@@ -319,6 +319,7 @@ def run_preview_loop(
             cv2.waitKey(50)
             captured_frame = None  # Keep the full-resolution photo for subsequent display resizes.
             active_request_id = None
+            displayed_request_id = None
         except cv2.error:
             return False
         while True:
@@ -332,23 +333,35 @@ def run_preview_loop(
                         else _fit_display(captured_frame, size)
                     )
                     cv2.imshow(window_name, displayed_frame)
+                resized = size != display_size
                 display_size = size
-                if captures_only and active_request_id is not None:
+                if captures_only:
                     assert controller is not None
-                    job = controller.status(active_request_id)
-                    assert job is not None
-                    if job.state == "complete":
+                    snapshot = controller.snapshot()
+                    # Completed jobs may arrive entirely between GUI polls, so
+                    # observing only the active request would miss fast remote shots.
+                    job = snapshot.last_completed_job
+                    new_photo = job is not None and job.request_id != displayed_request_id
+                    if new_photo:
+                        assert job is not None
                         assert isinstance(job.result, CaptureResult)
                         _announce(job.result, print)
                         frame, _ = load_rgb(job.result.parr)
                         captured_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
                         displayed_frame = _fit_display(captured_frame, display_size)
                         cv2.imshow(window_name, displayed_frame)
-                        active_request_id = None
-                    elif job.state == "failed":
-                        print(f"error: {job.error_message or job.error_code}")
-                        # The existing prompt or previous photo remains visible after an error.
-                        cv2.imshow(window_name, displayed_frame)
+                        displayed_request_id = job.request_id
+                    if active_request_id is not None:
+                        tracked = controller.status(active_request_id)
+                        if tracked is not None and tracked.state == "failed":
+                            print(f"error: {tracked.error_message or tracked.error_code}")
+                            cv2.imshow(window_name, displayed_frame)
+                    active = snapshot.active_job
+                    if active is not None:
+                        if active.request_id != active_request_id or resized or new_photo:
+                            cv2.imshow(window_name, _capture_loading_screen(display_size))
+                        active_request_id = active.request_id
+                    else:
                         active_request_id = None
                 if not captures_only:
                     frame = session.preview_frame(graded)

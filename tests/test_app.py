@@ -394,6 +394,66 @@ def test_capture_display_polls_controller_and_shows_loading_before_result(
         controller.close()
 
 
+@pytest.mark.parametrize("finish_between_polls", [False, True])
+def test_external_capture_updates_pi_display(
+    tmp_path, pipeline, monkeypatch, capture_gui, finish_between_polls,
+):
+    import cv2
+
+    from parr.capture.controller import CaptureController
+
+    session = _session(tmp_path, pipeline)
+    capture = session.capture
+    release = threading.Event()
+    finished = threading.Event()
+
+    def delayed_capture():
+        assert release.wait(timeout=2)
+        result = capture()
+        finished.set()
+        return result
+
+    monkeypatch.setattr(session, "capture", delayed_capture)
+    controller = CaptureController(session)
+    waits = 0
+
+    def finish_capture():
+        release.set()
+        assert finished.wait(timeout=2)
+        for _ in range(200):
+            if controller.status("remote-shot").state == "complete":
+                return
+            time.sleep(0.001)
+        pytest.fail("capture did not complete")
+
+    def wait_key(delay):
+        nonlocal waits
+        if delay in (1, 50):
+            return -1
+        waits += 1
+        if waits == 1:
+            controller.submit("remote-shot")
+            if finish_between_polls:
+                finish_capture()
+            return -1
+        if waits == 2 and not finish_between_polls:
+            assert len(np.unique(capture_gui[-1][0], axis=0)) == 7
+            finish_capture()
+            return -1
+        saved = controller.status("remote-shot").result.parr
+        rgb, _ = load_rgb(saved)
+        expected = cv2.resize(rgb, (640, 360), interpolation=cv2.INTER_AREA)[:, :, ::-1]
+        assert np.array_equal(capture_gui[-1], expected)
+        return ord("q")
+
+    monkeypatch.setattr(cv2, "waitKey", wait_key)
+    try:
+        assert run_preview_loop(session, captures_only=True, controller=controller)
+    finally:
+        release.set()
+        controller.close()
+
+
 @pytest.mark.parametrize("failed_attempt", [1, 2])
 def test_capture_display_keeps_last_photo_after_failed_capture(
     tmp_path, pipeline, monkeypatch, capture_gui, capsys, failed_attempt,
