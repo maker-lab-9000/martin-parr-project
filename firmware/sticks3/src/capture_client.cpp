@@ -8,7 +8,8 @@ CaptureClient::CaptureClient() = default;
 void CaptureClient::setWifiConnected(bool connected, uint32_t now_ms) {
   wifi_connected_ = connected;
   if (!connected) {
-    state_ = ClientState::Connecting;
+    api_ready_ = false;
+    if (state_ != ClientState::Photo) state_ = ClientState::Connecting;
     connect_in_flight_ = false;
     next_connect_at_ = now_ms + reconnect_backoff_ms_;
     return;
@@ -21,7 +22,7 @@ void CaptureClient::setWifiConnected(bool connected, uint32_t now_ms) {
   next_status_at_ = now_ms;
   // Wi-Fi association alone is not API readiness. An authenticated status
   // reply controls every transition into Ready.
-  state_ = ClientState::Connecting;
+  if (state_ != ClientState::Photo) state_ = ClientState::Connecting;
 }
 
 bool CaptureClient::debouncedPress(bool pressed, uint32_t now_ms) {
@@ -37,8 +38,8 @@ bool CaptureClient::debouncedPress(bool pressed, uint32_t now_ms) {
 }
 
 bool CaptureClient::onButtonSample(bool pressed, uint32_t now_ms, const char* request_id) {
-  if (!debouncedPress(pressed, now_ms) || active_request_ || !wifi_connected_ ||
-      state_ != ClientState::Ready || request_id == nullptr) {
+  if (!debouncedPress(pressed, now_ms) || active_request_ || !readyForCapture() ||
+      (state_ != ClientState::Ready && state_ != ClientState::Photo) || request_id == nullptr) {
     return false;
   }
   if (std::strlen(request_id) != 36) {
@@ -150,7 +151,7 @@ void CaptureClient::completeServerStatus(bool ready, bool has_active_job, const 
   if (!ready || instance_id == nullptr || std::strlen(instance_id) != 36) {
     api_ready_ = false;
     server_has_active_job_ = false;
-    state_ = ClientState::Connecting;
+    if (state_ != ClientState::Photo) state_ = ClientState::Connecting;
     return;
   }
   api_ready_ = true;
@@ -175,6 +176,7 @@ void CaptureClient::completeServerStatus(bool ready, bool has_active_job, const 
     return;
   }
   if (state_ == ClientState::Error && error_until_ != 0 && now_ms < error_until_) return;
+  if (state_ == ClientState::Photo) return;
   state_ = has_active_job ? ClientState::Connecting : ClientState::Ready;
 }
 
@@ -188,7 +190,7 @@ void CaptureClient::completeStatusTransportError(uint32_t now_ms) {
   if (active_request_) {
     error_reason_ = ErrorReason::Transport;
     setError(now_ms);
-  } else {
+  } else if (state_ != ClientState::Photo) {
     state_ = ClientState::Connecting;
   }
 }
@@ -256,7 +258,8 @@ void CaptureClient::completeConnect(bool connected, uint32_t now_ms) {
   wifi_connected_ = false;
   next_connect_at_ = now_ms + reconnect_backoff_ms_;
   reconnect_backoff_ms_ = reconnect_backoff_ms_ >= 5000 ? 10000 : reconnect_backoff_ms_ * 2;
-  state_ = ClientState::Connecting;
+  api_ready_ = false;
+  if (state_ != ClientState::Photo) state_ = ClientState::Connecting;
 }
 
 bool CaptureClient::consumeShutterSound() {

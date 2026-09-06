@@ -103,9 +103,11 @@ bool StickDisplay::decodeAndStore(const uint8_t* jpeg, size_t jpeg_size) {
 void StickDisplay::render(const CaptureClient& client, uint32_t now_ms) {
   const ClientState state = client.state();
   const uint32_t elapsed = client.elapsedSeconds(now_ms);
-  if (state == last_state_ && elapsed == last_elapsed_seconds_) return;
+  const bool ready = client.readyForCapture();
+  if (state == last_state_ && elapsed == last_elapsed_seconds_ && ready == last_ready_) return;
   last_state_ = state;
   last_elapsed_seconds_ = elapsed;
+  last_ready_ = ready;
   switch (state) {
     case ClientState::Ready:
       drawColourBars();
@@ -124,6 +126,12 @@ void StickDisplay::render(const CaptureClient& client, uint32_t now_ms) {
       break;
     case ClientState::Photo:
       drawPhoto();
+      if (!ready) {
+        M5.Display.fillRect(0, 0, width_, 20, TFT_BLACK);
+        M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+        M5.Display.setTextSize(1);
+        M5.Display.drawString("Pi unavailable or busy", width_ / 2, 10);
+      }
       break;
     case ClientState::Error:
       if (!hasPhoto()) {

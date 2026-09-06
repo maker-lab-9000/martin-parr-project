@@ -49,6 +49,7 @@ class CaptureClient {
   ClientState state() const { return state_; }
   const char* requestId() const { return request_id_; }
   bool hasActiveRequest() const { return active_request_; }
+  bool readyForCapture() const { return wifi_connected_ && api_ready_ && !server_has_active_job_; }
   uint32_t elapsedSeconds(uint32_t now_ms) const;
   bool timedOut() const { return timed_out_; }
   bool photoWasUpdated() const { return photo_updated_; }

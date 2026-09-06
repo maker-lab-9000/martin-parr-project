@@ -25,6 +25,7 @@ class StickDisplay {
   size_t photo_size_ = 0;
   ClientState last_state_ = ClientState::Connecting;
   uint32_t last_elapsed_seconds_ = UINT32_MAX;
+  bool last_ready_ = false;
   int16_t width_ = 0;
   int16_t height_ = 0;
 };

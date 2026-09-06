@@ -266,6 +266,50 @@ void test_only_acknowledged_post_queues_the_one_shutter_tone(void) {
   TEST_ASSERT_EQUAL(WorkKind::Poll, client.nextWork(550).kind);
 }
 
+void test_photo_survives_status_and_connectivity_until_ready_press(void) {
+  CaptureClient client;
+  const char* instance = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const char* next_id = "22222222-2222-4222-8222-222222222222";
+  make_ready(client);
+  settle_button(client, 10, "11111111-1111-4111-8111-111111111111");
+  client.completeSubmit(true, 50);
+  client.acceptStatus(JobStatus::Complete, 550);
+  client.completeDownload(true, 600);
+  for (uint32_t now = 1000; now <= 3000; now += 500) {
+    client.completeServerStatus(true, false, instance, now);
+    TEST_ASSERT_EQUAL(ClientState::Photo, client.state());
+    TEST_ASSERT_TRUE(client.readyForCapture());
+  }
+  client.onButtonSample(false, 3010, next_id);
+  client.onButtonSample(false, 3040, next_id);
+  client.setWifiConnected(false, 3100);
+  TEST_ASSERT_EQUAL(ClientState::Photo, client.state());
+  TEST_ASSERT_FALSE(client.readyForCapture());
+  TEST_ASSERT_FALSE(client.onButtonSample(true, 3110, next_id));
+  TEST_ASSERT_FALSE(client.onButtonSample(true, 3140, next_id));
+  client.completeConnect(false, 3150);
+  TEST_ASSERT_EQUAL(ClientState::Photo, client.state());
+  client.setWifiConnected(true, 3200);
+  TEST_ASSERT_EQUAL(ClientState::Photo, client.state());
+  TEST_ASSERT_FALSE(client.readyForCapture());
+  client.completeServerStatus(false, false, nullptr, 3300);
+  TEST_ASSERT_EQUAL(ClientState::Photo, client.state());
+  client.completeStatusTransportError(3400);
+  TEST_ASSERT_EQUAL(ClientState::Photo, client.state());
+  client.completeServerStatus(true, true, instance, 3500);
+  TEST_ASSERT_EQUAL(ClientState::Photo, client.state());
+  TEST_ASSERT_FALSE(client.readyForCapture());
+  client.completeServerStatus(true, false, instance, 3600);
+  TEST_ASSERT_EQUAL(ClientState::Photo, client.state());
+  TEST_ASSERT_TRUE(client.readyForCapture());
+  // A held button across reconnect never triggers a new capture.
+  TEST_ASSERT_FALSE(client.onButtonSample(true, 3610, next_id));
+  client.onButtonSample(false, 3620, next_id);
+  client.onButtonSample(false, 3650, next_id);
+  settle_button(client, 3700, next_id);
+  TEST_ASSERT_EQUAL(ClientState::Requesting, client.state());
+}
+
 void test_uuid_is_rfc4122_version_four_shape(void) {
   const uint32_t random_words[] = {0x01234567, 0x89abcdef, 0x10203040, 0x50607080};
   char id[37] = {};
@@ -297,6 +341,7 @@ void setup() {
   RUN_TEST(test_submit_start_failure_retries_the_same_uuid_without_polling);
   RUN_TEST(test_only_acknowledged_post_queues_the_one_shutter_tone);
   RUN_TEST(test_uuid_is_rfc4122_version_four_shape);
+  RUN_TEST(test_photo_survives_status_and_connectivity_until_ready_press);
   UNITY_END();
 }
 
@@ -324,6 +369,7 @@ int main() {
   test_submit_start_failure_retries_the_same_uuid_without_polling();
   test_only_acknowledged_post_queues_the_one_shutter_tone();
   test_uuid_is_rfc4122_version_four_shape();
+  test_photo_survives_status_and_connectivity_until_ready_press();
   return 0;
 }
 #endif
