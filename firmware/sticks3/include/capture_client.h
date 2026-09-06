@@ -13,7 +13,8 @@ enum class ClientState : uint8_t {
 };
 
 enum class JobStatus : uint8_t { Pending, Processing, Complete, Failed, Missing };
-enum class WorkKind : uint8_t { None, Connect, Submit, Poll, Download };
+enum class WorkKind : uint8_t { None, Connect, Status, Submit, Poll, Download };
+enum class ErrorReason : uint8_t { None, Transport, Timeout, Interrupted, Rejected, Image };
 
 struct WorkItem {
   WorkKind kind = WorkKind::None;
@@ -38,6 +39,8 @@ class CaptureClient {
   void submitStartFailed(uint32_t now_ms);
   void completeSubmit(bool acknowledged, uint32_t now_ms);
   void rejectSubmit(uint32_t now_ms);
+  void completeServerStatus(bool ready, bool has_active_job, const char* instance_id, uint32_t now_ms);
+  void completeStatusTransportError(uint32_t now_ms);
   void acceptStatus(JobStatus status, uint32_t now_ms);
   void completePollTransportError(uint32_t now_ms);
   void completeDownload(bool decoded, uint32_t now_ms);
@@ -49,6 +52,8 @@ class CaptureClient {
   uint32_t elapsedSeconds(uint32_t now_ms) const;
   bool timedOut() const { return timed_out_; }
   bool photoWasUpdated() const { return photo_updated_; }
+  const char* serverInstanceId() const { return server_instance_id_; }
+  const char* errorDetail() const;
   bool consumeShutterSound();
 
   // Turns four independent random words into an RFC 4122 v4 UUID.
@@ -62,6 +67,8 @@ class CaptureClient {
   ClientState state_ = ClientState::Connecting;
   char request_id_[37] = {};
   bool wifi_connected_ = false;
+  bool api_ready_ = false;
+  bool server_has_active_job_ = false;
   bool active_request_ = false;
   bool timed_out_ = false;
   bool photo_updated_ = false;
@@ -70,6 +77,7 @@ class CaptureClient {
   bool stable_button_ = false;
   bool submit_in_flight_ = false;
   bool submitted_ = false;
+  bool status_in_flight_ = false;
   bool poll_in_flight_ = false;
   bool download_in_flight_ = false;
   bool connect_in_flight_ = false;
@@ -77,7 +85,11 @@ class CaptureClient {
   uint32_t raw_changed_at_ = 0;
   uint32_t started_at_ = 0;
   uint32_t last_poll_at_ = 0;
+  uint32_t next_status_at_ = 0;
   uint32_t next_connect_at_ = 0;
   uint32_t next_download_at_ = 0;
   uint32_t reconnect_backoff_ms_ = 1000;
+  uint32_t error_until_ = 0;
+  ErrorReason error_reason_ = ErrorReason::None;
+  char server_instance_id_[37] = {};
 };

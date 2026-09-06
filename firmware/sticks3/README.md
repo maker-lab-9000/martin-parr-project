@@ -19,9 +19,13 @@ the four quoted build definitions `STICKS3_WIFI_SSID`, `STICKS3_WIFI_PASSWORD`,
 `STICKS3_API_BASE`, and `STICKS3_API_TOKEN` without replacing the base
 environment's existing build flags.
 
-The server must expose the bearer-authenticated API contract at
-`/v1/captures`; the device submits `{"request_id":"UUID"}`, polls the same
-ID every 500 ms, and fetches `/v1/captures/<UUID>/image.jpg` only on completion.
+The server must expose the bearer-authenticated API contract at `/v1/status`
+and `/v1/captures`. The device enters Ready only after `/v1/status` says the
+Pi is ready and no other capture is active. It records that endpoint's
+`instance_id`, submits `{"request_id":"UUID"}`, polls the same ID every
+500 ms, and fetches `/v1/captures/<UUID>/image.jpg` only on completion. A
+changed server instance or an unknown job interrupts the active request and
+requires a fresh deliberate press; it never automatically resubmits it.
 
 ## Build, flash, and serial monitor
 
@@ -44,6 +48,7 @@ On first flash, verify physical hardware before enabling network credentials:
 3. Press and hold the primary button: it should yield only one shutter tone and one request.
 
 Network traffic runs in a FreeRTOS worker. The UI loop remains responsive; Wi-Fi
-reconnects back off from one to ten seconds. A job still unresolved after 120
-seconds stays attached to its original UUID and continues lookup without
-submitting a replacement capture.
+reconnects back off from one to ten seconds. The shutter tone is queued only
+after a 2xx capture acknowledgement. A job still unresolved after 120 seconds
+stays attached to its original UUID and continues lookup without submitting a
+replacement capture.

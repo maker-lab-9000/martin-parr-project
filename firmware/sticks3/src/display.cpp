@@ -62,6 +62,18 @@ void StickDisplay::drawMessage(const char* title, const char* detail, uint32_t e
   M5.Display.drawString(elapsed, width_ / 2, height_ / 2 + 26);
 }
 
+void StickDisplay::drawBarsOverlay(const char* title, const char* detail, uint32_t elapsed_seconds) {
+  drawColourBars();
+  M5.Display.fillRect(0, 0, width_, 32, TFT_BLACK);
+  M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+  M5.Display.setTextSize(1);
+  char elapsed[24];
+  snprintf(elapsed, sizeof(elapsed), "%lus", static_cast<unsigned long>(elapsed_seconds));
+  M5.Display.drawString(title, width_ / 2, 7);
+  M5.Display.drawString(detail, width_ / 2, 18);
+  M5.Display.drawString(elapsed, width_ - 14, 7);
+}
+
 void StickDisplay::drawPhoto() {
   if (photo_size_ == 0) return;
   const int16_t target_width = std::min<int16_t>(width_, (height_ * 240) / 135);
@@ -102,28 +114,27 @@ void StickDisplay::render(const CaptureClient& client, uint32_t now_ms) {
       drawMessage("CONNECTING", "Wi-Fi reconnecting", elapsed);
       break;
     case ClientState::Requesting:
-      drawMessage("REQUESTING", "Sending capture request", elapsed);
+      drawBarsOverlay("REQUESTING", "Sending capture request", elapsed);
       break;
     case ClientState::Processing:
-      drawMessage("PROCESSING", "Waiting for film scan", elapsed);
+      drawBarsOverlay("PROCESSING", "Waiting for film scan", elapsed);
       break;
     case ClientState::Downloading:
-      drawMessage("DOWNLOADING", "Fetching 240 x 135 preview", elapsed);
+      drawBarsOverlay("DOWNLOADING", "Fetching 240 x 135 preview", elapsed);
       break;
     case ClientState::Photo:
       drawPhoto();
       break;
     case ClientState::Error:
       if (!hasPhoto()) {
-        drawMessage(client.timedOut() ? "TIMEOUT" : "ERROR",
-                    client.timedOut() ? "Still looking up this request" : "Retrying connection / image", elapsed);
+        drawMessage(client.timedOut() ? "TIMEOUT" : "ERROR", client.errorDetail(), elapsed);
         break;
       }
       drawPhoto();
       M5.Display.fillRect(0, 0, width_, 20, TFT_BLACK);
       M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
       M5.Display.setTextSize(1);
-      M5.Display.drawString(client.timedOut() ? "TIMEOUT — still looking up" : "ERROR — retrying image", width_ / 2, 10);
+      M5.Display.drawString(client.errorDetail(), width_ / 2, 10);
       break;
   }
 }

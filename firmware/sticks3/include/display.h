@@ -18,6 +18,7 @@ class StickDisplay {
  private:
   void drawPhoto();
   void drawColourBars();
+  void drawBarsOverlay(const char* title, const char* detail, uint32_t elapsed_seconds);
   void drawMessage(const char* title, const char* detail, uint32_t elapsed_seconds);
 
   uint8_t photo_[kMaxJpegBytes] = {};

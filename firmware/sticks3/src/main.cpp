@@ -54,6 +54,18 @@ JobStatus jobStatus(const String& payload) {
   return JobStatus::Pending;  // The server calls its initial state "queued".
 }
 
+String jsonString(const String& payload, const char* key) {
+  const String prefix = String("\"") + key + "\":\"";
+  const int start = payload.indexOf(prefix);
+  if (start < 0) return String();
+  const int value_start = start + prefix.length();
+  const int end = payload.indexOf('"', value_start);
+  return end < 0 ? String() : payload.substring(value_start, end);
+}
+
+bool serverReady(const String& payload) { return payload.indexOf("\"ready\":true") >= 0; }
+bool serverHasActiveJob(const String& payload) { return payload.indexOf("\"active_capture_id\":null") < 0; }
+
 bool fetchJpeg(const char* request_id) {
   HTTPClient http;
   const String path = endpoint((String("/v1/captures/") + request_id + "/image.jpg").c_str());
@@ -112,6 +124,28 @@ void processWork(const WorkItem& work) {
   if (!configured()) return;
 
   HTTPClient http;
+  if (work.kind == WorkKind::Status) {
+    if (!http.begin(endpoint("/v1/status"))) {
+      lockClient();
+      capture.completeStatusTransportError(millis());
+      unlockClient();
+      return;
+    }
+    http.setTimeout(5000);
+    addAuth(http);
+    const int status = http.GET();
+    const String payload = status == HTTP_CODE_OK ? http.getString() : String();
+    http.end();
+    lockClient();
+    if (status == HTTP_CODE_OK) {
+      const String instance_id = jsonString(payload, "instance_id");
+      capture.completeServerStatus(serverReady(payload), serverHasActiveJob(payload), instance_id.c_str(), millis());
+    } else {
+      capture.completeStatusTransportError(millis());
+    }
+    unlockClient();
+    return;
+  }
   if (work.kind == WorkKind::Submit) {
     if (!http.begin(endpoint("/v1/captures"))) {
       lockClient();

@@ -11,8 +11,11 @@
   sends the shutter event only once, retains an ambiguous ID for polling, and
   cannot submit another capture while one is active.
 - Added a FreeRTOS HTTP worker. It uses bearer authentication, 5-second HTTP
-  bounds, 500 ms job polling, 1-to-10 second reconnect backoff, and a 120
-  second unresolved-job timeout that retains and continues polling the same ID.
+  bounds, authenticated `/v1/status` readiness and instance-ID observation,
+  500 ms job polling, 1-to-10 second reconnect backoff, and a 120 second
+  unresolved-job timeout that retains and continues polling the same ID.
+  A changed server instance or unknown job is explicitly interrupted, stopped,
+  and requires a fresh press; it is never resubmitted automatically.
 - Added a display/speaker smoke path, local TV colour bars, state/elapsed UI,
   64 KiB bounded JPEG back buffer, a pinned JPEGDEC full-decode validation
   pass before persistent replacement, persistent last successful photo bytes,
@@ -28,18 +31,17 @@
   It covers state transitions, held buttons, one-shot sound, lost submit
   acknowledgement, server restart/missing job lookup, malformed/truncated JPEG
   failure, known submit rejection recovery, timeout persistence, elapsed time,
-  reconnect backoff, reconnect-before-submit recovery, submit-start retry with
-  the same UUID, and UUID v4 layout.
-- `git diff --check` — passed before report/commit; re-run after final changes
-  before committing.
-- `pio test -d firmware/sticks3 -e native` and `pio run -d firmware/sticks3`
-  could not run because `pio` is not installed in this environment (`zsh:
-  command not found: pio`). No firmware build or physical StickS3 test is
-  claimed. The PlatformIO project and hardware-bound code are deliberately
-  compile-oriented and the README records the physical verification required
-  after PlatformIO and a device are available.
+  server readiness/instance interruption, reconnect backoff cap,
+  reconnect-before-submit recovery, submit-start retry with the same UUID,
+  acknowledgement-only shutter sound, authenticated-status busy recovery, and
+  UUID v4 layout.
+- `pio test -d firmware/sticks3 -e native` — passed: 17 test cases succeeded.
+- `pio run -d firmware/sticks3` — passed. Target size: 178,124 / 327,680 bytes
+  RAM (54.4%) and 1,044,909 / 3,342,336 bytes flash (31.3%).
+- `git diff --check` — passed before the fix commit.
 
 ## Remaining concern
 
-The target JPEGDEC/M5GFX validation and the physical StickS3 smoke test remain
-pending because PlatformIO and hardware are unavailable in this environment.
+The physical StickS3 flash/smoke test remains pending because no device is
+attached to this environment. The target firmware build and JPEGDEC/M5GFX
+compile path have been verified by PlatformIO.
