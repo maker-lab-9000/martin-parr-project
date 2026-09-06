@@ -2,6 +2,8 @@
 
 Implementation commit: `364cc8239d6c69412b5c424bf1cb82850060ec37`
 
+Authentication hardening follow-up: `2ed8d42030f9d886d262b79f0fae8759fcbe2cec`
+
 ## Delivered
 
 - Added `parr/capture/remote.py`: a token-authenticated, localhost/LAN HTTP
@@ -27,11 +29,14 @@ Implementation commit: `364cc8239d6c69412b5c424bf1cb82850060ec37`
 - Full: `pytest -q -p no:cacheprovider` — passed.
 - Lint: `ruff check parr tests` — passed.
 - `git diff --check` — passed.
+- Follow-up: `pytest tests/test_remote.py -q -p no:cacheprovider` — 6 passed;
+  `ruff check parr/capture/remote.py tests/test_remote.py` — passed.
 
 New coverage includes bearer failures, malformed UUIDs, oversized bodies,
 idempotency and busy responses, arbitrary-path rejection, completed-image
 serving, thumbnail letterboxing and limits, expiry after 100 jobs, missing
-token startup refusal, and no-TTY remote operation.
+token startup refusal, no-TTY remote operation, and malformed non-ASCII bearer
+headers returning 401 without terminating their handler.
 
 ## Decisions and remaining concerns
 
