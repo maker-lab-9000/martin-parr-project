@@ -318,6 +318,41 @@ void test_uuid_is_rfc4122_version_four_shape(void) {
   TEST_ASSERT_EQUAL_STRING("01234567-89ab-4def-8020-304050607080", id);
 }
 
+void test_failed_next_capture_restores_previous_photo(void) {
+  // Exercise both terminal failure paths and both ways the error expires.
+  for (int scenario = 0; scenario < 4; ++scenario) {
+    CaptureClient client;
+    const char* id = "11111111-1111-4111-8111-111111111111";
+    const char* instance = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    make_ready(client);
+    settle_button(client, 10, id);
+    client.completeSubmit(true, 50);
+    client.acceptStatus(JobStatus::Complete, 550);
+    client.completeDownload(true, 600);
+    client.onButtonSample(false, 610, id);
+    client.onButtonSample(false, 640, id);
+    settle_button(client, 700, "22222222-2222-4222-8222-222222222222");
+    if (scenario < 2) {
+      client.rejectSubmit(750);
+    } else {
+      client.completeSubmit(true, 740);
+      client.acceptStatus(JobStatus::Failed, 750);
+    }
+    TEST_ASSERT_EQUAL(ClientState::Error, client.state());
+    TEST_ASSERT_FALSE(client.hasActiveRequest());
+    client.completeServerStatus(true, false, instance, 1000);
+    TEST_ASSERT_EQUAL(ClientState::Error, client.state());
+    if (scenario % 2 == 0) client.tick(2750);
+    else client.completeServerStatus(true, false, instance, 2750);
+    TEST_ASSERT_EQUAL(ClientState::Photo, client.state());
+    client.completeServerStatus(true, false, instance, 3250);
+    TEST_ASSERT_EQUAL(ClientState::Photo, client.state());
+    client.completeStatusTransportError(3750);
+    TEST_ASSERT_EQUAL(ClientState::Photo, client.state());
+    TEST_ASSERT_FALSE(client.readyForCapture());
+  }
+}
+
 }  // namespace
 
 #ifdef PIO_UNIT_TESTING
@@ -342,6 +377,7 @@ void setup() {
   RUN_TEST(test_only_acknowledged_post_queues_the_one_shutter_tone);
   RUN_TEST(test_uuid_is_rfc4122_version_four_shape);
   RUN_TEST(test_photo_survives_status_and_connectivity_until_ready_press);
+  RUN_TEST(test_failed_next_capture_restores_previous_photo);
   UNITY_END();
 }
 
@@ -370,6 +406,7 @@ int main() {
   test_only_acknowledged_post_queues_the_one_shutter_tone();
   test_uuid_is_rfc4122_version_four_shape();
   test_photo_survives_status_and_connectivity_until_ready_press();
+  test_failed_next_capture_restores_previous_photo();
   return 0;
 }
 #endif

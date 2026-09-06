@@ -9,7 +9,7 @@ void CaptureClient::setWifiConnected(bool connected, uint32_t now_ms) {
   wifi_connected_ = connected;
   if (!connected) {
     api_ready_ = false;
-    if (state_ != ClientState::Photo) state_ = ClientState::Connecting;
+    state_ = !active_request_ && has_photo_ ? ClientState::Photo : ClientState::Connecting;
     connect_in_flight_ = false;
     next_connect_at_ = now_ms + reconnect_backoff_ms_;
     return;
@@ -22,7 +22,7 @@ void CaptureClient::setWifiConnected(bool connected, uint32_t now_ms) {
   next_status_at_ = now_ms;
   // Wi-Fi association alone is not API readiness. An authenticated status
   // reply controls every transition into Ready.
-  if (state_ != ClientState::Photo) state_ = ClientState::Connecting;
+  state_ = !active_request_ && has_photo_ ? ClientState::Photo : ClientState::Connecting;
 }
 
 bool CaptureClient::debouncedPress(bool pressed, uint32_t now_ms) {
@@ -73,8 +73,8 @@ void CaptureClient::tick(uint32_t now_ms) {
   if (!active_request_ && state_ == ClientState::Error && error_until_ != 0 && now_ms >= error_until_) {
     error_until_ = 0;
     error_reason_ = ErrorReason::None;
-    state_ = wifi_connected_ && api_ready_ && !server_has_active_job_ ? ClientState::Ready
-                                                                         : ClientState::Connecting;
+    state_ = has_photo_ ? ClientState::Photo
+                       : (readyForCapture() ? ClientState::Ready : ClientState::Connecting);
   }
 }
 
@@ -151,7 +151,7 @@ void CaptureClient::completeServerStatus(bool ready, bool has_active_job, const 
   if (!ready || instance_id == nullptr || std::strlen(instance_id) != 36) {
     api_ready_ = false;
     server_has_active_job_ = false;
-    if (state_ != ClientState::Photo) state_ = ClientState::Connecting;
+    state_ = !active_request_ && has_photo_ ? ClientState::Photo : ClientState::Connecting;
     return;
   }
   api_ready_ = true;
@@ -176,8 +176,8 @@ void CaptureClient::completeServerStatus(bool ready, bool has_active_job, const 
     return;
   }
   if (state_ == ClientState::Error && error_until_ != 0 && now_ms < error_until_) return;
-  if (state_ == ClientState::Photo) return;
-  state_ = has_active_job ? ClientState::Connecting : ClientState::Ready;
+  state_ = has_photo_ ? ClientState::Photo
+                     : (has_active_job ? ClientState::Connecting : ClientState::Ready);
 }
 
 void CaptureClient::completeStatusTransportError(uint32_t now_ms) {
@@ -190,8 +190,8 @@ void CaptureClient::completeStatusTransportError(uint32_t now_ms) {
   if (active_request_) {
     error_reason_ = ErrorReason::Transport;
     setError(now_ms);
-  } else if (state_ != ClientState::Photo) {
-    state_ = ClientState::Connecting;
+  } else {
+    state_ = has_photo_ ? ClientState::Photo : ClientState::Connecting;
   }
 }
 
@@ -236,6 +236,7 @@ void CaptureClient::completePollTransportError(uint32_t now_ms) {
 void CaptureClient::completeDownload(bool decoded, uint32_t now_ms) {
   download_in_flight_ = false;
   if (decoded) {
+    has_photo_ = true;
     photo_updated_ = true;
     active_request_ = false;
     retry_download_ = false;
@@ -259,7 +260,7 @@ void CaptureClient::completeConnect(bool connected, uint32_t now_ms) {
   next_connect_at_ = now_ms + reconnect_backoff_ms_;
   reconnect_backoff_ms_ = reconnect_backoff_ms_ >= 5000 ? 10000 : reconnect_backoff_ms_ * 2;
   api_ready_ = false;
-  if (state_ != ClientState::Photo) state_ = ClientState::Connecting;
+  state_ = !active_request_ && has_photo_ ? ClientState::Photo : ClientState::Connecting;
 }
 
 bool CaptureClient::consumeShutterSound() {

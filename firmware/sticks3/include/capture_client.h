@@ -73,6 +73,7 @@ class CaptureClient {
   bool active_request_ = false;
   bool timed_out_ = false;
   bool photo_updated_ = false;
+  bool has_photo_ = false;
   bool shutter_pending_ = false;
   bool raw_button_ = false;
   bool stable_button_ = false;
