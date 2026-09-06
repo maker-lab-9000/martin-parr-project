@@ -19,7 +19,9 @@ int validateJpegDraw(JPEGDRAW*) {
 
 bool decodesSuccessfully(const uint8_t* jpeg, size_t size) {
   if (jpeg == nullptr || size < 4 || size > StickDisplay::kMaxJpegBytes) return false;
-  JPEGDEC decoder;
+  // JPEGDEC contains ~18 KiB of workspace, exceeding loopTask's 8 KiB stack.
+  // Only the UI loop calls this function, so reuse one static decoder safely.
+  static JPEGDEC decoder;
   if (!decoder.openRAM(const_cast<uint8_t*>(jpeg), static_cast<int>(size), validateJpegDraw)) return false;
   const bool decoded = decoder.decode(0, 0, 0) == 1;
   decoder.close();
