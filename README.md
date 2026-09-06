@@ -28,8 +28,9 @@ Mac (Python 3.11 or newer):
 
 ```bash
 cd ../martin-parr-project
-python3 -m venv .venv
-.venv/bin/pip install -e '.[train,dev]'
+python3.12 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -e '.[train,dev]'
 .venv/bin/pytest -q -m 'not slow'
 ```
 
@@ -38,12 +39,22 @@ Raspberry Pi OS with a desktop:
 ```bash
 sudo apt install python3-venv python3-opencv python3-numpy python3-pil
 python3 -m venv --system-site-packages .venv
-.venv/bin/pip install -e .
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -e .
 ```
 
 Use the Pi's system OpenCV for its GTK display support. Training additionally
 needs the `train` dependencies; normally train on the Mac and copy the artifact
 folder to the Pi.
+
+## StickS3 remote capture on the Pi
+
+The StickS3 and Pi deployment uses a local `.env` that is intentionally ignored
+by Git. Copy `.env.example` to `.env`, fill in the real credentials locally, and
+follow [the Pi and StickS3 deployment guide](docs/sticks3-remote.md). The guide
+covers the two-screen desktop mode and the Stick-only headless service; do not
+put a real token, Wi-Fi password, or Pi SSH password in a command, source file,
+or commit.
 
 ## Try the starter look
 

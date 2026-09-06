@@ -1,6 +1,9 @@
 import io
 import json
+import threading
+import time
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import numpy as np
@@ -34,6 +37,49 @@ def _session(tmp_path, pipeline, camera=None, now=None):
     camera = camera or FakeCamera([synthetic_frame(90, 160)])
     return CaptureSession(camera, pipeline, tmp_path / "shots", now=now,
                           seed_rng=np.random.default_rng(0))
+
+
+def test_remote_listener_refuses_to_start_without_a_token(monkeypatch, capsys):
+    """A listener without the shared secret would be an unauthenticated shutter button."""
+    monkeypatch.delenv("PARR_REMOTE_TOKEN", raising=False)
+
+    assert main(["--remote-listen", "127.0.0.1:8765"]) == 2
+
+    assert "PARR_REMOTE_TOKEN" in capsys.readouterr().err
+
+
+def test_remote_listener_keeps_running_without_a_tty(monkeypatch, tmp_path):
+    """The remote control path must not fall through to the terminal-only error."""
+    from parr.capture import app
+
+    listeners = []
+
+    class Listener:
+        def __init__(self, controller, token, listen):
+            self.controller = controller
+            self.token = token
+            self.listen = listen
+            self.started = False
+            self.closed = False
+            listeners.append(self)
+
+        def start(self):
+            self.started = True
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setenv("PARR_REMOTE_TOKEN", "secret")
+    monkeypatch.setattr(app, "RemoteCaptureServer", Listener)
+    monkeypatch.setattr(app.Artifacts, "resolve", lambda _: object())
+    monkeypatch.setattr(app, "Pipeline", lambda _: object())
+    monkeypatch.setattr(app, "has_display", lambda: False)
+    monkeypatch.setattr(app.sys, "stdin", SimpleNamespace(isatty=lambda: False))
+    monkeypatch.setattr(app.time, "sleep", lambda _: (_ for _ in ()).throw(KeyboardInterrupt))
+
+    assert app.main(["--fake", "--no-preview", "--remote-listen", "127.0.0.1:8765"]) == 0
+    assert len(listeners) == 1
+    assert listeners[0].started and listeners[0].closed
 
 
 def test_raw_mode_writes_the_camera_bytes_verbatim(tmp_path, pipeline):
@@ -141,6 +187,18 @@ def test_headless_loop_captures_on_space_and_quits_on_q(tmp_path, pipeline):
     assert any("Saved" in m for m in messages)
 
 
+def test_headless_loop_reports_loading_before_saved_result(tmp_path, pipeline):
+    """A synchronous direct capture would skip the shared job's loading state."""
+    session = _session(tmp_path, pipeline)
+    keys = iter([" ", "q"])
+    messages = []
+
+    assert run_headless_loop(session, read_key=lambda: next(keys), out=messages.append) == 1
+
+    assert messages[1] == "Processing photo..."
+    assert messages[2].startswith("Saved ")
+
+
 def test_headless_loop_survives_a_camera_error(tmp_path, pipeline):
     class FlakyCamera(FakeCamera):
         def read(self):
@@ -161,6 +219,41 @@ def test_preview_loop_falls_back_when_gui_is_unavailable(tmp_path, pipeline, mon
 
     monkeypatch.setattr(cv2, "namedWindow", boom)
     assert run_preview_loop(_session(tmp_path, pipeline)) is False
+
+
+def test_capture_display_closes_owned_controller_when_window_initialization_fails(
+    tmp_path, pipeline, monkeypatch,
+):
+    """Returning before the display loop must not leave a worker owning the camera."""
+    import cv2
+
+    from parr.capture import app
+    from parr.capture.controller import CaptureController as RealCaptureController
+
+    session = _session(tmp_path, pipeline)
+    session.camera.close = Mock(wraps=session.camera.close)
+    controllers = []
+
+    class RecordingController:
+        def __init__(self, session):
+            self.real = RealCaptureController(session)
+            controllers.append(self)
+
+        def close(self):
+            self.real.close()
+
+    def no_gui(*args):
+        raise cv2.error("no GUI")
+
+    monkeypatch.setattr(app, "CaptureController", RecordingController)
+    monkeypatch.setattr(cv2, "namedWindow", no_gui)
+    try:
+        assert run_preview_loop(session, captures_only=True) is False
+        assert len(controllers) == 1
+        assert session.camera.close.call_count == 1
+    finally:
+        for controller in controllers:
+            controller.close()
 
 
 def test_preview_loop_falls_back_when_imshow_fails(tmp_path, pipeline, monkeypatch, capture_gui):
@@ -220,53 +313,145 @@ def test_capture_display_changes_only_after_snapshot(
     camera.read = Mock(wraps=camera.read)
     pipeline.process = Mock(wraps=pipeline.process)
     session = _session(tmp_path, pipeline, camera)
-    capture = session.capture
-    repaints = []
-
-    def capture_after_loading_screen():
-        assert len(repaints) == camera.read.call_count + 1
-        assert np.array_equal(repaints[-1], capture_gui[-1])
-        # Seven distinct TV colour bars, already painted before camera acquisition/grading.
-        assert len(np.unique(repaints[-1][0], axis=0)) == 7
-        return capture()
-
-    monkeypatch.setattr(session, "capture", capture_after_loading_screen)
-    events = iter([(-1, 0), (32, 0), (-1, 1), (ord("p"), 1), (32, 1), (-1, 2), (ord("Q"), 2)])
+    events = iter([" ", None, "p", " ", None, "Q"])
 
     def next_key():
-        key, captures = next(events)
-        assert len(capture_gui) == captures * 2 + 1  # prompt, then loading screen and photo
-        assert camera.read.call_count == captures
-        assert pipeline.process.call_count == captures
+        key = next(events)
+        if key is None:
+            # Give the worker a chance to finish; the following GUI iteration
+            # owns the repaint after polling the immutable job snapshot.
+            time.sleep(0.1)
+            return None
         return key
 
     def wait_key(delay):
         if delay == 50:
             return -1
-        if delay == 1:
-            repaints.append(capture_gui[-1].copy())
-            return -1
-        return -1 if terminal_controls else next_key()
+        return -1 if terminal_controls else (ord(key) if (key := next_key()) else -1)
 
     monkeypatch.setattr(cv2, "waitKey", wait_key)
     if terminal_controls:
 
         def read_key():
             key = next_key()
-            return chr(key) if key >= 0 else None
+            return key
     else:
         read_key = None
     assert run_preview_loop(session, captures_only=True, read_key=read_key)
 
-    files = sorted(
-        (tmp_path / "shots").rglob("*_parr.jpg"), key=lambda p: p.stat().st_mtime_ns,
-    )
+    files = sorted((tmp_path / "shots").rglob("*_parr.jpg"), key=lambda p: p.stat().st_mtime_ns)
     assert len(files) == 2
     for displayed, saved in zip(capture_gui[2::2], files, strict=True):
         rgb, _ = load_rgb(saved)
         expected = cv2.resize(rgb, (640, 360), interpolation=cv2.INTER_AREA)
         assert np.array_equal(displayed, expected[:, :, ::-1])
     assert not np.array_equal(capture_gui[2], capture_gui[4])
+
+
+def test_capture_display_polls_controller_and_shows_loading_before_result(
+    tmp_path, pipeline, monkeypatch, capture_gui,
+):
+    """Calling ``session.capture`` on the GUI thread would prevent this repaint."""
+    import cv2
+
+    from parr.capture.controller import CaptureController
+
+    session = _session(tmp_path, pipeline)
+    capture = session.capture
+    started = threading.Event()
+    release = threading.Event()
+
+    def delayed_capture():
+        started.set()
+        assert release.wait(timeout=1)
+        return capture()
+
+    monkeypatch.setattr(session, "capture", delayed_capture)
+    controller = CaptureController(session)
+    waits = 0
+
+    def wait_key(delay):
+        nonlocal waits
+        if delay in (1, 50):
+            return -1
+        waits += 1
+        if waits == 1:
+            return ord(" ")
+        if waits == 2:
+            assert started.wait(timeout=1)
+            assert len(np.unique(capture_gui[-1][0], axis=0)) == 7
+            release.set()
+            time.sleep(0.05)
+            return -1
+        assert len(np.unique(capture_gui[-1][0], axis=0)) != 7
+        return ord("q")
+
+    monkeypatch.setattr(cv2, "waitKey", wait_key)
+    try:
+        assert run_preview_loop(session, captures_only=True, controller=controller)
+    finally:
+        release.set()
+        controller.close()
+
+
+@pytest.mark.parametrize("finish_between_polls", [False, True])
+def test_external_capture_updates_pi_display(
+    tmp_path, pipeline, monkeypatch, capture_gui, finish_between_polls,
+):
+    import cv2
+
+    from parr.capture.controller import CaptureController
+
+    session = _session(tmp_path, pipeline)
+    capture = session.capture
+    release = threading.Event()
+    finished = threading.Event()
+
+    def delayed_capture():
+        assert release.wait(timeout=2)
+        result = capture()
+        finished.set()
+        return result
+
+    monkeypatch.setattr(session, "capture", delayed_capture)
+    controller = CaptureController(session)
+    waits = 0
+
+    def finish_capture():
+        release.set()
+        assert finished.wait(timeout=2)
+        for _ in range(200):
+            if controller.status("remote-shot").state == "complete":
+                return
+            time.sleep(0.001)
+        pytest.fail("capture did not complete")
+
+    def wait_key(delay):
+        nonlocal waits
+        if delay in (1, 50):
+            return -1
+        waits += 1
+        if waits == 1:
+            controller.submit("remote-shot")
+            if finish_between_polls:
+                finish_capture()
+            return -1
+        if waits == 2 and not finish_between_polls:
+            assert len(np.unique(capture_gui[-1][0], axis=0)) == 7
+            finish_capture()
+            return -1
+        saved = controller.status("remote-shot").result.parr
+        rgb, _ = load_rgb(saved)
+        expected = cv2.resize(rgb, (640, 360), interpolation=cv2.INTER_AREA)[:, :, ::-1]
+        assert np.array_equal(capture_gui[-1], expected)
+        return ord("q")
+
+    monkeypatch.setattr(cv2, "waitKey", wait_key)
+    try:
+        assert run_preview_loop(session, captures_only=True, controller=controller)
+    finally:
+        release.set()
+        controller.close()
 
 
 @pytest.mark.parametrize("failed_attempt", [1, 2])
@@ -287,21 +472,23 @@ def test_capture_display_keeps_last_photo_after_failed_capture(
         return capture()
 
     monkeypatch.setattr(session, "capture", flaky_capture)
-    events = iter([(32, 1), (32, 3), (-1, 5), (32, 5), (ord("q"), 7)])
+    events = iter([" ", None, " ", None, "q"])
 
     def next_key(delay):
         if delay in (1, 50):
             return -1
-        key, updates = next(events)
-        assert len(capture_gui) == updates
-        return key
+        key = next(events)
+        if key is None:
+            time.sleep(0.1)
+            return -1
+        return ord(key)
 
     monkeypatch.setattr(cv2, "waitKey", next_key)
     assert run_preview_loop(session, captures_only=True)
     assert "dropped snapshot" in capsys.readouterr().out
-    before_failure = capture_gui[(failed_attempt - 1) * 2]
-    after_failure = capture_gui[failed_attempt * 2]
-    assert np.array_equal(after_failure, before_failure)
+    if failed_attempt == 2:
+        assert np.array_equal(capture_gui[-1], capture_gui[2])
+    assert len(list((tmp_path / "shots").rglob("*_parr.jpg"))) == 1
 
 
 def test_capture_display_preserves_portrait_aspect_ratio(
@@ -310,8 +497,15 @@ def test_capture_display_preserves_portrait_aspect_ratio(
     import cv2
 
     session = _session(tmp_path, pipeline, FakeCamera([synthetic_frame(160, 90)]))
-    keys = iter([32, ord("q")])
-    monkeypatch.setattr(cv2, "waitKey", lambda delay: -1 if delay in (1, 50) else next(keys))
+    keys = iter([32, -1, ord("q")])
+
+    def wait_key(delay):
+        key = -1 if delay in (1, 50) else next(keys)
+        if key == -1 and delay == 30:
+            time.sleep(0.1)
+        return key
+
+    monkeypatch.setattr(cv2, "waitKey", wait_key)
     assert run_preview_loop(session, captures_only=True)
     assert capture_gui[-1].shape == (360, 640, 3)
     assert not capture_gui[-1][:, :219].any()
@@ -336,8 +530,15 @@ def test_fullscreen_capture_fits_display_resolution(
 
     monkeypatch.setattr(cv2, "getWindowImageRect", lambda name: (0, 0, *size))
     session = _session(tmp_path, pipeline, FakeCamera([synthetic_frame(120, 160)]))
-    keys = iter([32, ord("q")])
-    monkeypatch.setattr(cv2, "waitKey", lambda delay: -1 if delay in (1, 50) else next(keys))
+    keys = iter([32, -1, ord("q")])
+
+    def wait_key(delay):
+        key = -1 if delay in (1, 50) else next(keys)
+        if key == -1 and delay == 30:
+            time.sleep(0.1)
+        return key
+
+    monkeypatch.setattr(cv2, "waitKey", wait_key)
     assert run_preview_loop(session, captures_only=True)
     cv2.namedWindow.assert_called_once_with(
         cv2.namedWindow.call_args.args[0], cv2.WINDOW_NORMAL | cv2.WINDOW_FREERATIO,
@@ -366,22 +567,39 @@ def test_resolution_change_redraws_full_resolution_photo_without_recapture(
 ):
     import cv2
 
+    from parr.capture.controller import CaptureController
+
     camera = FakeCamera([synthetic_frame(720, 1280)])
     camera.read = Mock(wraps=camera.read)
     pipeline.process = Mock(wraps=pipeline.process)
     session = _session(tmp_path, pipeline, camera)
-    keys = iter([32, -1, ord("q")])
+    controller = CaptureController(session)
+    keys = iter([32, -1, -1, ord("q")])
+    pauses = 0
 
     def wait_key(delay):
+        nonlocal pauses
         if delay in (1, 50):
             return -1
         key = next(keys)
         if key == -1:
-            monkeypatch.setattr(cv2, "getWindowImageRect", lambda name: (0, 0, 1280, 720))
+            pauses += 1
+            if pauses == 1:
+                for _ in range(100):
+                    if controller.snapshot().active_job is None:
+                        break
+                    time.sleep(0.01)
+                else:
+                    raise AssertionError("capture worker did not finish")
+            else:
+                monkeypatch.setattr(cv2, "getWindowImageRect", lambda name: (0, 0, 1280, 720))
         return key
 
     monkeypatch.setattr(cv2, "waitKey", wait_key)
-    assert run_preview_loop(session, captures_only=True)
+    try:
+        assert run_preview_loop(session, captures_only=True, controller=controller)
+    finally:
+        controller.close()
     assert camera.read.call_count == pipeline.process.call_count == 1
     assert len(capture_gui) == 4  # prompt, loading, photo, resized photo
     saved, = (tmp_path / "shots").rglob("*_parr.jpg")

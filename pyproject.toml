@@ -16,6 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 opencv = ["opencv-python>=4.8"]
 train = ["scipy>=1.12", "requests>=2.31", "tqdm>=4.66", "opencv-python>=4.8"]
+deploy = ["paramiko>=3.4"]
 dev = ["opencv-python>=4.8", "pytest>=7.4", "ruff>=0.4", "build>=1.0"]
 
 [project.scripts]

@@ -1,0 +1,17 @@
+[Unit]
+Description=Martin Parr remote capture service (headless Stick-only mode)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=george
+WorkingDirectory=/home/george/repos/martin-parr-project
+EnvironmentFile=/etc/parr-capture.env
+ExecStart=/home/george/repos/martin-parr-project/.venv/bin/parr-capture --no-preview --remote-listen 192.168.178.56:8765 --artifacts /home/george/repos/martin-parr-project/artifacts/personal-collection-01-v1
+Restart=on-failure
+RestartSec=3
+StandardInput=null
+
+[Install]
+WantedBy=multi-user.target
