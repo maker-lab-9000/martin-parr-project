@@ -1,4 +1,6 @@
 import subprocess
+import sys
+import types
 from pathlib import Path
 
 from firmware.sticks3.scripts.generate_config import (
@@ -7,6 +9,40 @@ from firmware.sticks3.scripts.generate_config import (
     platformio_defines,
     platformio_env_file,
 )
+
+
+def test_platformio_quotes_each_setting_with_its_macro_encoder(tmp_path, monkeypatch):
+    from firmware.sticks3.scripts import generate_config
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        'PI_HOST=192.0.2.1\nWIFI_SSID=studio wifi\n'
+        'WIFI_PASSWORD=a\\b"c\nPARR_REMOTE_TOKEN=test-token\n'
+    )
+
+    class BuildEnv:
+        def __init__(self):
+            self.encoded = []
+            self.defines = None
+
+        def StringifyMacro(self, value):
+            self.encoded.append(value)
+            return ("encoded", value)
+
+        def Append(self, **kwargs):
+            self.defines = kwargs["CPPDEFINES"]
+
+    build_env = BuildEnv()
+    scons = types.ModuleType("SCons.Script")
+    scons.Import = lambda name: None
+    monkeypatch.setitem(sys.modules, "SCons.Script", scons)
+    monkeypatch.setattr(generate_config, "env", build_env, raising=False)
+    generate_config.configure_platformio(env_file)
+
+    assert build_env.encoded == [
+        "studio wifi", 'a\\\\b"c', "http://192.0.2.1:8765", "test-token"
+    ]
+    assert all(value[0] == "encoded" for _, value in build_env.defines)
 
 
 def test_parse_env_file_treats_shell_syntax_as_plain_data(tmp_path):

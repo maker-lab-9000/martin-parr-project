@@ -75,11 +75,6 @@ def platformio_env_file(project_dir: Path) -> Path:
     return project_dir.resolve().parents[1] / ".env"
 
 
-def _cpp_string(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
-    return f'"{escaped}"'
-
-
 def configure_platformio(env_file: Path | None = None) -> None:
     """Append local defines when PlatformIO imports this module as a pre-script."""
     try:
@@ -93,7 +88,12 @@ def configure_platformio(env_file: Path | None = None) -> None:
     defines = platformio_defines(env_file)
     if not defines:
         return
-    build_env.Append(CPPDEFINES=[(key, _cpp_string(value)) for key, value in defines])
+    # PlatformIO must preserve C string quotes through SCons and the shell.
+    # Plain quoted strings lose their quotes before reaching the compiler.
+    build_env.Append(CPPDEFINES=[
+        (key, build_env.StringifyMacro(value.replace("\\", "\\\\")))
+        for key, value in defines
+    ])
 
 
 def main(argv: list[str] | None = None) -> int:

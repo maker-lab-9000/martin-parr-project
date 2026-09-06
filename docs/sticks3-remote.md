@@ -42,8 +42,22 @@ never writes a credentials file and never passes `PI_SSH_PASSWORD` to firmware.
 Install the optional, cross-platform SSH dependency before using deployment:
 
 ```sh
-.venv/bin/pip install -e '.[deploy]'
+.venv/bin/python --version  # requires Python 3.11 or newer
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -e '.[deploy]'
 ```
+
+If the environment uses an older Python, preserve it and recreate it first
+(on macOS with Python 3.12 installed):
+
+```sh
+mv .venv .venv-old
+python3.12 -m venv .venv
+```
+
+Then run the installation commands above. Pip 21.2.4 cannot install this
+project in editable mode; upgrading pip fixes that error only when the Python
+version also meets the project requirement.
 
 Add the Pi host key before deployment, by checking its fingerprint in person
 and accepting it once with normal OpenSSH:
@@ -61,7 +75,7 @@ unknown host key.
 First check the Pi's existing state without restarting anything:
 
 ```sh
-python3 scripts/deploy_remote.py --env .env
+.venv/bin/python scripts/deploy_remote.py --env .env
 ```
 
 It checks the project directory, selected artifact, existing `parr-capture`
@@ -100,7 +114,7 @@ terminal controls. Once it is installed and `sudo -n systemctl` is authorized
 for `george`, a guarded remote restart is available:
 
 ```sh
-python3 scripts/deploy_remote.py --env .env --restart
+.venv/bin/python scripts/deploy_remote.py --env .env --restart
 ```
 
 The script refuses to stop the service when its initial inspection finds a
