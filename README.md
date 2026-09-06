@@ -45,6 +45,15 @@ Use the Pi's system OpenCV for its GTK display support. Training additionally
 needs the `train` dependencies; normally train on the Mac and copy the artifact
 folder to the Pi.
 
+## StickS3 remote capture on the Pi
+
+The StickS3 and Pi deployment uses a local `.env` that is intentionally ignored
+by Git. Copy `.env.example` to `.env`, fill in the real credentials locally, and
+follow [the Pi and StickS3 deployment guide](docs/sticks3-remote.md). The guide
+covers the two-screen desktop mode and the Stick-only headless service; do not
+put a real token, Wi-Fi password, or Pi SSH password in a command, source file,
+or commit.
+
 ## Try the starter look
 
 ```bash
