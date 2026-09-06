@@ -12,12 +12,12 @@ Install PlatformIO Core and connect an M5StickS3 over USB-C. The project uses
 M5Stack's documented StickS3 base: `esp32-s3-devkitc-1`, 8 MB partition table,
 QIO/OPI PSRAM, USB CDC, M5Unified, M5GFX, and M5PM1.
 
-Task 4 supplies local configuration. Do not add a credentials file to this
-directory or commit credentials. Until then, empty, safe defaults mean the
-firmware cannot join a network. Its generated local configuration must supply
-the four quoted build definitions `STICKS3_WIFI_SSID`, `STICKS3_WIFI_PASSWORD`,
-`STICKS3_API_BASE`, and `STICKS3_API_TOKEN` without replacing the base
-environment's existing build flags.
+The pre-build script reads the repository-root `.env`; see the
+[deployment guide](../../docs/sticks3-remote.md). Missing configuration leaves
+safe empty defaults and the device cannot join a network. Only Wi-Fi settings,
+API URL and API token enter the firmware; the SSH password stays on the host.
+Build outputs contain device credentials. Keep them private and avoid verbose
+compiler logs when using real settings.
 
 The server must expose the bearer-authenticated API contract at `/v1/status`
 and `/v1/captures`. The device enters Ready only after `/v1/status` says the
