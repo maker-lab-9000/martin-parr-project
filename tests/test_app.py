@@ -3,6 +3,7 @@ import json
 import threading
 import time
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import numpy as np
@@ -36,6 +37,49 @@ def _session(tmp_path, pipeline, camera=None, now=None):
     camera = camera or FakeCamera([synthetic_frame(90, 160)])
     return CaptureSession(camera, pipeline, tmp_path / "shots", now=now,
                           seed_rng=np.random.default_rng(0))
+
+
+def test_remote_listener_refuses_to_start_without_a_token(monkeypatch, capsys):
+    """A listener without the shared secret would be an unauthenticated shutter button."""
+    monkeypatch.delenv("PARR_REMOTE_TOKEN", raising=False)
+
+    assert main(["--remote-listen", "127.0.0.1:8765"]) == 2
+
+    assert "PARR_REMOTE_TOKEN" in capsys.readouterr().err
+
+
+def test_remote_listener_keeps_running_without_a_tty(monkeypatch, tmp_path):
+    """The remote control path must not fall through to the terminal-only error."""
+    from parr.capture import app
+
+    listeners = []
+
+    class Listener:
+        def __init__(self, controller, token, listen):
+            self.controller = controller
+            self.token = token
+            self.listen = listen
+            self.started = False
+            self.closed = False
+            listeners.append(self)
+
+        def start(self):
+            self.started = True
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setenv("PARR_REMOTE_TOKEN", "secret")
+    monkeypatch.setattr(app, "RemoteCaptureServer", Listener)
+    monkeypatch.setattr(app.Artifacts, "resolve", lambda _: object())
+    monkeypatch.setattr(app, "Pipeline", lambda _: object())
+    monkeypatch.setattr(app, "has_display", lambda: False)
+    monkeypatch.setattr(app.sys, "stdin", SimpleNamespace(isatty=lambda: False))
+    monkeypatch.setattr(app.time, "sleep", lambda _: (_ for _ in ()).throw(KeyboardInterrupt))
+
+    assert app.main(["--fake", "--no-preview", "--remote-listen", "127.0.0.1:8765"]) == 0
+    assert len(listeners) == 1
+    assert listeners[0].started and listeners[0].closed
 
 
 def test_raw_mode_writes_the_camera_bytes_verbatim(tmp_path, pipeline):

@@ -65,6 +65,7 @@ from ..imageio import load_rgb, save_jpeg
 from ..pipeline import Pipeline
 from .camera import Camera, CameraError, FakeCamera, V4L2Camera
 from .controller import CaptureController, JobSnapshot
+from .remote import RemoteCaptureServer
 
 cv2 = require_cv2()
 
@@ -423,6 +424,20 @@ def has_display() -> bool:
     )
 
 
+def _remote_listen(value: str) -> tuple[str, int]:
+    """Parse the intentionally simple IPv4/hostname ``host:port`` CLI value."""
+    host, separator, raw_port = value.rpartition(":")
+    if not separator or not host:
+        raise argparse.ArgumentTypeError("expected host:port")
+    try:
+        port = int(raw_port)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("port must be a number") from exc
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError("port must be between 1 and 65535")
+    return host, port
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="parr-capture",
@@ -440,7 +455,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--fake", action="store_true", help="synthetic camera, no hardware")
     parser.add_argument("--seed", type=int, default=None, help="seed the grain seed generator")
+    parser.add_argument(
+        "--remote-listen", type=_remote_listen, metavar="HOST:PORT",
+        help="serve the authenticated remote capture API (requires PARR_REMOTE_TOKEN)",
+    )
     args = parser.parse_args(argv)
+
+    remote_token = os.environ.get("PARR_REMOTE_TOKEN") if args.remote_listen else None
+    if args.remote_listen and not remote_token:
+        print("error: --remote-listen requires PARR_REMOTE_TOKEN", file=sys.stderr)
+        return 2
 
     try:
         pipeline = Pipeline(Artifacts.resolve(args.artifacts))
@@ -459,7 +483,43 @@ def main(argv: list[str] | None = None) -> int:
         args.out,
         seed_rng=np.random.default_rng(args.seed),
     )
+    controller: CaptureController | None = None
+    remote: RemoteCaptureServer | None = None
     try:
+        if args.remote_listen:
+            controller = CaptureController(session)
+            try:
+                remote = RemoteCaptureServer(controller, remote_token, args.remote_listen)
+                remote.start()
+            except OSError as exc:
+                print(f"error: could not start remote listener: {exc}", file=sys.stderr)
+                return 2
+            host, port = args.remote_listen
+            print(f"Remote capture API listening on {host}:{port}.")
+            try:
+                if has_display() and (args.show_captures or not args.no_preview):
+                    if sys.stdin.isatty():
+                        with TerminalKeys() as keys:
+                            displayed = run_preview_loop(
+                                session, CAPTURE_WINDOW_NAME, captures_only=True,
+                                read_key=lambda: keys.read(timeout=0), controller=controller,
+                            )
+                    else:
+                        displayed = run_preview_loop(
+                            session, CAPTURE_WINDOW_NAME, captures_only=True, controller=controller,
+                        )
+                    if displayed:
+                        return 0
+                    print("Capture display unavailable; remote API remains active.")
+                if sys.stdin.isatty():
+                    with TerminalKeys() as keys:
+                        run_headless_loop(session, keys.read, controller=controller)
+                    return 0
+                print("Remote capture API active without terminal controls. Press Ctrl-C to stop.")
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                return 0
         if args.show_captures and has_display():
             if sys.stdin.isatty():
                 with TerminalKeys() as keys:
@@ -489,7 +549,12 @@ def main(argv: list[str] | None = None) -> int:
             run_headless_loop(session, keys.read)
         return 0
     finally:
-        camera.close()
+        if remote is not None:
+            remote.close()
+        if controller is not None:
+            controller.close()
+        else:
+            camera.close()
 
 
 if __name__ == "__main__":
