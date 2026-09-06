@@ -227,6 +227,18 @@ void test_successful_status_clears_active_transport_error(void) {
   TEST_ASSERT_EQUAL_STRING("Capture error", client.errorDetail());
 }
 
+void test_failed_status_clears_stale_readiness_after_rejected_post(void) {
+  CaptureClient client;
+  make_ready(client);
+  settle_button(client, 10, "11111111-1111-4111-8111-111111111111");
+  client.rejectSubmit(50);
+  client.completeStatusTransportError(550);
+
+  client.tick(2050);
+
+  TEST_ASSERT_EQUAL(ClientState::Connecting, client.state());
+}
+
 void test_submit_start_failure_retries_the_same_uuid_without_polling(void) {
   CaptureClient client;
   make_ready(client);
@@ -281,6 +293,7 @@ void setup() {
   RUN_TEST(test_known_submission_rejection_releases_button_for_a_later_press);
   RUN_TEST(test_rejection_expiry_does_not_claim_ready_while_server_has_an_active_job);
   RUN_TEST(test_successful_status_clears_active_transport_error);
+  RUN_TEST(test_failed_status_clears_stale_readiness_after_rejected_post);
   RUN_TEST(test_submit_start_failure_retries_the_same_uuid_without_polling);
   RUN_TEST(test_only_acknowledged_post_queues_the_one_shutter_tone);
   RUN_TEST(test_uuid_is_rfc4122_version_four_shape);
@@ -307,6 +320,7 @@ int main() {
   test_known_submission_rejection_releases_button_for_a_later_press();
   test_rejection_expiry_does_not_claim_ready_while_server_has_an_active_job();
   test_successful_status_clears_active_transport_error();
+  test_failed_status_clears_stale_readiness_after_rejected_post();
   test_submit_start_failure_retries_the_same_uuid_without_polling();
   test_only_acknowledged_post_queues_the_one_shutter_tone();
   test_uuid_is_rfc4122_version_four_shape();

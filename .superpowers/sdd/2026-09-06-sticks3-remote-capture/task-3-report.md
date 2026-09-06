@@ -34,10 +34,11 @@
   server readiness/instance interruption, reconnect backoff cap,
   reconnect-before-submit recovery, submit-start retry with the same UUID,
   acknowledgement-only shutter sound, authenticated-status busy recovery, and
-  UUID v4 layout.
-- `pio test -d firmware/sticks3 -e native` — passed: 17 test cases succeeded.
+  stale-readiness invalidation after status transport failure, and UUID v4
+  layout.
+- `pio test -d firmware/sticks3 -e native` — passed: 18 test cases succeeded.
 - `pio run -d firmware/sticks3` — passed. Target size: 178,124 / 327,680 bytes
-  RAM (54.4%) and 1,044,909 / 3,342,336 bytes flash (31.3%).
+  RAM (54.4%) and 1,044,861 / 3,342,336 bytes flash (31.3%).
 - `git diff --check` — passed before the fix commit.
 
 ## Remaining concern

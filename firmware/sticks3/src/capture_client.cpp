@@ -181,6 +181,10 @@ void CaptureClient::completeServerStatus(bool ready, bool has_active_job, const 
 void CaptureClient::completeStatusTransportError(uint32_t now_ms) {
   status_in_flight_ = false;
   next_status_at_ = now_ms + kPollIntervalMs;
+  // A failed authenticated status probe invalidates the cached readiness.
+  // Treat the server as busy until a later successful response proves idle.
+  api_ready_ = false;
+  server_has_active_job_ = true;
   if (active_request_) {
     error_reason_ = ErrorReason::Transport;
     setError(now_ms);
