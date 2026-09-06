@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "martin-parr-project"
+version = "0.1.0"
+description = "Saturated color-negative grading and reference-trained 3D LUTs for USB cameras"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.24",
+  "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+opencv = ["opencv-python>=4.8"]
+train = ["scipy>=1.12", "requests>=2.31", "tqdm>=4.66", "opencv-python>=4.8"]
+dev = ["opencv-python>=4.8", "pytest>=7.4", "ruff>=0.4", "build>=1.0"]
+
+[project.scripts]
+parr-fetch = "parr.train.fetch:main"
+parr-train = "parr.train.fit:main"
+parr-capture = "parr.capture.app:main"
+parr-process = "parr.capture.batch:main"
+parr-preset = "parr.preset:main"
+
+[tool.setuptools.packages.find]
+include = ["parr*"]
+
+[tool.setuptools.package-data]
+parr = ["data/*.cube", "data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = ["slow: builds a wheel and installs it into a temporary venv"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

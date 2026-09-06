@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# Data and generated output
+/data/
+/artifacts/
+
+# Downloaded film reference corpus (keep ektar100-attribution.md versionable)
+/ektar100/
+
+# Agent scratch space (plans' ledgers, briefs, review packages)
+.superpowers/
+
+# OS
+.DS_Store
