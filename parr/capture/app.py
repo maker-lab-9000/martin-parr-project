@@ -50,6 +50,7 @@ import sys
 import termios
 import time
 import tty
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -63,6 +64,7 @@ from ..artifacts import PARAMS_VERSION, Artifacts, ArtifactsError
 from ..imageio import load_rgb, save_jpeg
 from ..pipeline import Pipeline
 from .camera import Camera, CameraError, FakeCamera, V4L2Camera
+from .controller import CaptureController, JobSnapshot
 
 cv2 = require_cv2()
 
@@ -166,21 +168,45 @@ def run_headless_loop(
     session: CaptureSession,
     read_key: Callable[[], str | None],
     out: Callable[[str], None] = print,
+    *,
+    controller: CaptureController | None = None,
 ) -> int:
     out("Headless mode: SPACE to capture, Q to quit.")
     count = 0
+    owned_controller = controller is None
+    controller = controller or CaptureController(session)
+    try:
+        while True:
+            key = read_key()
+            if key is None:
+                continue
+            if key == " ":
+                job = controller.submit(uuid.uuid4().hex)
+                if job.error_code is not None:
+                    out(f"error: {job.error_message or job.error_code}")
+                    continue
+                out("Processing photo...")
+                completed = _wait_for_terminal_job(controller, job.request_id)
+                if completed.state == "complete":
+                    assert isinstance(completed.result, CaptureResult)
+                    _announce(completed.result, out)
+                    count += 1
+                else:
+                    out(f"error: {completed.error_message or completed.error_code}")
+            elif key.lower() == "q":
+                return count
+    finally:
+        if owned_controller:
+            controller.close()
+
+
+def _wait_for_terminal_job(controller: CaptureController, request_id: str) -> JobSnapshot:
     while True:
-        key = read_key()
-        if key is None:
-            continue
-        if key == " ":
-            try:
-                _announce(session.capture(), out)
-                count += 1
-            except (CameraError, OSError) as exc:
-                out(f"error: {exc}")
-        elif key.lower() == "q":
-            return count
+        job = controller.status(request_id)
+        assert job is not None
+        if job.state in {"complete", "failed"}:
+            return job
+        time.sleep(0.01)
 
 
 def _resize_to_fit(frame: np.ndarray, size: tuple[int, int]) -> np.ndarray:
@@ -263,8 +289,13 @@ def run_preview_loop(
     *,
     captures_only: bool = False,
     read_key: Callable[[], str | None] | None = None,
+    controller: CaptureController | None = None,
 ) -> bool:
     """Run the windowed loop. Returns False if this build cannot show a window."""
+    if controller is not None and not captures_only:
+        raise ValueError("a shared capture controller requires capture-only display mode")
+    owned_controller = captures_only and controller is None
+    controller = controller or (CaptureController(session) if captures_only else None)
     try:
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL | cv2.WINDOW_FREERATIO)
     except cv2.error:
@@ -283,6 +314,7 @@ def run_preview_loop(
             cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
             cv2.waitKey(50)
             captured_frame = None  # Keep the full-resolution photo for subsequent display resizes.
+            active_request_id = None
         except cv2.error:
             return False
         while True:
@@ -297,6 +329,23 @@ def run_preview_loop(
                     )
                     cv2.imshow(window_name, displayed_frame)
                 display_size = size
+                if captures_only and active_request_id is not None:
+                    assert controller is not None
+                    job = controller.status(active_request_id)
+                    assert job is not None
+                    if job.state == "complete":
+                        assert isinstance(job.result, CaptureResult)
+                        _announce(job.result, print)
+                        frame, _ = load_rgb(job.result.parr)
+                        captured_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                        displayed_frame = _fit_display(captured_frame, display_size)
+                        cv2.imshow(window_name, displayed_frame)
+                        active_request_id = None
+                    elif job.state == "failed":
+                        print(f"error: {job.error_message or job.error_code}")
+                        # The existing prompt or previous photo remains visible after an error.
+                        cv2.imshow(window_name, displayed_frame)
+                        active_request_id = None
                 if not captures_only:
                     frame = session.preview_frame(graded)
                     cv2.imshow(window_name, _fit_display(
@@ -315,20 +364,23 @@ def run_preview_loop(
             if key == ord(" "):
                 try:
                     if captures_only:
+                        if active_request_id is not None:
+                            continue
+                        assert controller is not None
+                        job = controller.submit(uuid.uuid4().hex)
+                        if job.error_code is not None:
+                            print(f"error: {job.error_message or job.error_code}")
+                            continue
+                        active_request_id = job.request_id
                         cv2.imshow(window_name, _capture_loading_screen(display_size))
                         # imshow queues a repaint; pump GUI events before blocking on capture.
                         cv2.waitKey(1)
-                    try:
-                        result = session.capture()
-                        _announce(result, print)
-                        if captures_only:
-                            frame, _ = load_rgb(result.parr)
-                            captured_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-                            displayed_frame = _fit_display(captured_frame, display_size)
-                    except (CameraError, OSError) as exc:
-                        print(f"error: {exc}")
-                    if captures_only:
-                        cv2.imshow(window_name, displayed_frame)
+                    else:
+                        try:
+                            result = session.capture()
+                            _announce(result, print)
+                        except (CameraError, OSError) as exc:
+                            print(f"error: {exc}")
                 except cv2.error:
                     return False
             elif not captures_only and key in (ord("p"), ord("P")):
@@ -340,6 +392,9 @@ def run_preview_loop(
             cv2.destroyAllWindows()
         except cv2.error:
             pass
+        if owned_controller:
+            assert controller is not None
+            controller.close()
 
 
 class TerminalKeys:
