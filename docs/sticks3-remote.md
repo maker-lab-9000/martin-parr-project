@@ -103,9 +103,10 @@ for `george`, a guarded remote restart is available:
 python3 scripts/deploy_remote.py --env .env --restart
 ```
 
-The script stops the service first, verifies that no `parr-capture` process
-remains, and only then starts it. It refuses to restart when a camera is already
-owned. For a service change, run the inspection command again afterward and use
+The script refuses to stop the service when its initial inspection finds a
+foreign camera/capture owner. It permits only the service's own known process,
+then stops it, verifies that no process or camera owner remains, and only then
+starts it. For a service change, run the inspection command again afterward and use
 `journalctl -u parr-capture.service -n 100` on the Pi for diagnostics.
 
 ## Generate and flash StickS3 configuration

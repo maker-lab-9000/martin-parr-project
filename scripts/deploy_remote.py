@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shlex
 import sys
 from collections.abc import Mapping
@@ -92,6 +93,10 @@ def inspection_commands(config: DeploymentConfig) -> list[tuple[str, str]]:
             "artifact",
             f"test -d {artifact} && test -f {artifact}/params.json && test -f {artifact}/parr.cube",
         ),
+        (
+            "service pid",
+            "systemctl show -p MainPID --value parr-capture.service 2>/dev/null || true",
+        ),
         ("capture process", "pgrep -af '[p]arr-capture' || true"),
         ("camera owners", "fuser -v /dev/video* 2>/dev/null || true"),
         ("desktop session", "loginctl list-sessions --no-legend 2>/dev/null || true"),
@@ -114,10 +119,38 @@ def inspect_target(client: Any, config: DeploymentConfig) -> dict[str, str]:
     return results
 
 
+def _process_ids(output: str) -> set[str]:
+    return {
+        match.group(1)
+        for line in output.splitlines()
+        if (match := re.match(r"\s*(\d+)\s+", line))
+    }
+
+
+def _camera_owner_ids(output: str) -> set[str]:
+    return set(re.findall(r"(?<![A-Za-z/])(\d+)(?:[A-Za-z])?\b", output))
+
+
+def _has_foreign_initial_owner(inspection: Mapping[str, str]) -> bool:
+    service_pid = inspection.get("service pid", "").strip()
+    allowed = {service_pid} if service_pid.isdecimal() and service_pid != "0" else set()
+    capture_output = inspection.get("capture process", "")
+    camera_output = inspection.get("camera owners", "")
+    capture_ids = _process_ids(capture_output)
+    camera_ids = _camera_owner_ids(camera_output)
+    if capture_ids - allowed or camera_ids - allowed:
+        return True
+    if capture_output and (not capture_ids or "parr-capture" not in capture_output):
+        return True
+    return bool(camera_output and not camera_ids)
+
+
 def restart_headless_service(client: Any, inspection: Mapping[str, str]) -> None:
     """Stop first, then refuse to start while any process still owns a camera."""
-    # The initial inspection may correctly find the service we are replacing.
-    # Stop it first, then inspect again before starting a replacement.
+    if _has_foreign_initial_owner(inspection):
+        raise RuntimeError("refusing restart: foreign capture or camera owner is active")
+    # A known service-owned process may hold the camera initially. Stop it, then
+    # recheck before starting a replacement so two processes cannot compete.
     status, _output, error = _run(client, "sudo -n systemctl stop parr-capture.service")
     if status:
         detail = error.strip() or "command failed"

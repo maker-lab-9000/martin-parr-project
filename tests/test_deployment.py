@@ -1,3 +1,5 @@
+import pytest
+
 from scripts.deploy_remote import (
     DeploymentConfig,
     build_capture_command,
@@ -106,6 +108,7 @@ def test_restart_stops_the_current_service_before_rechecking_its_camera_owner():
         {
             "camera owners": "1234  /home/george/.venv/bin/parr-capture",
             "capture process": "1234 parr-capture",
+            "service pid": "1234",
         },
     )
 
@@ -115,3 +118,19 @@ def test_restart_stops_the_current_service_before_rechecking_its_camera_owner():
         "fuser -v /dev/video* 2>/dev/null || true",
         "sudo -n systemctl start parr-capture.service",
     ]
+
+
+def test_restart_refuses_a_foreign_camera_owner_before_stopping_the_service():
+    client = RestartClient()
+
+    with pytest.raises(RuntimeError, match="foreign capture or camera owner"):
+        restart_headless_service(
+            client,
+            {
+                "camera owners": "4321  /usr/bin/other-camera-app",
+                "capture process": "4321 other-camera-app",
+                "service pid": "1234",
+            },
+        )
+
+    assert client.commands == []

@@ -70,6 +70,11 @@ def platformio_defines(env_file: Path) -> list[tuple[str, str]]:
     return firmware_defines(parse_env_file(env_file))
 
 
+def platformio_env_file(project_dir: Path) -> Path:
+    """Map PlatformIO's firmware project directory to the checkout-local env."""
+    return project_dir.resolve().parents[1] / ".env"
+
+
 def _cpp_string(value: str) -> str:
     escaped = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
     return f'"{escaped}"'
@@ -84,7 +89,7 @@ def configure_platformio(env_file: Path | None = None) -> None:
     Import("env")
     build_env = globals()["env"]
     if env_file is None:
-        env_file = Path(str(build_env["PROJECT_DIR"])) / ".env"
+        env_file = platformio_env_file(Path(str(build_env["PROJECT_DIR"])))
     defines = platformio_defines(env_file)
     if not defines:
         return

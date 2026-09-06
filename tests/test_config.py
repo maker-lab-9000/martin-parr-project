@@ -5,6 +5,7 @@ from firmware.sticks3.scripts.generate_config import (
     firmware_defines,
     parse_env_file,
     platformio_defines,
+    platformio_env_file,
 )
 
 
@@ -50,6 +51,12 @@ def test_firmware_defines_include_only_device_credentials_and_api_values():
 
 def test_platformio_uses_safe_empty_defaults_when_local_env_is_absent(tmp_path):
     assert platformio_defines(tmp_path / ".env") == []
+
+
+def test_platformio_derives_the_repo_root_env_file_from_its_project_directory(tmp_path):
+    project_dir = tmp_path / "repo" / "firmware" / "sticks3"
+
+    assert platformio_env_file(project_dir) == tmp_path / "repo" / ".env"
 
 
 def test_gitignore_excludes_local_secrets_and_firmware_build_outputs():
