@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import socket
 import threading
 import time
 import uuid
@@ -72,6 +73,23 @@ def test_api_rejects_missing_and_wrong_bearer_tokens(remote):
     server, _ = remote
     assert _request(server, "GET", "/v1/status", token=None)[0] == 401
     assert _request(server, "GET", "/v1/status", token="not-the-token")[0] == 401
+    assert _json(server, "GET", "/v1/status")[0] == 200
+
+
+def test_api_rejects_a_non_ascii_bearer_header_without_losing_the_handler(remote):
+    """A malformed raw header must be unauthorized, not crash its request thread."""
+    server, _ = remote
+    request = (
+        b"GET /v1/status HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Authorization: Bearer \xff\r\n"
+        b"Connection: close\r\n\r\n"
+    )
+    with socket.create_connection(server.address, timeout=2) as connection:
+        connection.sendall(request)
+        response = connection.recv(4096)
+
+    assert response.startswith(b"HTTP/1.1 401")
     assert _json(server, "GET", "/v1/status")[0] == 200
 
 

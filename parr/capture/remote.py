@@ -113,8 +113,9 @@ class RemoteCaptureServer:
         return Handler
 
     def _authorized(self, handler: BaseHTTPRequestHandler) -> bool:
-        expected = f"Bearer {self._token}"
-        supplied = handler.headers.get("Authorization", "")
+        # ``compare_digest`` rejects non-ASCII strings, but accepts UTF-8 bytes.
+        expected = f"Bearer {self._token}".encode()
+        supplied = handler.headers.get("Authorization", "").encode()
         if hmac.compare_digest(supplied, expected):
             return True
         self._send_json(handler, HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
