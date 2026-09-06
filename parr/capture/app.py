@@ -299,6 +299,9 @@ def run_preview_loop(
     try:
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL | cv2.WINDOW_FREERATIO)
     except cv2.error:
+        if owned_controller:
+            assert controller is not None
+            controller.close()
         return False
     graded = True
     try:
