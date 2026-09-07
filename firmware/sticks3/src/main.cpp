@@ -41,6 +41,22 @@ bool configured() {
 void lockClient() { xSemaphoreTake(capture_mutex, portMAX_DELAY); }
 void unlockClient() { xSemaphoreGive(capture_mutex); }
 
+// Releases on every path out of a scope, including the early returns in
+// fetchJpeg. Without it the download held no lock while writing the buffer
+// the display task decodes from.
+class MutexGuard {
+ public:
+  explicit MutexGuard(SemaphoreHandle_t handle) : handle_(handle) {
+    xSemaphoreTake(handle_, portMAX_DELAY);
+  }
+  ~MutexGuard() { xSemaphoreGive(handle_); }
+  MutexGuard(const MutexGuard&) = delete;
+  MutexGuard& operator=(const MutexGuard&) = delete;
+
+ private:
+  SemaphoreHandle_t handle_;
+};
+
 String endpoint(const char* suffix) { return String(STICKS3_API_BASE) + suffix; }
 
 void addAuth(HTTPClient& http) {
@@ -83,6 +99,21 @@ bool fetchJpeg(const char* request_id) {
     return false;
   }
   WiFiClient* stream = http.getStreamPtr();
+
+  // Everything below touches jpeg_back_buffer, so hold jpeg_mutex from the
+  // first byte written until the size and ready flag are published. It used
+  // to be taken only for that final publish, leaving the network task free
+  // to overwrite the buffer while loop() was decoding out of it -- a torn
+  // frame on screen, and a read of bytes being concurrently rewritten.
+  //
+  // Holding a mutex across several seconds of network I/O is normally worth
+  // avoiding, but it is safe here because the only other holder, loop(),
+  // takes it with a zero timeout: while a download is in flight the display
+  // task simply skips its decode attempt and retries on a later iteration,
+  // so button sampling and rendering keep running at full rate. Widening
+  // this lock therefore costs responsiveness nothing.
+  MutexGuard buffer_lock(jpeg_mutex);
+
   size_t received = 0;
   const uint32_t deadline = millis() + 5000;
   while (http.connected() && (length < 0 || received < static_cast<size_t>(length)) && millis() < deadline) {
@@ -105,10 +136,8 @@ bool fetchJpeg(const char* request_id) {
       jpeg_back_buffer[received - 2] != 0xff || jpeg_back_buffer[received - 1] != 0xd9) {
     return false;
   }
-  xSemaphoreTake(jpeg_mutex, portMAX_DELAY);
   jpeg_back_size = received;
   jpeg_ready = true;
-  xSemaphoreGive(jpeg_mutex);
   return true;
 }
 

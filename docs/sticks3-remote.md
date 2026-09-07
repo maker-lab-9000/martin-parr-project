@@ -216,3 +216,33 @@ curl -s -H "Authorization: Bearer $PARR_REMOTE_TOKEN" \
 
 If `/tmp/served.jpg` is graded, the Pi is correct and the fault is on the
 Stick; if it is not, the capture that produced it is worth keeping.
+
+## 2026-09-07: the download buffer race, fixed
+
+`fetchJpeg` wrote the HTTP body into `jpeg_back_buffer` while holding no
+lock, taking `jpeg_mutex` only at the very end to publish `jpeg_back_size`
+and `jpeg_ready`. `loop()` holds that same mutex while `decodeAndStore`
+reads the buffer, so a download landing during a decode overwrote the bytes
+being decoded — a torn frame, and a read of memory being concurrently
+rewritten.
+
+The lock now spans the whole download, from the first byte written to the
+publish, via an RAII `MutexGuard` so the several early `return false` paths
+release it. Holding a mutex across seconds of network I/O is normally worth
+avoiding; it is safe here because the only other holder takes it with a zero
+timeout (`xSemaphoreTake(jpeg_mutex, 0)`). While a download is in flight the
+display task skips its decode attempt and retries on the next iteration, so
+button sampling and rendering keep running at full rate. Widening the lock
+costs responsiveness nothing and needs no second buffer.
+
+A partial download now leaves stale bytes in the buffer, which is harmless:
+`jpeg_ready` is only set after the SOI/EOI and length checks pass, so
+`loop()` never decodes a failed transfer.
+
+**Not covered by a test, and it cannot easily be.** `fetchJpeg` lives in
+`main.cpp`, which `[env:native]` excludes from the Unity build
+(`build_src_filter` takes only `capture_client.cpp`), and it depends on
+`HTTPClient` and FreeRTOS. Testing it would mean extracting the transfer
+loop behind a stream interface so a host test could drive it — worth doing
+if this area keeps producing defects, but it is a refactor rather than a
+fix. What was verified here is that it compiles for the target.
