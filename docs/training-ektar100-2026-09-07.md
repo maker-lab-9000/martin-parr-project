@@ -146,3 +146,19 @@ would have turned `parr-preset` on a bare Pi install into a
 `ModuleNotFoundError` for a command that previously worked. Importing
 `parr.preset` with SciPy blocked now succeeds, and calling `starter_lut`
 raises a message naming the extra.
+
+## The bundled artifact was regenerated
+
+`parr/data/` now carries the `vividness=1` preset (`preset_version: 2`), so
+`git pull` on the Pi is enough — `parr-capture` and `parr-process` pick it up
+with no extra step. `parr-preset` is only needed to *make* a different look,
+and it needs the `[train]` extra for SciPy.
+
+Verified by inspecting the built wheel: `parr/data/parr.cube` (970,373 bytes)
+and `params.json` travel inside it, and all five console scripts are in
+`entry_points.txt`.
+
+Note `tests/test_packaging.py` fails on this machine — the console script is
+absent from the temporary venv it builds. It fails identically at
+`origin/main`, so it is environmental and pre-existing, not a regression from
+this branch. The wheel itself is correct by direct inspection.
