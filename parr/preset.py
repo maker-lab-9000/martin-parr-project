@@ -13,7 +13,6 @@ from .grain import GrainParams
 from .lut import LUT3D
 from .normalize import NormalizeParams
 
-
 _NEEDS_TRAIN = (
     "Regenerating the preset needs SciPy, which arrives with the [train] extra:\n"
     "  pip install -e '.[train]'\n"

@@ -31,3 +31,7 @@ dist/
 
 # OS
 .DS_Store
+
+# Scratch from analysis runs
+/compare4.py
+/train-*.log

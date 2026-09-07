@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import http.client
+import io
 import json
 import socket
 import threading
@@ -14,11 +15,16 @@ from PIL import Image
 
 from parr.capture.controller import CaptureController
 from parr.capture.remote import RemoteCaptureServer
+from parr.capture.thumbnail import fitted_jpeg
 
 
 @dataclass
 class SavedCapture:
     parr: object
+    # The real CaptureResult also carries `original`, the camera's own frame.
+    # Leaving it out of the double meant no test could tell which of the two
+    # the API serves, so a swap would have been invisible.
+    original: object = None
 
 
 class BlockingSession:
@@ -196,5 +202,44 @@ def test_expired_job_is_not_reused_after_the_bounded_registry_forgets_it():
         first_body = json.dumps({"request_id": request_ids[0]}).encode()
         assert _json(server, "POST", "/v1/captures", first_body)[0] == 404
     finally:
+        server.close()
+        controller.close()
+
+
+def test_the_api_serves_the_graded_image_and_never_the_camera_original(tmp_path):
+    """The Stick shows what this endpoint returns, so it must be the grade.
+
+    `SavedCapture` used to carry only `parr`, so every existing test passed a
+    single file as both and could not distinguish them: swapping `parr` for
+    `original` in the handler would have gone unnoticed.
+    """
+    graded = tmp_path / "shot_parr.jpg"
+    original = tmp_path / "shot_ungraded.jpg"
+    Image.fromarray(np.full((135, 240, 3), (210, 90, 40), dtype=np.uint8)).save(graded)
+    Image.fromarray(np.full((135, 240, 3), (120, 120, 120), dtype=np.uint8)).save(original)
+
+    session = BlockingSession(SavedCapture(graded, original))
+    controller = CaptureController(session)
+    server = RemoteCaptureServer(controller, "secret-token", ("127.0.0.1", 0))
+    server.start()
+    try:
+        request_id = str(uuid.uuid4())
+        _json(server, "POST", "/v1/captures", json.dumps({"request_id": request_id}).encode())
+        assert session.started.wait(timeout=1)
+        session.release.set()
+        status, data = 0, b""
+        for _ in range(100):
+            status, _headers, data = _request(server, "GET", f"/v1/captures/{request_id}/image.jpg")
+            if status == 200:
+                break
+            time.sleep(0.01)
+        assert status == 200
+        assert data == fitted_jpeg(graded), "served bytes are not the graded image"
+        assert data != fitted_jpeg(original)
+        # And the served frame is visibly the warm one, not neutral grey.
+        served = np.asarray(Image.open(io.BytesIO(data)).convert("RGB"), dtype=np.int16)
+        assert served[:, :, 0].mean() - served[:, :, 2].mean() > 40
+    finally:
+        session.release.set()
         server.close()
         controller.close()

@@ -168,3 +168,51 @@ replace the local `PARR_REMOTE_TOKEN` in `.env`, update the secured Pi service
 environment (or desktop session environment), restart the Pi process only after
 inspection, then rebuild and flash the StickS3. The old token stops working as
 soon as the Pi process has been restarted with the new value.
+
+## 2026-09-07: "the Stick shows the ungraded photo" — what was checked
+
+**The Pi serves the graded image. Proven, not inferred.** A real
+`CaptureSession` with the fake camera, a real `RemoteCaptureServer`, and one
+capture over HTTP: the served bytes are byte-identical to
+`fitted_jpeg(result.parr)` and differ from `fitted_jpeg(result.original)`.
+`capture()` assigns `parr = save_jpeg(graded, ...)` and `_image` reads
+`job.result.parr`, so the whole chain is right.
+
+**The grade is clearly visible at thumbnail size**, so a subtle-grade
+explanation does not hold on the numbers: between the two 240×135
+thumbnails the Stick could receive, mean Oklab difference is 0.083–0.110 and
+p95 is 0.177–0.224, five to ten times a just-noticeable difference.
+
+**A test gap that would have hidden exactly this bug.** The `SavedCapture`
+double carried only `parr`, so every test passed one file as both images and
+none could tell which the handler returned. Swapping `parr` for `original`
+in `_image` passed the whole remote suite. `SavedCapture` now carries
+`original` too, and a new test asserts the served bytes are the graded file
+and not the original — falsified by making that swap, which now fails.
+
+**A real firmware defect, found while looking, which is NOT this bug.**
+`fetchJpeg` writes the download into `jpeg_back_buffer` while holding no
+lock, taking `jpeg_mutex` only at the end to publish `jpeg_back_size` and
+`jpeg_ready`. `loop()` holds the mutex while `decodeAndStore` reads that
+same buffer, so a download landing during a decode can overwrite the bytes
+being decoded. The symptom would be a torn or garbled frame rather than a
+correctly-decoded wrong image, so it does not explain this report — but it
+should be fixed: either take the mutex around the write, or double-buffer
+and publish a pointer.
+
+**Not explained.** No mechanism found by which the *camera original* reaches
+the Stick. Remaining candidates, in order: the panel itself (small
+low-gamut TFT, and the shipped preset is now `vividness 0.5`, a deliberately
+gentler look than the 1.0 these observations may have been made against);
+a stale `photo_` buffer surviving a failed fetch or decode, which shows an
+older but still graded capture; or a Pi running an older revision than the
+branch. The decisive check is to fetch the endpoint directly from the Pi and
+look at the bytes:
+
+```bash
+curl -s -H "Authorization: Bearer $PARR_REMOTE_TOKEN" \
+  http://localhost:PORT/v1/captures/<request-id>/image.jpg -o /tmp/served.jpg
+```
+
+If `/tmp/served.jpg` is graded, the Pi is correct and the fault is on the
+Stick; if it is not, the capture that produced it is worth keeping.

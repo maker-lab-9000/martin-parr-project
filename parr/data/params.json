@@ -1,7 +1,7 @@
 {
   "version": 2,
   "lut_file": "parr.cube",
-  "lut_sha1": "853fe24a4d12b480b5082421130a6cb3f02f9e2e",
+  "lut_sha1": "c170d28bdf5d05d3e106cb1afb9c416861e84e9c",
   "normalize": {
     "white_balance": true,
     "wb_gain_min": 0.6,
@@ -29,7 +29,7 @@
     "kind": "handcrafted-preset",
     "trained": false,
     "preset_version": 2,
-    "vividness": 1.0,
+    "vividness": 0.5,
     "note": "Untrained saturated color-negative starter. No Martin Parr images used. Not a calibrated film-stock or photographer emulation."
   }
 }
