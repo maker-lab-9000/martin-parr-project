@@ -88,3 +88,61 @@ tints its neutrals (0.0074 and 0.0100 measured) while the grades carried
 fitted artifacts land at 0.0037–0.0039, well under either ceiling. The cap
 was never the binding constraint. The wider value is kept because it does
 not belong at a Kodachrome-era setting here, but it buys nothing today.
+
+## The stylistic lift (`--vividness`)
+
+Added because the reference cannot supply it. `chroma_gain` follows a power
+curve in chroma, unity at 0.15 and rising as chroma falls, so weak colour
+gains more than strong colour. `vividness=0` reproduces the original
+constant-gain look exactly.
+
+An exponential decay was tried first and measured too weak — mean chroma
+0.0251 → 0.0270 across its whole range. The power curve reaches 0.0284 and,
+more to the point, matches the reference's *distribution shape*:
+
+| | mean chroma | chroma of colours | >0.06 | >0.12 |
+|---|---|---|---|---|
+| ungraded | 0.0212 | 0.0825 | 6.5% | 0.8% |
+| `vividness 0` (original) | 0.0251 | 0.0878 | 10.6% | 1.4% |
+| **`vividness 1`** | **0.0284** | **0.0948** | **14.8%** | **2.4%** |
+| `vividness 1.5` | 0.0303 | 0.0998 | 16.2% | 3.8% |
+| *Ektar 100 reference* | 0.0364 | 0.0863 | **14.6%** | **2.6%** |
+| *Velvia reference* | 0.0497 | 0.0920 | 25.8% | 7.3% |
+
+`vividness=1` is therefore calibrated, not chosen by eye: it puts the same
+share of the frame above chroma 0.06 and 0.12 as Ektar 100 does. 1.5 leans
+toward Velvia. Mean chroma stays well below either reference on purpose —
+two thirds of these frames are white wall and grey floor, and colouring
+those would be wrong rather than vivid.
+
+**Near-neutral surfaces are not tinted.** Output chroma by input band, mean
+over the 26 captures:
+
+| input chroma | share | v=0 | v=1 | v=1.5 |
+|---|---|---|---|---|
+| 0.00–0.01 | 37.2% | 0.0055 | 0.0055 | 0.0055 |
+| 0.01–0.02 | 26.7% | 0.0165 | 0.0168 | 0.0170 |
+| 0.02–0.04 | 21.3% | 0.0333 | 0.0392 | 0.0429 |
+| 0.04–0.08 | 12.1% | 0.0666 | 0.0801 | 0.0871 |
+
+The lift lands in 0.02–0.08 and leaves the bottom two bands alone, because
+the existing grey-diagonal blend protects them. A first visual read of these
+frames suggested walls were picking up a cyan cast; the measurement says
+otherwise — what changes is slightly-blue daylight at chroma 0.02–0.04,
+lifted 29%, which is the control working as intended.
+
+## `enforce_monotone` now also runs on the handcrafted preset
+
+The preset is built by `starter_lut`, not `fit_lut`, so the monotone
+projection the fitted path applies had never touched it. It needed it: the
+per-node gamut search and neutral blend left **53 steps where a channel falls
+as its own input rises, the worst reversing by 0.15 — 38 of 255 levels**,
+which is the banding hazard. The projection fixes all of them, moves nodes by
+a mean of 0.00003, and changes mean chroma by 0.0%. It is free.
+
+`parr.preset` imports it lazily. `parr/train/lutfit.py` imports SciPy at
+module scope and SciPy is only in the `[train]` extra, so a top-level import
+would have turned `parr-preset` on a bare Pi install into a
+`ModuleNotFoundError` for a command that previously worked. Importing
+`parr.preset` with SciPy blocked now succeeds, and calling `starter_lut`
+raises a message naming the extra.
