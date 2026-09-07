@@ -1,0 +1,1504 @@
+{
+  "version": 1,
+  "purpose": "reviewed regression set; not a blind final test",
+  "source_dir": "/Users/george.babanau/2026-09-07",
+  "comparison_dir": "/Users/george.babanau/2026-09-07-trained-comparison-v3",
+  "captures": [
+    {
+      "id": "124829",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:48:29",
+        "original": "124829_ungraded.jpg",
+        "parr": "124829_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          1.0397,
+          0.9947,
+          0.9437
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0003,
+          "high": 1.0006,
+          "stretch": 0.9997,
+          "gamma": 1.1268,
+          "black_rgb_spread": 0.0,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1911761572,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2958.7,
+        "shutter_to_saved_ms": 3821.7
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/124829_ungraded.jpg",
+          "sha256": "819ef3949073fc796840a3bbabc49b7aee3cbb63ad66f333d14b1ec927e8c3d2"
+        },
+        "starter": {
+          "path": "images/124829_starter.jpg",
+          "sha256": "ad9013e396c312ec31608313040b37d7a4c82f82c8b8740e5a104a04ab4fa7bf"
+        },
+        "v3": {
+          "path": "images/124829_v3.jpg",
+          "sha256": "0ae61fadfd284098130fca8aa79e66ece32c01a35543b01ea465aca3ee526223"
+        }
+      }
+    },
+    {
+      "id": "124841",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:48:41",
+        "original": "124841_ungraded.jpg",
+        "parr": "124841_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          1.073,
+          0.9875,
+          0.9302
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0,
+          "high": 0.8025,
+          "stretch": 1.2462,
+          "gamma": 1.2066,
+          "black_rgb_spread": 0.0,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 2078478518,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2716.9,
+        "shutter_to_saved_ms": 3494.2
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/124841_ungraded.jpg",
+          "sha256": "14c2517a31d00abed3df21ac37e08fe6284948ce237207a653f95d0199359e19"
+        },
+        "starter": {
+          "path": "images/124841_starter.jpg",
+          "sha256": "bc0614ae99a1266cf86f41e73d59e55bb398da4ce897ea890c95bce8fd58a061"
+        },
+        "v3": {
+          "path": "images/124841_v3.jpg",
+          "sha256": "c202a560a6f866545a6e7ae6e1f8d1e5c146d7c6bb66895fe3c1f262ed212be6"
+        }
+      }
+    },
+    {
+      "id": "124852",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:48:52",
+        "original": "124852_ungraded.jpg",
+        "parr": "124852_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          1.0528,
+          0.9944,
+          0.916
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0,
+          "high": 0.8508,
+          "stretch": 1.1753,
+          "gamma": 0.8833,
+          "black_rgb_spread": 0.0,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1540754142,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 4834.2,
+        "shutter_to_saved_ms": 5659.4
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/124852_ungraded.jpg",
+          "sha256": "6fa0158867ec38bebe7a3776f440cb3d610b83be716cd26be175b4af2e07f69c"
+        },
+        "starter": {
+          "path": "images/124852_starter.jpg",
+          "sha256": "6ce97d3aba0ec624664b560d8f1f320f5f0fa3be3d303cd58105a269ed657c54"
+        },
+        "v3": {
+          "path": "images/124852_v3.jpg",
+          "sha256": "ccc26cfbbc87258990de48745a5ace1b55a071109a0ec2b3abdf371804ef44d7"
+        }
+      }
+    },
+    {
+      "id": "124910",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:49:10",
+        "original": "124910_ungraded.jpg",
+        "parr": "124910_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9725,
+          1.0062,
+          1.0226
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0006,
+          "high": 0.7503,
+          "stretch": 1.3339,
+          "gamma": 1.1578,
+          "black_rgb_spread": 0.0006,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1744364478,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2649.4,
+        "shutter_to_saved_ms": 3413.1
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/124910_ungraded.jpg",
+          "sha256": "5c8e2cd9ced2fea76b2bcbf94103aeac12147bcf9f5cabdbc737933357e5b701"
+        },
+        "starter": {
+          "path": "images/124910_starter.jpg",
+          "sha256": "bbdd5c837d9e4316ec20f22baedf5ac8230d837f7155e5b97c4c13600ed3f2fd"
+        },
+        "v3": {
+          "path": "images/124910_v3.jpg",
+          "sha256": "96926c7b6e854fee183c1c108f0378c81defc97476b6952678fb354b1f218e07"
+        }
+      }
+    },
+    {
+      "id": "124919",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:49:19",
+        "original": "124919_ungraded.jpg",
+        "parr": "124919_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9957,
+          1.0061,
+          0.9544
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0,
+          "high": 0.4911,
+          "stretch": 2.0363,
+          "gamma": 2.0,
+          "black_rgb_spread": 0.0,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": true
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 654611457,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2544.2,
+        "shutter_to_saved_ms": 3220.6
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/124919_ungraded.jpg",
+          "sha256": "d75147fc65bf739ee91ffa7812277c67ae7f4c876c64a60dcf458485783ebf1d"
+        },
+        "starter": {
+          "path": "images/124919_starter.jpg",
+          "sha256": "509660e377242b5858ccdb10e7e9247edbe91ed85940a641a25126b633625edd"
+        },
+        "v3": {
+          "path": "images/124919_v3.jpg",
+          "sha256": "fb7f51f0d145b1dc9279624257d43489ce02b80c9a9bb04c40f5d65b9109189b"
+        }
+      }
+    },
+    {
+      "id": "124931",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:49:31",
+        "original": "124931_ungraded.jpg",
+        "parr": "124931_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9737,
+          1.0081,
+          1.0003
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0002,
+          "high": 0.9913,
+          "stretch": 1.009,
+          "gamma": 1.2789,
+          "black_rgb_spread": 0.0003,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1204809296,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2511.6,
+        "shutter_to_saved_ms": 3155.1
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/124931_ungraded.jpg",
+          "sha256": "6af09c3138d758d95d73b740d0f265bd15fd4e5bad0b42b13ce86eb4385a4caf"
+        },
+        "starter": {
+          "path": "images/124931_starter.jpg",
+          "sha256": "a38d5a6b15ee16f2844d56ed6e2e7f8b80dd0fe28fc9bdbc72d2312264e0c412"
+        },
+        "v3": {
+          "path": "images/124931_v3.jpg",
+          "sha256": "2cd91a45f29ecc0e0c15a6c9976a38a2e491be2dcc6a6278a986f45ccb1ee996"
+        }
+      }
+    },
+    {
+      "id": "124940",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:49:40",
+        "original": "124940_ungraded.jpg",
+        "parr": "124940_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9469,
+          1.015,
+          1.019
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0002,
+          "high": 1.0008,
+          "stretch": 0.9994,
+          "gamma": 1.3694,
+          "black_rgb_spread": 0.0,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1080538107,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2507.5,
+        "shutter_to_saved_ms": 3196.6
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/124940_ungraded.jpg",
+          "sha256": "54a647a81a74d182e54bfded338387f3505c4abdb2434c5b51c49058c4e46bdf"
+        },
+        "starter": {
+          "path": "images/124940_starter.jpg",
+          "sha256": "59c9b3181dfee77d6aefd4b6952a63b8674beb8764c43a69784b7a764984f6a0"
+        },
+        "v3": {
+          "path": "images/124940_v3.jpg",
+          "sha256": "fcc7c2e3244bc99974b9cc4b501af0fec0012bcd65c7bcea081d27bc20c20d9b"
+        }
+      }
+    },
+    {
+      "id": "125007",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:50:07",
+        "original": "125007_ungraded.jpg",
+        "parr": "125007_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9601,
+          1.0125,
+          1.0003
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0002,
+          "high": 1.0005,
+          "stretch": 0.9998,
+          "gamma": 0.895,
+          "black_rgb_spread": 0.0,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 2082845215,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2442.2,
+        "shutter_to_saved_ms": 3104.4
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125007_ungraded.jpg",
+          "sha256": "446b546cdc737186d8a47b7613f566e08bf4590d3120c943656914887ad18c32"
+        },
+        "starter": {
+          "path": "images/125007_starter.jpg",
+          "sha256": "0433db438eff6b3b108049855ea83253bf02e880f10878801d2f4018ff539950"
+        },
+        "v3": {
+          "path": "images/125007_v3.jpg",
+          "sha256": "234b2f0fd6f3134e0bd6312932c2ecba6f86ff7bd37b6a3622967d7d7b30a318"
+        }
+      }
+    },
+    {
+      "id": "125018",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:50:18",
+        "original": "125018_ungraded.jpg",
+        "parr": "125018_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9795,
+          1.0074,
+          0.9892
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0,
+          "high": 1.0001,
+          "stretch": 0.9999,
+          "gamma": 0.95,
+          "black_rgb_spread": 0.0,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1523897514,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2491.7,
+        "shutter_to_saved_ms": 3158.7
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125018_ungraded.jpg",
+          "sha256": "8d3ddef6e3fa90cb4a15dc0cd82ad24d78d97ce0fa969420a5a7ea56417246dd"
+        },
+        "starter": {
+          "path": "images/125018_starter.jpg",
+          "sha256": "cb90e631f668651385e447c04c76cd9bf7815db877fa3c4dfb42835e3f6fedf7"
+        },
+        "v3": {
+          "path": "images/125018_v3.jpg",
+          "sha256": "61738bfbaafcb535b0d0af91788cc9e7ea655e68d63379795423db0b1fe230a0"
+        }
+      }
+    },
+    {
+      "id": "125027",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:50:27",
+        "original": "125027_ungraded.jpg",
+        "parr": "125027_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9767,
+          1.0074,
+          0.997
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0002,
+          "high": 0.7012,
+          "stretch": 1.4265,
+          "gamma": 1.5517,
+          "black_rgb_spread": 0.0003,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1651707411,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2520.2,
+        "shutter_to_saved_ms": 3168.0
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125027_ungraded.jpg",
+          "sha256": "ae01525572a32d2bd02044fb6972da94007c8e1f44d4b5b506e33ee47832302e"
+        },
+        "starter": {
+          "path": "images/125027_starter.jpg",
+          "sha256": "a2e8a4fcb3cfa9dc0694e614ee398b3fd4904474e5bd1c42183c6dd063e0a5fa"
+        },
+        "v3": {
+          "path": "images/125027_v3.jpg",
+          "sha256": "ddd41a5df71d0dfdf41be358ec7df52f3f2a151ab6ec9b14cafa08807a343bde"
+        }
+      }
+    },
+    {
+      "id": "125041",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:50:41",
+        "original": "125041_ungraded.jpg",
+        "parr": "125041_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9741,
+          1.01,
+          0.9805
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0003,
+          "high": 0.6974,
+          "stretch": 1.4345,
+          "gamma": 1.7337,
+          "black_rgb_spread": 0.0003,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1314967262,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2417.4,
+        "shutter_to_saved_ms": 3072.7
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125041_ungraded.jpg",
+          "sha256": "44ad51cf7a81c52b6bbd3a32f31216622f52d731e0658c3b7a25960fcc1f3970"
+        },
+        "starter": {
+          "path": "images/125041_starter.jpg",
+          "sha256": "0bd79690808a34e55720e84a7ce9a6306120a9b07bb824e5e84e20083d335b4f"
+        },
+        "v3": {
+          "path": "images/125041_v3.jpg",
+          "sha256": "940d2b49efdd1b47b5ce82cc2e91baf949dc88c5f879c7d9bff2106557cab88a"
+        }
+      }
+    },
+    {
+      "id": "125118",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:51:18",
+        "original": "125118_ungraded.jpg",
+        "parr": "125118_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9048,
+          1.0563,
+          0.8208
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0001,
+          "high": 0.6761,
+          "stretch": 1.4793,
+          "gamma": 1.5641,
+          "black_rgb_spread": 0.0,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 91226247,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2519.5,
+        "shutter_to_saved_ms": 3190.7
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125118_ungraded.jpg",
+          "sha256": "7682933f1ae0663374d1c05c5e6cfec1fc8e9af77ca1d9411036ab2c77e0ee63"
+        },
+        "starter": {
+          "path": "images/125118_starter.jpg",
+          "sha256": "56b3154eeaa311abe7bd24425fd1d9be6ce0bc0a4bf313bbfdf74dec278a3df9"
+        },
+        "v3": {
+          "path": "images/125118_v3.jpg",
+          "sha256": "89ff07374b313a0247c3dbcb91fb3cf8845d9a0a4c7c4434b5c5816165b222f0"
+        }
+      }
+    },
+    {
+      "id": "125132",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:51:32",
+        "original": "125132_ungraded.jpg",
+        "parr": "125132_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.904,
+          1.0391,
+          0.9438
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0,
+          "high": 0.6607,
+          "stretch": 1.5137,
+          "gamma": 1.1131,
+          "black_rgb_spread": 0.0,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1322300166,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2482.4,
+        "shutter_to_saved_ms": 3158.9
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125132_ungraded.jpg",
+          "sha256": "fc2b085ea87124f42f64f1b4ef0c79844a70f664c2fa2cc0bc8a74faac47e6f3"
+        },
+        "starter": {
+          "path": "images/125132_starter.jpg",
+          "sha256": "0d0dd5bdac06ebdfc2e35d7fd6f56d2080b5dd78abc40ebdbf8ca3b7b072d66d"
+        },
+        "v3": {
+          "path": "images/125132_v3.jpg",
+          "sha256": "104d2dad09ffcaa22bca3304c34f4c6c921fb92e053e38d3300a4f41607d217b"
+        }
+      }
+    },
+    {
+      "id": "125142",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:51:42",
+        "original": "125142_ungraded.jpg",
+        "parr": "125142_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9912,
+          1.0088,
+          0.9432
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0,
+          "high": 1.0003,
+          "stretch": 0.9997,
+          "gamma": 0.9858,
+          "black_rgb_spread": 0.0,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1883533297,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2491.8,
+        "shutter_to_saved_ms": 3149.6
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125142_ungraded.jpg",
+          "sha256": "60bc9fa4a72d95cb3dcbee60ef7a0f6b2574b9a9d0a24caffbfe0dbf8cc781a3"
+        },
+        "starter": {
+          "path": "images/125142_starter.jpg",
+          "sha256": "886a8788bfcd1633ddf7ab396c0ef105b36c27d23c038b313f5b263fee02198e"
+        },
+        "v3": {
+          "path": "images/125142_v3.jpg",
+          "sha256": "abc2fd7277823c958811854ce0e8118e815e66534b2fb0eb296cf59cf4d4fea9"
+        }
+      }
+    },
+    {
+      "id": "125148",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:51:48",
+        "original": "125148_ungraded.jpg",
+        "parr": "125148_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          1.0349,
+          1.0022,
+          0.8924
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0001,
+          "high": 0.5156,
+          "stretch": 1.9399,
+          "gamma": 1.7287,
+          "black_rgb_spread": 0.0,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 734810068,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2417.6,
+        "shutter_to_saved_ms": 3105.2
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125148_ungraded.jpg",
+          "sha256": "981e5babf17db86e780a9a3aa062e944fc8feb4d2344e04e4c13b71c7099f506"
+        },
+        "starter": {
+          "path": "images/125148_starter.jpg",
+          "sha256": "04f8f7c1c467828aa4bb4f2a4f292b3ac83871893ce3a60fddf7a71d8ea3b1b8"
+        },
+        "v3": {
+          "path": "images/125148_v3.jpg",
+          "sha256": "005b0b56828543b15d0e74271878d339ba3608f26e23cfc25693c1df3d36dca7"
+        }
+      }
+    },
+    {
+      "id": "125159",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:51:59",
+        "original": "125159_ungraded.jpg",
+        "parr": "125159_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9632,
+          1.0104,
+          1.0102
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0011,
+          "high": 1.0004,
+          "stretch": 1.0007,
+          "gamma": 1.0189,
+          "black_rgb_spread": 0.0009,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1004982586,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2472.9,
+        "shutter_to_saved_ms": 3117.8
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125159_ungraded.jpg",
+          "sha256": "cc7058985ffa6b70008b00a7f42be98512cf3b36cc5def09e7210a7d52999033"
+        },
+        "starter": {
+          "path": "images/125159_starter.jpg",
+          "sha256": "72fb28e4bbbc206c44a11643a5cd6f0c631c901a83932d80799d65911adf4978"
+        },
+        "v3": {
+          "path": "images/125159_v3.jpg",
+          "sha256": "3312645637e67fe58e00522f7954288a57c062f61b7874a377a7a05a4ec1cd9b"
+        }
+      }
+    },
+    {
+      "id": "125212",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:52:12",
+        "original": "125212_ungraded.jpg",
+        "parr": "125212_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9716,
+          1.0097,
+          0.9909
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0005,
+          "high": 0.7274,
+          "stretch": 1.3756,
+          "gamma": 1.5015,
+          "black_rgb_spread": 0.0003,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1510193090,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2504.9,
+        "shutter_to_saved_ms": 3180.5
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125212_ungraded.jpg",
+          "sha256": "e9b7a2100f6d77d9dac9fe78c580b78890cc19b3229101a2f26054d8ee98d83d"
+        },
+        "starter": {
+          "path": "images/125212_starter.jpg",
+          "sha256": "2586ea13ec8dc260ec2db7986126bf28b3a26c46888a8a0c770f49355ae5a779"
+        },
+        "v3": {
+          "path": "images/125212_v3.jpg",
+          "sha256": "83a948f7d0064b56a66cac2a715b8b4323077d92a4f2f9466f5d1e6051d54fb0"
+        }
+      }
+    },
+    {
+      "id": "125223",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:52:23",
+        "original": "125223_ungraded.jpg",
+        "parr": "125223_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9253,
+          1.0232,
+          1.0137
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0002,
+          "high": 0.6729,
+          "stretch": 1.4866,
+          "gamma": 2.0,
+          "black_rgb_spread": 0.0,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": true
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1456452612,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2467.8,
+        "shutter_to_saved_ms": 3138.7
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125223_ungraded.jpg",
+          "sha256": "d06b84371efda3d8b6363013f9cf05dbeae6727217cce8fa3cd08912a94b99f7"
+        },
+        "starter": {
+          "path": "images/125223_starter.jpg",
+          "sha256": "bc4a3c9229e8e7a004439f920024f82a5578377e3eaac5ef23277083de260ee7"
+        },
+        "v3": {
+          "path": "images/125223_v3.jpg",
+          "sha256": "e7563463d3346e6270b9ad410b264d8d4df1cbe7055612f4a6ac80f90e31b5f0"
+        }
+      }
+    },
+    {
+      "id": "125235",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:52:35",
+        "original": "125235_ungraded.jpg",
+        "parr": "125235_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.8847,
+          1.0272,
+          1.1378
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0,
+          "high": 0.6215,
+          "stretch": 1.6091,
+          "gamma": 1.1962,
+          "black_rgb_spread": 0.0,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1594142694,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2481.4,
+        "shutter_to_saved_ms": 3183.5
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125235_ungraded.jpg",
+          "sha256": "72b60003a8b3548b41ce3d361dd21a5b95dc3e5d2a295552203dcca6f55b98a5"
+        },
+        "starter": {
+          "path": "images/125235_starter.jpg",
+          "sha256": "b26f93541e6f7d9b2899010785d6a94d7f338e45282a8d5385b1dee9e7a0fe81"
+        },
+        "v3": {
+          "path": "images/125235_v3.jpg",
+          "sha256": "441cbb73c6a78279980f2886a609ac1582030d3d7cf3c1058ecb5b36656b0cf7"
+        }
+      }
+    },
+    {
+      "id": "125250",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:52:50",
+        "original": "125250_ungraded.jpg",
+        "parr": "125250_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9807,
+          1.0084,
+          0.9765
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0007,
+          "high": 0.6477,
+          "stretch": 1.5457,
+          "gamma": 1.3409,
+          "black_rgb_spread": 0.0006,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1946669344,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2486.5,
+        "shutter_to_saved_ms": 3154.2
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125250_ungraded.jpg",
+          "sha256": "df3c597ff4ae43074ed9369c9c4ff36de3c992bc59236fcd0b64615d9699dd23"
+        },
+        "starter": {
+          "path": "images/125250_starter.jpg",
+          "sha256": "fcd58cbdc0cb414c04147e6a9ccf12d9fd8529c441d80a4de4925082bd6981dd"
+        },
+        "v3": {
+          "path": "images/125250_v3.jpg",
+          "sha256": "39c67d5d2d969e005d7ec472b7153dd58433e26eeac9f3723774648633c180ad"
+        }
+      }
+    },
+    {
+      "id": "125259",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:52:59",
+        "original": "125259_ungraded.jpg",
+        "parr": "125259_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9805,
+          1.0089,
+          0.9719
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0003,
+          "high": 0.8188,
+          "stretch": 1.2217,
+          "gamma": 1.1185,
+          "black_rgb_spread": 0.0003,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1232665772,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2527.3,
+        "shutter_to_saved_ms": 3198.7
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125259_ungraded.jpg",
+          "sha256": "6e50c7d56853ac51547be85613cf7c166f27b5f747b78c99edf9b85c70ebf060"
+        },
+        "starter": {
+          "path": "images/125259_starter.jpg",
+          "sha256": "f8b9b15bedb446a760c699eba410bb4c9fd49b0f187dea9490e3f2b4f73495df"
+        },
+        "v3": {
+          "path": "images/125259_v3.jpg",
+          "sha256": "bfa536af2f258d730f22cdb6ce981558f9321d95c1d1a0f87a039d6d77a07bf4"
+        }
+      }
+    },
+    {
+      "id": "125809",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:58:09",
+        "original": "125809_ungraded.jpg",
+        "parr": "125809_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9221,
+          1.0229,
+          1.0275
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0,
+          "high": 0.9929,
+          "stretch": 1.0071,
+          "gamma": 0.8654,
+          "black_rgb_spread": 0.0,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1377030380,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2943.6,
+        "shutter_to_saved_ms": 3974.6
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125809_ungraded.jpg",
+          "sha256": "babb0388d76f6a68fcd9ae370f9a8aa145125f607bec4f1480d657e37c98f1fc"
+        },
+        "starter": {
+          "path": "images/125809_starter.jpg",
+          "sha256": "510e2fd2cb051735955a6822be05ac6bb251846b88a788b94d7db9df970bb86f"
+        },
+        "v3": {
+          "path": "images/125809_v3.jpg",
+          "sha256": "1e436ce3ed2490bed6793e68910304ea64a9e1837f1df2c23036576fb44f4476"
+        }
+      }
+    },
+    {
+      "id": "125841",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:58:41",
+        "original": "125841_ungraded.jpg",
+        "parr": "125841_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9626,
+          1.0118,
+          0.9991
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0075,
+          "high": 1.0004,
+          "stretch": 1.0071,
+          "gamma": 1.0087,
+          "black_rgb_spread": 0.0008,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 82277752,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2633.2,
+        "shutter_to_saved_ms": 3312.3
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125841_ungraded.jpg",
+          "sha256": "ee672b35f0e91a8e8ab2fe2214b4d1c4dd47d89cf4372361e56d653ca865768a"
+        },
+        "starter": {
+          "path": "images/125841_starter.jpg",
+          "sha256": "3ed2582295338844cd229291406f8899314c43d9509c90b99718b2343c495e56"
+        },
+        "v3": {
+          "path": "images/125841_v3.jpg",
+          "sha256": "dcc35e52d6197b257732fc6088a049386c51b53b55c4862e1de78e662ebc172f"
+        }
+      }
+    },
+    {
+      "id": "125851",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:58:51",
+        "original": "125851_ungraded.jpg",
+        "parr": "125851_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9685,
+          1.0104,
+          0.9937
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0044,
+          "high": 0.963,
+          "stretch": 1.0432,
+          "gamma": 1.1039,
+          "black_rgb_spread": 0.0008,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 512384036,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2571.4,
+        "shutter_to_saved_ms": 3325.2
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125851_ungraded.jpg",
+          "sha256": "df87ca7b94ce42c98f5a797ac3a649a3d4c0a524bb776c83e4256e72d7ee67b9"
+        },
+        "starter": {
+          "path": "images/125851_starter.jpg",
+          "sha256": "0dd18fe2ceb0d3ddb64651d7012ec73523072aaf8e330b11442949b9e9f70ef7"
+        },
+        "v3": {
+          "path": "images/125851_v3.jpg",
+          "sha256": "b0f2c3b15a327e186a86596891521e1e9aa4ddb35bd8e7f4e3b3bb23b69d7227"
+        }
+      }
+    },
+    {
+      "id": "125903",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:59:03",
+        "original": "125903_ungraded.jpg",
+        "parr": "125903_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9774,
+          1.0026,
+          1.0441
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.004,
+          "high": 1.0003,
+          "stretch": 1.0038,
+          "gamma": 0.9908,
+          "black_rgb_spread": 0.0009,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1926594649,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2376.3,
+        "shutter_to_saved_ms": 3029.1
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125903_ungraded.jpg",
+          "sha256": "996ccbac71d02f3dc8c44767edca5ce58e2cacb909b2ebe844d8dcd0ddacdf66"
+        },
+        "starter": {
+          "path": "images/125903_starter.jpg",
+          "sha256": "50e9524c1ed82e8c28505119b29f249e0d59fb497a672a509b9a83681de660bf"
+        },
+        "v3": {
+          "path": "images/125903_v3.jpg",
+          "sha256": "5aae6503d3b7b3a95a79310068ae1e2a5ceb9865429f4c441ad53abce497b0fb"
+        }
+      }
+    },
+    {
+      "id": "125912",
+      "size": [
+        1920,
+        1080
+      ],
+      "capture": {
+        "timestamp": "2026-09-07T12:59:12",
+        "original": "125912_ungraded.jpg",
+        "parr": "125912_parr.jpg",
+        "frame_source": "decoded",
+        "wb_gains": [
+          0.9761,
+          1.007,
+          1.0031
+        ],
+        "exposure_gain": 1.0,
+        "levels": {
+          "low": 0.0065,
+          "high": 1.0002,
+          "stretch": 1.0064,
+          "gamma": 1.046,
+          "black_rgb_spread": 0.0006,
+          "tone": "luma"
+        },
+        "clamped": {
+          "wb": false,
+          "exposure": false,
+          "levels": false
+        },
+        "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
+        "grain_seed": 1038372052,
+        "params_version": 2,
+        "package_version": "0.1.0",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "fourcc": "MJPG",
+        "raw_mjpeg": false,
+        "pipeline_ms": 2479.5,
+        "shutter_to_saved_ms": 3141.4
+      },
+      "files": {
+        "ungraded": {
+          "path": "images/125912_ungraded.jpg",
+          "sha256": "e3334d4eb71b91e0f1a3782839ddd0e692584e62beba945221b4796255b05081"
+        },
+        "starter": {
+          "path": "images/125912_starter.jpg",
+          "sha256": "fa3eba90b583dfb85c23dc5dad5efdda6358d9f9f2e4891ee9376e856d287824"
+        },
+        "v3": {
+          "path": "images/125912_v3.jpg",
+          "sha256": "3ae0a38b3d2e23463a3e392b34c188fcb879d6f6598d08cb6a991e66c6f3fd92"
+        }
+      }
+    }
+  ],
+  "baseline": {
+    "parr.cube": {
+      "path": "baseline/parr.cube",
+      "sha256": "17ee4bac93d250255bd7cbabef851227463595ed82feed7219a900361b06261c"
+    },
+    "params.json": {
+      "path": "baseline/params.json",
+      "sha256": "9a5e2d80c39bd5312052c7d4b81b7602ff2899402ab3918653717f82a0b44dd0"
+    }
+  },
+  "capture_log": {
+    "path": "captures.jsonl",
+    "sha256": "663f893af4ce7f18b977d0edf22fe83183ea743814171915ac07a5aa674d4a91"
+  }
+}
