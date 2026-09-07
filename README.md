@@ -70,7 +70,7 @@ covers the two-screen desktop mode and the Stick-only headless service; do not
 put a real token, Wi-Fi password, or Pi SSH password in a command, source file,
 or commit.
 
-| Ready to capture | Last captured photo |
+| Last captured photo | Ready to capture |
 | --- | --- |
 | <img src="docs/images/sticks3-ready.jpg" alt="M5Stack StickS3 showing TV colour bars and the READY prompt" height="280"> | <img src="docs/images/sticks3-captured-photo.jpg" alt="M5Stack StickS3 displaying a captured room photo" height="280"> |
 
