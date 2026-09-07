@@ -76,10 +76,32 @@ the Kodachrome project. Capture currently requests a 1920 × 1080 MJPEG stream a
 resolution. Use `--device` to select the camera.
 
 The preset increases midtone color and contrast with a smooth tone curve,
-compresses out-of-gamut chroma, and adds subtle grain (`0.004`). Rebuild it with:
+lifts weak colour more than strong colour (`--vividness`, shipped at 0.5),
+compresses out-of-gamut chroma, and adds subtle grain (`0.004`).
+
+**You do not need to build it.** The look ships inside the package at
+`parr/data/`, so `parr-capture` and `parr-process` use it straight after a
+`git pull`. `parr-preset` only exists to *make a different* look, it needs
+SciPy from the `[train]` extra, and a Pi installed with a plain
+`pip install -e .` will not have that:
 
 ```bash
-.venv/bin/parr-preset --out artifacts/starter-v1
+# On a training machine (not needed on the Pi):
+.venv/bin/parr-preset --out artifacts/vivid-1 --vividness 1.0
+```
+
+To use a look you built elsewhere, copy that folder to the Pi and pass
+`--artifacts`:
+
+```bash
+.venv/bin/parr-capture --artifacts artifacts/vivid-1
+```
+
+Check which look is actually loaded:
+
+```bash
+.venv/bin/python -c "from parr.artifacts import Artifacts as A; t=A.default().training; \
+print(t['preset_version'], t.get('vividness'), t.get('trained'))"
 ```
 
 ## Train a reference-derived look
