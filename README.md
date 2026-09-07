@@ -70,6 +70,73 @@ covers the two-screen desktop mode and the Stick-only headless service; do not
 put a real token, Wi-Fi password, or Pi SSH password in a command, source file,
 or commit.
 
+| Ready to capture | Last captured photo |
+| --- | --- |
+| <img src="docs/images/sticks3-ready.jpg" alt="M5Stack StickS3 showing TV colour bars and the READY prompt" height="280"> | <img src="docs/images/sticks3-captured-photo.jpg" alt="M5Stack StickS3 displaying a captured room photo" height="280"> |
+
+## From button press to displayed photo
+
+The Raspberry Pi does the capture, grading and storage. The M5Stack StickS3 is
+the wireless shutter button and **last-capture display**, not a live viewfinder.
+Both devices communicate over the local LAN using a token-authenticated HTTP API;
+SSH is used for deployment/administration, not for each shutter press. No cloud
+service is involved in this capture flow.
+
+```text
+Stick joins Wi-Fi → checks Pi readiness → displays READY
+    ↓ primary button press
+Capture request → Pi accepts → Stick sounds shutter acknowledgement
+    ↓ TV colour bars while waiting
+Pi acquires one camera frame → normalizes → applies LUT → adds grain
+    ↓
+Pi saves original + graded JPEG + capture log → marks job complete
+    ├─ Optional Pi screen displays the saved graded photo
+    └─ Stick polls completion → downloads graded thumbnail → decodes → displays
+```
+
+1. **Connect and become ready.** The Pi capture app must be running with its
+   remote listener enabled. The Stick connects to Wi-Fi and checks the Pi's
+   status before showing that it is ready for another capture.
+2. **Request one snapshot.** A debounced primary-button press creates a unique
+   request ID and sends `POST /v1/captures`. The Pi accepts only one active
+   capture at a time; additional requests can be rejected as busy. The Stick's
+   shutter tone acknowledges an accepted request—it does not mean grading or
+   saving has finished.
+3. **Show processing feedback.** The Stick shows TV colour bars while submitting,
+   processing and downloading. It polls `GET /v1/captures/{id}` for that same
+   capture, rather than taking another photo while waiting. In two-screen mode,
+   the Pi also shows processing colour bars during capture and grading.
+4. **Capture and grade on the Pi.** One newly acquired USB-camera frame supplies
+   both the original and the graded output. The pipeline applies configured
+   white-balance and exposure/levels normalization, the selected 3D LUT, then
+   optional fine grain. The bundled starter is the default; `--artifacts DIR`
+   explicitly selects another LUT and its associated normalization/grain settings.
+5. **Save locally before declaring completion.** By default, the Pi writes to
+   `~/Pictures/parr/YYYY-MM-DD/`: the original camera JPEG as `*_original.jpg`
+   when available, otherwise an encoded `*_ungraded.jpg`; the full-resolution
+   graded `*_parr.jpg`; and an entry in `captures.jsonl`. The log records file
+   names, timestamp, LUT hash, normalization gains, grain seed, camera stream
+   settings and processing timings. The job is marked complete after these writes
+   succeed.
+6. **Transfer a graded preview to the Stick.** After completion, the Stick requests
+   `GET /v1/captures/{id}/image.jpg`. The Pi reads that job's saved **`*_parr.jpg`**
+   and generates an aspect-preserving **240 × 135 JPEG**, with black padding if
+   needed and a **64 KiB** transfer limit. This is a download initiated by the
+   Stick, not a push/upload of the full-resolution file. Grading is not repeated
+   on the Stick, and the ungraded file is not used for this endpoint.
+7. **Display until the next snapshot.** The Stick decodes the JPEG and displays
+   it from memory. In normal operation it stays visible until the next capture
+   starts. The full-resolution files remain on the Pi; the Stick display is not
+   the photo archive. Network or capture failures show a status/error instead of
+   being treated as a successful new photo.
+
+For battery-powered **headless use**, run with `--no-preview`, enable the remote
+listener, and omit `--show-captures`. The Stick still receives the graded preview;
+the Pi does not need a connected monitor or a display window. For **two-screen
+use**, add `--show-captures` in a working Pi desktop session. See the
+[deployment guide](docs/sticks3-remote.md) for the complete configuration and
+service commands.
+
 ## Try the starter look
 
 ```bash
