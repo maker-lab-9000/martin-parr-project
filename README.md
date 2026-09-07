@@ -1,6 +1,14 @@
-# martin-parr-project
+# Introduction
+This entire idea took shape from trying to find a kid friendly camera for my son, which is a little more than potato quality, is made of decent plastic, modular and cheap.
 
-A separate color-grading experiment inspired by Martin Parr's saturated,
+The prototype is still in progress but I'm aiming at a handheld point and shoot with the M5Stack Stick S3 used as the viewfinder along the Raspberry Pi3 and the Innomaker low light camera module for start.
+
+Once the prototype is working as expected, additional parts would include a proper 3D printed case, and potential upgrade to the Raspi high quality camera module and external battery HAT.
+
+
+# Martin Parr Look
+
+A color-grading experiment inspired by Martin Parr's saturated,
 flash-lit color-negative photographs: vivid reds, yellows and blues, crisp
 contrast, neutral whites, and fine grain. Runs on a Mac for training and a
 Raspberry Pi for capture, using the learned 3D-LUT approach from `kodachrome-film`.
@@ -21,6 +29,12 @@ parr-process /path/to/ungraded-photos /path/to/results \
 ```
 
 Without `--artifacts`, commands continue to use the untrained starter preset.
+
+## Hardware
+- Raspberry Pi 3B, 1GB RAM
+- M5Stack StickS3 (display, trigger)
+- 64GB SD Card
+- Innomaker 1080P USB2.0 UVC Camera, 121° Lens, PS5268 Sensor
 
 ## Setup
 
