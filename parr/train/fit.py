@@ -71,7 +71,12 @@ class FitConfig:
     lambda_identity: float = 1.0
     strength: float = 1.0
     seed: int = 0
-    neutral_axis_cap: float = 0.005   # halved from 0.01: 0.01 left indoor whites visibly cool
+    # 0.010, not the 0.005 inherited from kodachrome-film. That project halved
+    # it because indoor whites leaned cool; here the reference is saturated
+    # film, which visibly tints its neutrals -- measured on the corpora as
+    # near-neutral chroma 0.0074 (Ektar 100) and 0.0100 (Velvia), against
+    # 0.0042 in the graded captures. Capping at 0.005 threw that away.
+    neutral_axis_cap: float = 0.010
 
     def __post_init__(self) -> None:
         if not 2 <= self.lut_size <= 65:
