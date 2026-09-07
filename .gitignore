@@ -23,8 +23,10 @@ dist/
 /data/
 /artifacts/
 
-# Downloaded film reference corpus (keep ektar100-attribution.md versionable)
+# Downloaded film reference corpus
 /ektar100/
+/velvia/
+ektar100-attribution.md
 
 # Agent scratch space (plans' ledgers, briefs, review packages)
 .superpowers/
