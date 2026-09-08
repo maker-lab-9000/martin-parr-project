@@ -3,9 +3,34 @@ import pytest
 from scripts.deploy_remote import (
     DeploymentConfig,
     build_capture_command,
+    deployment_config,
     open_ssh_client,
     restart_headless_service,
 )
+
+REQUIRED_ENV = {
+    "PI_HOST": "parr.local",
+    "PI_USER": "george",
+    "PI_PROJECT_DIR": "/home/george/repos/martin-parr-project",
+    "PI_SSH_PASSWORD": "ssh-secret",
+    "PARR_REMOTE_TOKEN": "remote-secret",
+    "PI_ARTIFACT_DIR": "/home/george/repos/martin-parr-project/artifacts/personal-v1",
+}
+
+
+def test_listen_address_defaults_to_all_interfaces_when_env_omits_it():
+    # The SSH host (Ethernet, mDNS name) and the API bind address (hotspot)
+    # are different things in the direct-hotspot topology, so the listen
+    # address must not be derived from PI_HOST.
+    config = deployment_config(REQUIRED_ENV)
+
+    assert config.listen == "0.0.0.0:8765"
+
+
+def test_listen_address_is_read_from_env_when_present():
+    config = deployment_config({**REQUIRED_ENV, "PARR_LISTEN": "10.42.0.1:8765"})
+
+    assert config.listen == "10.42.0.1:8765"
 
 
 class FakeClient:
@@ -54,21 +79,23 @@ class RestartClient:
 
 def test_capture_command_uses_verified_artifact_directory_and_never_includes_token():
     config = DeploymentConfig(
-        host="192.168.178.56",
+        host="parr.local",
         user="george",
         project_dir="/home/george/repos/martin-parr-project",
         ssh_password="ssh-secret",
         artifact_dir="/home/george/parr artifacts/personal-v1",
         remote_token="remote-secret",
+        listen="0.0.0.0:8765",
     )
 
     command = build_capture_command(config, show_captures=True)
 
     assert command == (
         "/home/george/repos/martin-parr-project/.venv/bin/parr-capture --no-preview "
-        "--show-captures --remote-listen 192.168.178.56:8765 --artifacts "
+        "--show-captures --remote-listen 0.0.0.0:8765 --artifacts "
         "'/home/george/parr artifacts/personal-v1'"
     )
+    assert "parr.local" not in command
     assert "remote-secret" not in command
     assert "ssh-secret" not in command
 
@@ -81,6 +108,7 @@ def test_open_ssh_client_rejects_unknown_host_keys_before_password_connection():
         ssh_password="ssh-secret",
         artifact_dir="/home/george/artifacts/personal-v1",
         remote_token="remote-secret",
+        listen="0.0.0.0:8765",
     )
 
     client = open_ssh_client(config, paramiko_module=FakeParamiko)

@@ -66,19 +66,28 @@ String jsonString(const String& payload, const char* key) {
 bool serverReady(const String& payload) { return payload.indexOf("\"ready\":true") >= 0; }
 bool serverHasActiveJob(const String& payload) { return payload.indexOf("\"active_capture_id\":null") < 0; }
 
+// Serial debug log. Every line carries the uptime in ms so `pio device monitor`
+// shows where a photo stops on its way from the Pi to the screen.
+#define STICK_LOG(fmt, ...) Serial.printf("[%lu] " fmt "\n", static_cast<unsigned long>(millis()), ##__VA_ARGS__)
+
 bool fetchJpeg(const char* request_id) {
   HTTPClient http;
   const String path = endpoint((String("/v1/captures/") + request_id + "/image.jpg").c_str());
-  if (!http.begin(path)) return false;
+  if (!http.begin(path)) {
+    STICK_LOG("download: http.begin failed for %s", path.c_str());
+    return false;
+  }
   http.setTimeout(5000);
   addAuth(http);
   const int status = http.GET();
+  const int length = http.getSize();
+  STICK_LOG("download %.8s: HTTP %d, content-length %d", request_id, status, length);
   if (status != HTTP_CODE_OK) {
     http.end();
     return false;
   }
-  const int length = http.getSize();
   if (length > static_cast<int>(StickDisplay::kMaxJpegBytes)) {
+    STICK_LOG("download rejected: %d bytes exceeds %u byte buffer", length, static_cast<unsigned>(StickDisplay::kMaxJpegBytes));
     http.end();
     return false;
   }
@@ -93,6 +102,7 @@ bool fetchJpeg(const char* request_id) {
     }
     const size_t room = StickDisplay::kMaxJpegBytes - received;
     if (room == 0) {
+      STICK_LOG("download rejected: stream exceeded the %u byte buffer", static_cast<unsigned>(StickDisplay::kMaxJpegBytes));
       http.end();
       return false;
     }
@@ -103,12 +113,20 @@ bool fetchJpeg(const char* request_id) {
   if ((length >= 0 && received != static_cast<size_t>(length)) || received < 4 ||
       jpeg_back_buffer[0] != 0xff || jpeg_back_buffer[1] != 0xd8 ||
       jpeg_back_buffer[received - 2] != 0xff || jpeg_back_buffer[received - 1] != 0xd9) {
+    if (received >= 4) {
+      STICK_LOG("download rejected: received %u of %d bytes, SOI %02x%02x EOI %02x%02x",
+                static_cast<unsigned>(received), length, jpeg_back_buffer[0], jpeg_back_buffer[1],
+                jpeg_back_buffer[received - 2], jpeg_back_buffer[received - 1]);
+    } else {
+      STICK_LOG("download rejected: only %u bytes received", static_cast<unsigned>(received));
+    }
     return false;
   }
   xSemaphoreTake(jpeg_mutex, portMAX_DELAY);
   jpeg_back_size = received;
   jpeg_ready = true;
   xSemaphoreGive(jpeg_mutex);
+  STICK_LOG("download ok: %u bytes, valid JPEG markers, handed to UI loop for decode", static_cast<unsigned>(received));
   return true;
 }
 
@@ -136,6 +154,17 @@ void processWork(const WorkItem& work) {
     const int status = http.GET();
     const String payload = status == HTTP_CODE_OK ? http.getString() : String();
     http.end();
+    // Status is polled twice a second; log it only when the answer changes.
+    static int last_status_code = 0;
+    static bool last_ready = false, last_active = false;
+    const bool ready = status == HTTP_CODE_OK && serverReady(payload);
+    const bool active = status == HTTP_CODE_OK && serverHasActiveJob(payload);
+    if (status != last_status_code || ready != last_ready || active != last_active) {
+      STICK_LOG("status: HTTP %d ready=%d active_capture=%d", status, ready, active);
+      last_status_code = status;
+      last_ready = ready;
+      last_active = active;
+    }
     lockClient();
     if (status == HTTP_CODE_OK) {
       const String instance_id = jsonString(payload, "instance_id");
@@ -158,6 +187,8 @@ void processWork(const WorkItem& work) {
     http.addHeader("Content-Type", "application/json");
     const int status = http.POST(String("{\"request_id\":\"") + work.request_id + "\"}");
     http.end();
+    STICK_LOG("submit %.8s: HTTP %d (%s)", work.request_id, status,
+              status >= 200 && status < 300 ? "accepted" : status >= 100 ? "rejected" : "transport error");
     lockClient();
     if (status >= 200 && status < 300) {
       capture.completeSubmit(true, millis());
@@ -184,6 +215,15 @@ void processWork(const WorkItem& work) {
     const int status = http.GET();
     const String payload = status == HTTP_CODE_OK ? http.getString() : String();
     http.end();
+    // Polled every 500 ms while a capture is active; log only changes.
+    static int last_poll_code = 0;
+    static String last_job_state;
+    const String job_state = status == HTTP_CODE_OK ? jsonString(payload, "state") : String();
+    if (status != last_poll_code || job_state != last_job_state) {
+      STICK_LOG("poll %.8s: HTTP %d job state '%s'", work.request_id, status, job_state.c_str());
+      last_poll_code = status;
+      last_job_state = job_state;
+    }
     lockClient();
     if (status == HTTP_CODE_OK) {
       capture.acceptStatus(jobStatus(payload), millis());
@@ -197,6 +237,7 @@ void processWork(const WorkItem& work) {
   }
   if (work.kind == WorkKind::Download) {
     if (!fetchJpeg(work.request_id)) {
+      STICK_LOG("download failed; state machine will retry the same request in 1 s");
       lockClient();
       capture.completeDownload(false, millis());
       unlockClient();
@@ -259,9 +300,21 @@ void loop() {
   if (xSemaphoreTake(jpeg_mutex, 0) == pdTRUE) {
     if (jpeg_ready) {
       jpeg_ready = false;
-      capture.completeDownload(display.decodeAndStore(jpeg_back_buffer, jpeg_back_size), millis());
+      const bool decoded = display.decodeAndStore(jpeg_back_buffer, jpeg_back_size);
+      STICK_LOG("ui: %u byte JPEG %s", static_cast<unsigned>(jpeg_back_size),
+                decoded ? "decoded and drawn; state -> PHOTO" : "FAILED to decode; keeping previous photo");
+      capture.completeDownload(decoded, millis());
     }
     xSemaphoreGive(jpeg_mutex);
+  }
+  static ClientState last_logged_state = ClientState::Connecting;
+  if (capture.state() != last_logged_state) {
+    if (capture.state() == ClientState::Error) {
+      STICK_LOG("state %s -> %s (%s)", clientStateName(last_logged_state), clientStateName(capture.state()), capture.errorDetail());
+    } else {
+      STICK_LOG("state %s -> %s", clientStateName(last_logged_state), clientStateName(capture.state()));
+    }
+    last_logged_state = capture.state();
   }
   display.render(capture, millis());
   unlockClient();

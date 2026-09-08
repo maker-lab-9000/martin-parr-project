@@ -78,9 +78,10 @@ or commit.
 
 The Raspberry Pi does the capture, grading and storage. The M5Stack StickS3 is
 the wireless shutter button and **last-capture display**, not a live viewfinder.
-Both devices communicate over the local LAN using a token-authenticated HTTP API;
-SSH is used for deployment/administration, not for each shutter press. No cloud
-service is involved in this capture flow.
+The Pi runs its own Wi-Fi hotspot and the Stick joins it directly, so no home
+network is needed in the field; the two talk over a token-authenticated HTTP API.
+SSH over an Ethernet cable is used for deployment/administration and photo
+transfer, not for each shutter press. No cloud service is involved.
 
 ```text
 Stick joins Wi-Fi → checks Pi readiness → displays READY

@@ -26,6 +26,18 @@ void make_ready(CaptureClient& client, uint32_t at_ms = 0, const char* instance 
   TEST_ASSERT_EQUAL(ClientState::Ready, client.state());
 }
 
+void test_every_client_state_has_a_distinct_log_name(void) {
+  // The serial debug log prints state transitions by name so a monitor
+  // session shows where a photo stops on its way to the screen.
+  TEST_ASSERT_EQUAL_STRING("CONNECTING", clientStateName(ClientState::Connecting));
+  TEST_ASSERT_EQUAL_STRING("READY", clientStateName(ClientState::Ready));
+  TEST_ASSERT_EQUAL_STRING("REQUESTING", clientStateName(ClientState::Requesting));
+  TEST_ASSERT_EQUAL_STRING("PROCESSING", clientStateName(ClientState::Processing));
+  TEST_ASSERT_EQUAL_STRING("DOWNLOADING", clientStateName(ClientState::Downloading));
+  TEST_ASSERT_EQUAL_STRING("PHOTO", clientStateName(ClientState::Photo));
+  TEST_ASSERT_EQUAL_STRING("ERROR", clientStateName(ClientState::Error));
+}
+
 void test_ready_requires_authenticated_server_status_without_active_job(void) {
   CaptureClient client;
   client.setWifiConnected(true, 0);
@@ -358,6 +370,7 @@ void test_failed_next_capture_restores_previous_photo(void) {
 #ifdef PIO_UNIT_TESTING
 void setup() {
   UNITY_BEGIN();
+  RUN_TEST(test_every_client_state_has_a_distinct_log_name);
   RUN_TEST(test_ready_requires_authenticated_server_status_without_active_job);
   RUN_TEST(test_press_starts_one_request_and_one_shutter_sound);
   RUN_TEST(test_lost_submission_acknowledgement_is_resolved_by_polling_same_id);

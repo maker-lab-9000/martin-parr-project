@@ -47,6 +47,75 @@ On first flash, verify physical hardware before enabling network credentials:
 2. The boot smoke screen appears, the short speaker tone is audible, and colour bars follow.
 3. Press and hold the primary button: it should yield only one shutter tone and one request.
 
+## Reading the serial debug log
+
+The firmware logs every hop of a capture on the serial port, each line
+prefixed with the uptime in milliseconds. A healthy capture looks like this:
+
+```text
+[12034] status: HTTP 200 ready=1 active_capture=0
+[12040] state CONNECTING -> READY
+[12041] [display] render READY (pi ready=1, stored photo=0 bytes)
+[30212] submit 3f9c1a2b: HTTP 202 (accepted)
+[30215] state READY -> REQUESTING
+[30731] poll 3f9c1a2b: HTTP 200 job state 'processing'
+[30733] state REQUESTING -> PROCESSING
+[33245] poll 3f9c1a2b: HTTP 200 job state 'complete'
+[33247] state PROCESSING -> DOWNLOADING
+[33802] download 3f9c1a2b: HTTP 200, content-length 18342
+[33951] download ok: 18342 bytes, valid JPEG markers, handed to UI loop for decode
+[33970] [display] JPEGDEC validation ok; M5GFX drawJpg 18342 bytes at 0,0 240x135 -> ok
+[33971] ui: 18342 byte JPEG decoded and drawn; state -> PHOTO
+[33972] state DOWNLOADING -> PHOTO
+[33973] [display] render PHOTO (pi ready=1, stored photo=18342 bytes)
+[33990] [display] drawPhoto: M5GFX drawJpg 18342 bytes at 0,0 240x135 on 240x135 screen -> ok
+```
+
+Where the sequence stops tells you which side to look at:
+
+- No `status: HTTP 200` line: Wi-Fi or the API URL/token. Check the Pi's
+  `parr-capture` service and the `.env` values baked into this build.
+- `submit` returns 409: the Pi is already busy with a capture.
+- `download` returns 409: the job is not complete yet; the state machine retries.
+- `download rejected`: the JPEG arrived truncated or exceeded the 64 KiB buffer.
+- `JPEGDEC validation FAILED`: the bytes are not a decodable JPEG.
+- `drawJpg ... -> FAILED`: JPEGDEC accepted the file but M5GFX's decoder did not
+  draw it. The stored photo is kept; the screen shows black behind the overlay.
+- `render PHOTO` followed by `drawPhoto ... -> ok` with nothing visible: check
+  the panel itself (brightness, rotation), not the network path.
+
+Status and poll results are logged only when they change, so an idle Stick is
+quiet apart from Wi-Fi events.
+
+### Confirming the photo is the graded one
+
+The log proves a JPEG arrived and was drawn, not which file it came from. The
+server builds the thumbnail from the job's `*_parr.jpg` and the thumbnail
+generator is deterministic on one Pillow build, so regenerating thumbnails on
+the Pi from both saved files and hashing them settles it. Fetch what the Stick
+received (the last completed job ID comes from `/v1/status`), then on the Pi:
+
+```sh
+cd ~/repos/martin-parr-project
+.venv/bin/python - <<'PY'
+import hashlib, json
+from datetime import date
+from pathlib import Path
+from parr.capture.thumbnail import fitted_jpeg
+day = Path.home() / 'Pictures' / 'parr' / date.today().isoformat()
+rec = json.loads((day / 'captures.jsonl').read_text().splitlines()[-1])
+for label in ('parr', 'original'):
+    data = fitted_jpeg(day / rec[label])
+    print(label, len(data), hashlib.sha256(data).hexdigest()[:16])
+print('lut_sha1 used:', rec['lut_sha1'])
+PY
+```
+
+Exactly one hash matches `sha256sum` of the downloaded image; it must be the
+`parr` one. The `lut_sha1` line tells you which look graded it: compare it with
+`lut_sha1` in the `params.json` of the artifact you intended the service to
+load. The bundled starter and a trained artifact have different hashes.
+
 Network traffic runs in a FreeRTOS worker. The UI loop remains responsive; Wi-Fi
 reconnects back off from one to ten seconds. The shutter tone is queued only
 after a 2xx capture acknowledgement. A job still unresolved after 120 seconds
