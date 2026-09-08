@@ -28,6 +28,11 @@ class StickDisplay {
   void drawColourBars();
   void drawBarsOverlay(const char* title, const char* detail, uint32_t elapsed_seconds);
   void drawMessage(const char* title, const char* detail, uint32_t elapsed_seconds);
+  // The seconds counter alone, repainted in place. A tick must not redraw the
+  // whole screen: repainting the colour bars once a second is a visible blink.
+  void drawOverlayElapsed(uint32_t elapsed_seconds);
+  void drawMessageElapsed(uint32_t elapsed_seconds);
+  void drawElapsedOnly(ClientState state, uint32_t elapsed_seconds);
   void drawBatteryBadge();
 
   uint8_t photo_[kMaxJpegBytes] = {};

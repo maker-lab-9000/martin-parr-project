@@ -227,7 +227,7 @@ void networkWorker(void*) {
 
 void playShutter() { M5.Speaker.tone(1800, 55); }
 
-ChargeState chargeState() {
+ChargeState chargerPinReport() {
   switch (M5.Power.isCharging()) {
     case m5::Power_Class::is_charging: return ChargeState::Charging;
     case m5::Power_Class::is_discharging: return ChargeState::Discharging;
@@ -235,20 +235,32 @@ ChargeState chargeState() {
   }
 }
 
+// The PM1 reports which rails are powering the board. A reply of `none` means
+// the read failed (a running board always has at least the battery), so that
+// is treated as unknown and the charger pin decides.
+ChargeState chargeState(uint8_t* sources_out) {
+  const uint8_t sources = static_cast<uint8_t>(M5.Power.M5pm1.getPowerSource());
+  *sources_out = sources;
+  const bool known = sources != m5::M5PM1_Class::none;
+  const bool external = (sources & (m5::M5PM1_Class::vin | m5::M5PM1_Class::vinout)) != 0;
+  return chargeStateFrom(known, external, chargerPinReport());
+}
+
 // Reads the PM1 power chip on the monitor's cadence (every 10 s) and repaints
 // the corner badge only when the visible text changes. Runs on the UI task,
-// which owns the display; the I2C read is short.
+// which owns the display; the I2C reads are short.
 void pollBattery(uint32_t now_ms) {
   if (!battery.pollDue(now_ms)) return;
   const int level = static_cast<int>(M5.Power.getBatteryLevel());
-  const ChargeState charge = chargeState();
+  uint8_t sources = 0;
+  const ChargeState charge = chargeState(&sources);
   if (battery.update(level, charge, now_ms)) {
     display.setBatteryLabel(battery.label(), battery.low());
-    Serial.printf("[%lu] battery %s (level %d, %s, %d mV)\n", static_cast<unsigned long>(now_ms),
-                  battery.label(), level,
-                  charge == ChargeState::Charging ? "charging"
-                  : charge == ChargeState::Discharging ? "discharging" : "charge state unknown",
-                  M5.Power.getBatteryVoltage());
+    Serial.printf("[%lu] battery %s (level %d, %s, power sources 0x%02x, %d mV)\n",
+                  static_cast<unsigned long>(now_ms), battery.label(), level,
+                  charge == ChargeState::Charging ? "external power"
+                  : charge == ChargeState::Discharging ? "on battery" : "power state unknown",
+                  sources, M5.Power.getBatteryVoltage());
   }
 }
 
