@@ -14,6 +14,8 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from firmware.sticks3.scripts.generate_config import parse_env_file
 
+DEFAULT_LISTEN = "0.0.0.0:8765"
+
 
 @dataclass(frozen=True)
 class DeploymentConfig:
@@ -23,6 +25,7 @@ class DeploymentConfig:
     ssh_password: str
     artifact_dir: str
     remote_token: str
+    listen: str
 
 
 def _required(values: Mapping[str, str], key: str) -> str:
@@ -33,6 +36,9 @@ def _required(values: Mapping[str, str], key: str) -> str:
 
 
 def deployment_config(values: Mapping[str, str]) -> DeploymentConfig:
+    # PI_HOST is where SSH goes (Ethernet, usually an mDNS name). The API bind
+    # address is a separate setting because, with the Pi running its own
+    # hotspot, the Stick reaches a different interface than the admin does.
     return DeploymentConfig(
         host=_required(values, "PI_HOST"),
         user=_required(values, "PI_USER"),
@@ -40,6 +46,7 @@ def deployment_config(values: Mapping[str, str]) -> DeploymentConfig:
         ssh_password=_required(values, "PI_SSH_PASSWORD"),
         artifact_dir=_required(values, "PI_ARTIFACT_DIR"),
         remote_token=_required(values, "PARR_REMOTE_TOKEN"),
+        listen=values.get("PARR_LISTEN") or DEFAULT_LISTEN,
     )
 
 
@@ -54,7 +61,7 @@ def build_capture_command(config: DeploymentConfig, *, show_captures: bool) -> s
     parts.extend(
         [
             "--remote-listen",
-            f"{config.host}:8765",
+            config.listen,
             "--artifacts",
             config.artifact_dir,
         ]
