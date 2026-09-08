@@ -31,7 +31,7 @@ WIFI_PASSWORD=replace-locally-8-to-63-ascii-characters
 PARR_REMOTE_URL=http://10.42.0.1:8765
 PARR_LISTEN=0.0.0.0:8765
 PARR_REMOTE_TOKEN=replace-locally-with-a-long-random-token
-PI_ARTIFACT_DIR=/home/george/repos/martin-parr-project/artifacts/personal-collection-01-v1
+PI_ARTIFACT_DIR=/home/george/repos/martin-parr-project/parr/data
 ```
 
 What each group means in this topology:
@@ -46,8 +46,13 @@ What each group means in this topology:
 - `PARR_LISTEN` is where `parr-capture` binds on the Pi. `0.0.0.0:8765`
   listens on both the hotspot and Ethernet and avoids a boot-order race with
   NetworkManager bringing the hotspot address up.
-- `PI_ARTIFACT_DIR` is the selected artifact directory. Verify it on the Pi
-  before starting capture: it must contain both `params.json` and `parr.cube`.
+- `PI_ARTIFACT_DIR` is the look the service loads. `parr/data` is the bundled
+  untrained starter and exists in every checkout. A trained model under
+  `artifacts/` is gitignored and must be copied to the Pi first. Whatever you
+  choose, use the same path in the service unit's `--artifacts` and verify it
+  on the Pi before starting capture: it must contain both `params.json` and
+  `parr.cube`. Each capture's `captures.jsonl` record carries the `lut_sha1` of
+  the look that graded it, so you can always tell which one was in use.
 
 The scripts parse this file as `KEY=VALUE` data. They do not source it, expand
 variables, run command substitutions, or execute any of its contents. The Pi

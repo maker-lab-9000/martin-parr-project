@@ -15,7 +15,12 @@ EnvironmentFile=/etc/parr-capture.env
 # Bind on all interfaces: the Stick arrives over the Pi's own hotspot
 # (10.42.0.1), while administration arrives over Ethernet. Binding to the
 # hotspot address alone races NetworkManager bringing it up at boot.
-ExecStart=/home/george/repos/martin-parr-project/.venv/bin/parr-capture --no-preview --remote-listen 0.0.0.0:8765 --artifacts /home/george/repos/martin-parr-project/artifacts/personal-collection-01-v1
+# --artifacts names the look. parr/data is the bundled untrained starter that
+# ships with the package and exists in every checkout. To deploy a trained
+# model, point this at its directory (params.json + parr.cube), for example
+# /home/george/repos/martin-parr-project/artifacts/personal-collection-01-v1,
+# and use the same path for PI_ARTIFACT_DIR in .env.
+ExecStart=/home/george/repos/martin-parr-project/.venv/bin/parr-capture --no-preview --remote-listen 0.0.0.0:8765 --artifacts /home/george/repos/martin-parr-project/parr/data
 Restart=on-failure
 RestartSec=3
 StandardInput=null
