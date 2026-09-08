@@ -49,7 +49,30 @@ void StickDisplay::drawColourBars() {
   }
   M5.Display.fillRect(0, height_ - 24, width_, 24, TFT_BLACK);
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-  M5.Display.drawString("READY  •  press primary button", width_ / 2, height_ - 12);
+  M5.Display.setTextSize(1);
+  // Centred in the space left of the battery badge, not under it.
+  M5.Display.drawString("READY  •  press primary button", (width_ - kBatteryBadgeWidth) / 2, height_ - 12);
+}
+
+void StickDisplay::setBatteryLabel(const char* label, bool low) {
+  std::strncpy(battery_label_, label == nullptr ? "" : label, sizeof(battery_label_) - 1);
+  battery_label_[sizeof(battery_label_) - 1] = '\0';
+  battery_low_ = low;
+  drawBatteryBadge();
+}
+
+void StickDisplay::drawBatteryBadge() {
+  if (battery_label_[0] == '\0') return;
+  const int16_t x = width_ - kBatteryBadgeWidth;
+  const int16_t y = height_ - kBatteryBadgeHeight;
+  M5.Display.fillRect(x, y, kBatteryBadgeWidth, kBatteryBadgeHeight, TFT_BLACK);
+  M5.Display.setTextSize(1);
+  M5.Display.setTextDatum(middle_center);
+  // Red below the low threshold while discharging; white otherwise. The trailing
+  // "+" in the label marks charging.
+  M5.Display.setTextColor(battery_low_ ? TFT_RED : TFT_WHITE, TFT_BLACK);
+  M5.Display.drawString(battery_label_, x + kBatteryBadgeWidth / 2, y + kBatteryBadgeHeight / 2);
+  M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
 }
 
 void StickDisplay::drawMessage(const char* title, const char* detail, uint32_t elapsed_seconds) {
@@ -147,4 +170,6 @@ void StickDisplay::render(const CaptureClient& client, uint32_t now_ms) {
       M5.Display.drawString(client.errorDetail(), width_ / 2, 10);
       break;
   }
+  // Every branch above repainted the full screen, so the badge goes back on top.
+  drawBatteryBadge();
 }

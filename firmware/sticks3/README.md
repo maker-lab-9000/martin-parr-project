@@ -47,6 +47,25 @@ On first flash, verify physical hardware before enabling network credentials:
 2. The boot smoke screen appears, the short speaker tone is audible, and colour bars follow.
 3. Press and hold the primary button: it should yield only one shutter tone and one request.
 
+## Battery indicator
+
+The bottom-right corner of every screen shows the Stick's own battery as a
+small badge: `87%` while discharging, `87%+` while charging over USB, `--%`
+when the power chip cannot report a level. It turns red at 15% or below while
+discharging. The READY caption is centred in the space left of the badge.
+
+The level comes from M5Unified's `M5.Power.getBatteryLevel()`, which on the
+StickS3 derives it from the PM1 power chip's battery voltage, so expect it to
+move in steps rather than smoothly, and to read high while a charger is
+attached. The chip is polled every 10 seconds by `BatteryMonitor`
+(`include/battery_status.h`), which is Arduino-free and covered by the native
+tests; the display repaints the badge only when the text changes. Each change
+is also logged on the serial port:
+
+```text
+[1203] battery 87% (level 87, discharging, 4012 mV)
+```
+
 Network traffic runs in a FreeRTOS worker. The UI loop remains responsive; Wi-Fi
 reconnects back off from one to ten seconds. The shutter tone is queued only
 after a 2xx capture acknowledgement. A job still unresolved after 120 seconds

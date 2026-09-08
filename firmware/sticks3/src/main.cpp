@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "battery_status.h"
 #include "capture_client.h"
 #include "display.h"
 
@@ -27,6 +28,7 @@
 namespace {
 CaptureClient capture;
 StickDisplay display;
+BatteryMonitor battery;
 SemaphoreHandle_t capture_mutex = nullptr;
 SemaphoreHandle_t jpeg_mutex = nullptr;
 TaskHandle_t network_task = nullptr;
@@ -225,6 +227,31 @@ void networkWorker(void*) {
 
 void playShutter() { M5.Speaker.tone(1800, 55); }
 
+ChargeState chargeState() {
+  switch (M5.Power.isCharging()) {
+    case m5::Power_Class::is_charging: return ChargeState::Charging;
+    case m5::Power_Class::is_discharging: return ChargeState::Discharging;
+    default: return ChargeState::Unknown;
+  }
+}
+
+// Reads the PM1 power chip on the monitor's cadence (every 10 s) and repaints
+// the corner badge only when the visible text changes. Runs on the UI task,
+// which owns the display; the I2C read is short.
+void pollBattery(uint32_t now_ms) {
+  if (!battery.pollDue(now_ms)) return;
+  const int level = static_cast<int>(M5.Power.getBatteryLevel());
+  const ChargeState charge = chargeState();
+  if (battery.update(level, charge, now_ms)) {
+    display.setBatteryLabel(battery.label(), battery.low());
+    Serial.printf("[%lu] battery %s (level %d, %s, %d mV)\n", static_cast<unsigned long>(now_ms),
+                  battery.label(), level,
+                  charge == ChargeState::Charging ? "charging"
+                  : charge == ChargeState::Discharging ? "discharging" : "charge state unknown",
+                  M5.Power.getBatteryVoltage());
+  }
+}
+
 void smokeTest() {
   M5.Display.fillScreen(TFT_BLACK);
   M5.Display.setTextDatum(middle_center);
@@ -263,6 +290,7 @@ void loop() {
     }
     xSemaphoreGive(jpeg_mutex);
   }
+  pollBattery(millis());
   display.render(capture, millis());
   unlockClient();
   delay(10);
