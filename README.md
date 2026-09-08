@@ -48,7 +48,8 @@ python3.12 -m venv .venv
 .venv/bin/pytest -q -m 'not slow'
 ```
 
-Raspberry Pi OS with a desktop:
+Raspberry Pi OS (verified on Trixie, Debian 13; a desktop is only needed for
+the two-screen mode, the Stick-only handheld runs headless):
 
 ```bash
 sudo apt install python3-venv python3-opencv python3-numpy python3-pil
@@ -66,9 +67,12 @@ folder to the Pi.
 The StickS3 and Pi deployment uses a local `.env` that is intentionally ignored
 by Git. Copy `.env.example` to `.env`, fill in the real credentials locally, and
 follow [the Pi and StickS3 deployment guide](docs/sticks3-remote.md). The guide
-covers the two-screen desktop mode and the Stick-only headless service; do not
-put a real token, Wi-Fi password, or Pi SSH password in a command, source file,
-or commit.
+covers the Pi's own Wi-Fi hotspot that the Stick joins, Ethernet administration
+over `parr.local`, the two-screen desktop mode and the Stick-only headless
+service; do not put a real token, Wi-Fi password, or Pi SSH password in a
+command, source file, or commit. The firmware writes a serial debug log of every
+capture step; [the firmware README](firmware/sticks3/README.md) explains how to
+read it and how to confirm the Stick is showing the graded file.
 
 | Last captured photo | Ready to capture |
 | --- | --- |
@@ -84,7 +88,7 @@ SSH over an Ethernet cable is used for deployment/administration and photo
 transfer, not for each shutter press. No cloud service is involved.
 
 ```text
-Stick joins Wi-Fi → checks Pi readiness → displays READY
+Stick joins the Pi's hotspot → checks Pi readiness → displays READY
     ↓ primary button press
 Capture request → Pi accepts → Stick sounds shutter acknowledgement
     ↓ TV colour bars while waiting
@@ -96,8 +100,8 @@ Pi saves original + graded JPEG + capture log → marks job complete
 ```
 
 1. **Connect and become ready.** The Pi capture app must be running with its
-   remote listener enabled. The Stick connects to Wi-Fi and checks the Pi's
-   status before showing that it is ready for another capture.
+   remote listener enabled. The Stick joins the Pi's hotspot and checks the
+   Pi's status before showing that it is ready for another capture.
 2. **Request one snapshot.** A debounced primary-button press creates a unique
    request ID and sends `POST /v1/captures`. The Pi accepts only one active
    capture at a time; additional requests can be rejected as busy. The Stick's
