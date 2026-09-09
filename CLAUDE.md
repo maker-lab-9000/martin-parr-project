@@ -10,7 +10,10 @@ from a USB camera, grades, and saves. An M5Stack StickS3 acts as a wireless shut
 last-capture display, talking to the Pi over a token-authenticated HTTP API.
 
 Forked from the user's `kodachrome-film` project (see `ORIGIN.md`). Package is `parr`, distribution is
-`martin-parr-project`, commands are `parr-*`. The bundled LUT in `parr/data/` is a handcrafted,
+`martin-parr-project`, commands are `parr-*`. `docs/setup.md` is the ordered install guide (Mac, `.env`,
+Pi network, Pi service, Stick, optional training) and says which machine each step runs on and why;
+`docs/sticks3-remote.md` holds the network and service detail; `firmware/sticks3/README.md` the Stick;
+`docs/training.md` is the step-by-step training procedure and explains every report gate. The bundled LUT in `parr/data/` is a handcrafted,
 untrained starter preset (`trained: false`). Trained artifacts, training data, `data/`, `artifacts/`,
 `ektar100/`, `velvia/` are all gitignored and not in a clone.
 
@@ -24,14 +27,12 @@ python3.12 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -e '.[train,dev]'     # add ,deploy for scripts/deploy_remote.py
 
-# Tests: use `python -m pytest`, NOT bare `pytest`.
-# tests/test_config.py and tests/test_deployment.py import `firmware.sticks3.scripts.generate_config`
-# and `scripts.deploy_remote` as namespace packages from the repo root; only `python -m pytest`
-# puts the CWD on sys.path. Bare `.venv/bin/pytest` fails collection on those two files.
-.venv/bin/python -m pytest -q -m 'not slow'           # ~40s, 361 tests
-.venv/bin/python -m pytest -q tests/test_lut.py       # one file
-.venv/bin/python -m pytest -q tests/test_lut.py -k identity   # one test by name
-.venv/bin/python -m pytest -q -m slow                 # builds a wheel, installs into a temp venv, runs parr-process
+# Tests. pyproject sets pytest `pythonpath = ["."]` because tests import `scripts/` and
+# `firmware/sticks3/scripts/` as namespace packages from the repo root.
+.venv/bin/pytest -q -m 'not slow'                     # ~40s, ~380 tests
+.venv/bin/pytest -q tests/test_lut.py                 # one file
+.venv/bin/pytest -q tests/test_lut.py -k identity     # one test by name
+.venv/bin/pytest -q -m slow                           # builds a wheel, installs into a temp venv, runs parr-process
 
 # Lint (ruff: E, F, I, B, UP; line length 100)
 .venv/bin/ruff check .
@@ -137,6 +138,9 @@ Unity test env. `main.cpp` runs networking in a FreeRTOS task and the UI loop on
 `display.cpp` draws colour bars, status, and the decoded JPEG. Config enters only as four
 `STICKS3_*` compile defines appended by `scripts/generate_config.py` from `.env`; empty defaults on a
 clean clone leave the device unable to join a network. Build outputs contain credentials.
+Every capture step is logged on the serial port (`STICK_LOG` in `main.cpp`, `[display]` lines in
+`display.cpp`), including the return value of each `drawJpg`; `clientStateName()` names states for
+the log and is unit-tested. `firmware/sticks3/README.md` has an annotated healthy log.
 
 ### Deployment (`scripts/deploy_remote.py`, `deploy/parr-capture.service.example`)
 
@@ -145,6 +149,13 @@ generated from `.env`) and the Stick joins it directly; SSH and photo transfer g
 (`parr.local` via avahi). `WIFI_SSID`/`WIFI_PASSWORD` in `.env` are therefore the hotspot's
 credentials, `PARR_REMOTE_URL`'s host is the hotspot address, `PI_HOST` is the SSH address, and
 `PARR_LISTEN` (default `0.0.0.0:8765`) is where `parr-capture` binds.
+
+Facts verified on the real Pi (2026-09-08): Raspberry Pi OS Trixie, NetworkManager 1.52 with
+netplan-generated profiles (`netplan-eth0`, `netplan-wlan0-<SSID>`; `nmcli` changes persist as
+`/etc/netplan/90-NM-*.yaml`). The Pi 3B radio (BCM43430) has no management-frame protection, so the
+hotspot keyfile must set `pmf=1` or the AP never starts. The deployed look is the bundled starter
+(`--artifacts .../parr/data`); the example unit and `.env.example` match that. The user account has
+no passwordless sudo, so `deploy_remote.py --restart` needs the narrow sudoers rule from the guide.
 
 `deploy_remote.py` uses Paramiko with system known_hosts and `RejectPolicy`; it inspects the Pi
 (project dir, artifact, running `parr-capture`, `/dev/video*` owners, desktop sessions) and refuses

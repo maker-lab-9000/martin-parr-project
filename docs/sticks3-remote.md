@@ -94,6 +94,10 @@ One radio cannot reliably be a client of your home Wi-Fi and an access point at
 the same time. **Activating the hotspot disconnects the Pi from home Wi-Fi.**
 Do the steps below with an Ethernet cable connected, in this order.
 
+Verified 2026-09-08 on a Pi 3B running Raspberry Pi OS Trixie (Debian 13),
+NetworkManager 1.52.1 with netplan-generated profiles, brcmfmac firmware
+7.45.98. Hotspot and capture service both return unattended after a reboot.
+
 ### 1. Ethernet administration (do this first)
 
 Plug the Pi into your router, or directly into the laptop (the Pi 3B port is
@@ -216,8 +220,13 @@ From a phone or laptop joined to `parr-cam` (or from the Pi itself):
 curl -s -H "Authorization: Bearer $PARR_REMOTE_TOKEN" http://10.42.0.1:8765/v1/status
 ```
 
-Expect `"ready":true`. Then power the Stick: colour bars, READY, one capture per
-deliberate press, graded thumbnail displayed. Pull photos over Ethernet with:
+Expect `"ready":true`. Allow up to 30 seconds after a boot before the port
+answers: the service imports OpenCV, loads the LUT and warms up the camera
+first, and on a Pi 3B that takes 15 to 25 seconds. Then power the Stick: colour
+bars, READY, one capture per deliberate press, graded thumbnail displayed. The
+Stick's serial log shows each step; `firmware/sticks3/README.md` explains how to
+read it and how to prove the displayed image is the graded file. Pull photos
+over Ethernet with:
 
 ```sh
 rsync -av george@parr.local:Pictures/parr/ ~/Pictures/parr-pi/
@@ -282,8 +291,30 @@ with no `export`, quotes, or Windows line endings:
 
 ```sh
 sudo sed -E 's/=.*/=<redacted>/' /etc/parr-capture.env | cat -A
-``` Once it is installed and `sudo -n systemctl` is authorized
-for `george`, a guarded remote restart is available:
+```
+
+The guarded remote restart below runs `sudo -n systemctl`, which needs a
+passwordless rule for exactly those two commands. The default Raspberry Pi OS
+user does not have one, so add it once on the Pi. Two short rules rather than
+one long line: sudoers has no implicit line continuation, and a long rule that
+soft-wraps on paste becomes a syntax error that disables the rule.
+
+```sh
+sudo tee /etc/sudoers.d/parr-capture >/dev/null <<'EOF'
+george ALL=(root) NOPASSWD: /usr/bin/systemctl start parr-capture.service
+george ALL=(root) NOPASSWD: /usr/bin/systemctl stop parr-capture.service
+EOF
+sudo chmod 440 /etc/sudoers.d/parr-capture
+sudo visudo -c
+sudo -k && sudo -n systemctl start parr-capture.service && echo passwordless-ok
+```
+
+If `visudo -c` reports a syntax error, fix the file with
+`sudo visudo -f /etc/sudoers.d/parr-capture`. Should `sudo` itself refuse to
+run after a sudoers mistake, `pkexec rm /etc/sudoers.d/parr-capture` removes
+the file through polkit instead.
+
+With that in place, a guarded remote restart is available:
 
 ```sh
 .venv/bin/python scripts/deploy_remote.py --env .env --restart

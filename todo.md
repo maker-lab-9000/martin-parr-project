@@ -4,6 +4,12 @@ Written 2026-09-07 after reading the code, the three training reports, the
 September 7 refinement experiment, and the trained artifacts on disk. Items are
 checkboxes grouped by theme and ordered by expected payoff within each group.
 
+Updated 2026-09-08. Section 5 (Pi hotspot, Ethernet administration) is done
+and verified on the device; the Stick captures over the hotspot and displays the
+graded thumbnail, proven by hash. The deployed look is the bundled starter
+(`parr/data`) by decision. Firmware now writes a serial debug log. Remaining
+work is sections 1, 3 (partly) and 4.
+
 ---
 
 ## 1. Better training results
@@ -31,6 +37,10 @@ checkboxes grouped by theme and ordered by expected payoff within each group.
 - Parr's saturation depends on direct flash. The camera has no flash, so the
   source distribution can never contain the specular highlights and hard
   shadows the references have. A LUT cannot invent them.
+- Measured on a real indoor capture (2026-09-08): only 1.3% of pixels had Oklab
+  chroma above 0.05 before grading. The starter, the trained model, and a
+  starter pushed to 2.2x saturation all looked the same at Stick size. There is
+  nothing for any LUT to amplify in an unlit room; the flash is not optional.
 
 ### Priority 1: a real camera source corpus
 
@@ -47,13 +57,15 @@ checkboxes grouped by theme and ordered by expected payoff within each group.
 - [ ] Port scene-grouped partitions from `parr.experiments.partitions` into
       `parr-train` (a `--partition manifest.json` flag) so the production
       trainer stops doing random per-image splits.
-- [ ] Lock the camera before collecting: fix white balance and exposure via
-      `v4l2-ctl` (`white_balance_automatic=0`, manual `auto_exposure`, fixed
-      `exposure_time_absolute`), and set in-camera saturation, contrast,
-      sharpness and gamma to neutral. Record the control values in
-      `captures.jsonl` (spec 7.5 already asks for this). Auto WB and auto
-      exposure change the input distribution frame to frame, which the
-      normalizer partially undoes but never fully.
+- [ ] Configure the camera for training frames exactly as it is configured at
+      capture, and record the control values in `captures.jsonl` (spec 7.5
+      already asks for this). Today that means auto exposure and auto white
+      balance on, since the service sets no controls. Do not lock one white
+      balance across different lighting: the normalizer's gains are clamped to
+      0.6 to 1.6 and cannot undo a tungsten frame shot with a daylight setting,
+      so the LUT would learn a cast compensation. Freeze white balance per scene
+      at most. Consider setting in-camera saturation, contrast and sharpness to
+      neutral, and if so, do it in the service as well so both sides match.
 - [ ] Add the flash (section 3) before the main collection run. Source data
       with flash is the single largest change you can make to the input
       distribution.
@@ -133,6 +145,10 @@ and the neutral-tint drift enter. Real pairs remove both problems.
 ---
 
 ## 2. Should `parr.cube` and `params.json` be committed?
+
+Decision 2026-09-08: the Pi deploys the bundled starter (`parr/data`), which is
+already in the package, so nothing needs committing for the current setup. The
+question below stays open for the day a trained model is promoted.
 
 Short answer: yes for those two files, never the `report/` folder, and
 consider shipping the look as package data instead of un-ignoring a path.
@@ -228,9 +244,14 @@ Cleaner alternative:
 - [ ] Add a `Makefile` (or `justfile`) with `test`, `lint`, `firmware`,
       `flash`, `deploy`, `pull-photos` targets so the README commands have one
       home.
-- [ ] Set `[tool.pytest.ini_options] pythonpath = ["."]` so bare `pytest`
-      collects `tests/test_config.py` and `tests/test_deployment.py`. Today
-      only `python -m pytest` works.
+- [x] Set `[tool.pytest.ini_options] pythonpath = ["."]` so bare `pytest`
+      collects `tests/test_config.py` and `tests/test_deployment.py`.
+      (Done 2026-09-08.)
+- [ ] Add the narrow sudoers rule for `systemctl start/stop parr-capture.service`
+      so `deploy_remote.py --restart` works. The Pi user has no passwordless
+      sudo; it only looked that way while an interactive credential was cached.
+      Commands are in `docs/sticks3-remote.md`.
+- [ ] Rotate the Pi SSH password and update `PI_SSH_PASSWORD` in `.env`.
 - [ ] Add GitHub Actions: ruff, fast pytest, and `pio test -e native`.
 - [ ] Deploy by wheel rather than editable checkout on the Pi:
       `python -m build`, copy the wheel over Ethernet, `pip install`. The slow
@@ -332,63 +353,64 @@ access-point mode with the standard `brcmfmac` driver, and the ESP32-S3 is
 `WiFi.begin(ssid, password)`, which is plain WPA2-PSK; no firmware change is
 needed beyond rebuilding with the new SSID, passphrase and API URL.
 
-### Pi as hotspot (Raspberry Pi OS Bookworm, NetworkManager)
+### Pi as hotspot (Raspberry Pi OS Trixie, NetworkManager with netplan)
 
-- [ ] Set the Wi-Fi country first (`sudo raspi-config nonint do_wifi_country XX`).
+Done and verified 2026-09-08. Kept here as the record of what was actually
+needed; the live procedure is `docs/sticks3-remote.md`.
+
+- [x] Set the Wi-Fi country first (`sudo raspi-config nonint do_wifi_country DE`).
       Without it the radio stays soft-blocked.
-- [ ] Create an autoconnecting AP profile with a fixed address:
-
-```sh
-sudo nmcli con add type wifi ifname wlan0 con-name parr-ap autoconnect yes ssid parr-cam
-sudo nmcli con modify parr-ap 802-11-wireless.mode ap 802-11-wireless.band bg \
-  ipv4.method shared ipv4.addresses 10.42.0.1/24 \
-  wifi-sec.key-mgmt wpa-psk wifi-sec.psk 'a-long-passphrase'
-sudo nmcli con up parr-ap
-```
+- [x] Create an autoconnecting AP profile with a fixed address. Implemented as
+      `scripts/pi_hotspot.py`, which writes a root-only NetworkManager keyfile
+      from `.env` instead of passing the passphrase to `nmcli`.
+- [x] Disable Protected Management Frames in that profile (`pmf=1`). Not in the
+      original plan; found on the device. NetworkManager's "optional" default
+      makes hostapd install an AES-CMAC key, the Pi 3B's BCM43430 firmware has
+      no MFP, and the kernel refuses with "key setting validation failed", so
+      the AP never started.
+- [x] Disable autoconnect on the home Wi-Fi profile (`netplan-wlan0-<SSID>` on
+      Trixie, not `preconfigured`).
 
 `ipv4.method shared` runs a DHCP server for the Stick and NATs to Ethernet if
 that is up, so the Pi keeps internet access when you wire it to a router.
 
-- [ ] Point the firmware and the service at the AP address. In `.env`, set
-      `PARR_REMOTE_URL=http://10.42.0.1:8765` (already supported by
-      `generate_config.py`) and keep `PI_HOST` as the SSH address used by
-      `deploy_remote.py`. Rebuild and flash the Stick.
+- [x] Point the firmware and the service at the AP address. `.env` carries
+      `PARR_REMOTE_URL=http://10.42.0.1:8765` and `PARR_LISTEN=0.0.0.0:8765`;
+      `PI_HOST=parr.local` is the SSH address. Stick rebuilt and flashed.
 - [x] Set `--remote-listen 0.0.0.0:8765` in the unit. (Done 2026-09-08.)
 - [x] Repo side: `scripts/pi_hotspot.py` writes the hotspot as a root-only
       NetworkManager keyfile from `.env`; `.env.example` and
       `docs/sticks3-remote.md` describe the hotspot topology. (Done 2026-09-08;
       the Pi-side steps above and below still need to be run on the device.)
-- [ ] Expect 10 to 20 s after Pi boot before the AP is up. The firmware already
-      backs off reconnects between 1 and 10 s, so the Stick will settle into
-      READY on its own.
-- [ ] The API is plain HTTP with a bearer token. On a private WPA2 hotspot with
-      a strong passphrase that is acceptable; keep the token anyway so a guest
-      on the hotspot cannot fire the shutter.
+- [x] Verified: after an unattended reboot the hotspot is up and the service is
+      listening within about 30 s (SSH back after 57 s including the reboot
+      itself). The Stick's reconnect backoff handles the gap.
+- [x] The API is plain HTTP with a bearer token. On a private WPA2 hotspot with
+      a strong passphrase that is acceptable; the token is kept, and a request
+      without it gets 401.
 
 ### Ethernet for administration
 
 The Pi 3B port is auto-MDI-X, so a normal patch cable straight into a laptop
 works.
 
-- [ ] Set a memorable hostname (`sudo hostnamectl set-hostname parr`); avahi is
-      installed by default on Raspberry Pi OS, and macOS resolves `parr.local`
-      natively.
-- [ ] Make the wired profile fall back to link-local when no DHCP server is
-      present, so a direct cable gives `ssh george@parr.local` with no static
-      IP dance, while a router or macOS Internet Sharing still hands out DHCP:
+- [x] Set a memorable hostname (`sudo raspi-config nonint do_hostname parr`);
+      avahi is installed by default on Raspberry Pi OS, and macOS resolves
+      `parr.local` natively. Verified.
+- [x] Make the wired profile keep a link-local address alongside DHCP, so a
+      direct cable gives `ssh george@parr.local` with no static IP dance while
+      a router still hands out DHCP. Done on the netplan-generated profile:
 
 ```sh
-sudo nmcli con modify 'Wired connection 1' ipv4.method auto ipv4.link-local fallback
+sudo nmcli connection modify netplan-eth0 ipv4.method auto ipv4.link-local enabled
 ```
 
-  (Verify the `ipv4.link-local` property exists on the installed NetworkManager
-  version with `nmcli con show 'Wired connection 1' | grep link-local`; if not,
-  a second static profile on `192.168.7.2/24` with the Mac set to
-  `192.168.7.1` is the simple alternative.)
+  NetworkManager persisted it as `/etc/netplan/90-NM-<uuid>.yaml`, and it
+  survived a reboot.
 
 - [ ] Enable macOS Internet Sharing from Wi-Fi to the Ethernet port when you
       want the Pi to reach apt and pip. The Pi then gets a `192.168.2.x`
-      address and full internet through the Mac.
+      address and full internet through the Mac. Not yet tried.
 - [x] Update `docs/sticks3-remote.md` to describe this topology instead of the
       home-LAN one, and remove the hard-coded `192.168.178.56` from the service
       example and the guide. (Done 2026-09-08.)
@@ -400,8 +422,26 @@ sudo nmcli con modify 'Wired connection 1' ipv4.method auto ipv4.link-local fall
 - [ ] `.venv-python39-backup-20260906/` and `build/` are in the working tree;
       both are gitignored, but delete the old venv once you are sure the
       Python 3.12 venv is complete.
-- [ ] `README.md` says `.venv/bin/pytest -q -m 'not slow'`; change to
-      `.venv/bin/python -m pytest` or fix `pythonpath` as above.
+- [x] `README.md` says `.venv/bin/pytest -q -m 'not slow'`; that now works
+      because `pythonpath` is set in `pyproject.toml`. (Done 2026-09-08.)
+- [x] One ordered install guide. The service install was only described deep
+      inside the network guide and nothing stated the overall order or which
+      machine each step runs on. `docs/setup.md` now does: Mac, `.env`, Pi
+      network, Pi service, Stick, optional training, day-to-day, and a one-page
+      checklist. README trimmed to point at it. (Done 2026-09-09.)
+- [x] The sudoers rule in the guide was one long line and soft-wrapped on
+      paste into a syntax error. Now two short rules plus a `visudo -c` check
+      and a polkit recovery note. (Done 2026-09-09.)
+- [x] Step-by-step training guide, `docs/training.md`: how a run works, camera
+      frame collection, reference curation, sanity checks, training, the report
+      gate by gate with remedies, iteration rules and scene-grouped partitions,
+      deployment and verification, the run write-up, troubleshooting, defaults.
+      (Done 2026-09-09.)
+- [x] Firmware serial debug log: every capture step is logged with uptime,
+      including HTTP codes, byte counts, JPEG marker checks and the return
+      value of each `drawJpg`. `firmware/sticks3/README.md` documents a healthy
+      log and a hash recipe that proves the displayed image is the graded file.
+      (Done 2026-09-08.)
 - [ ] The Stick shows no battery level of its own. M5Unified exposes
       `M5.Power.getBatteryLevel()`; a small indicator on the READY screen is a
       few lines in `display.cpp`.

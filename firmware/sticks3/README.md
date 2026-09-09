@@ -16,6 +16,9 @@ The pre-build script reads the repository-root `.env`; see the
 [deployment guide](../../docs/sticks3-remote.md). Missing configuration leaves
 safe empty defaults and the device cannot join a network. Only Wi-Fi settings,
 API URL and API token enter the firmware; the SSH password stays on the host.
+In the deployed topology the Pi runs its own hotspot, so `WIFI_SSID` and
+`WIFI_PASSWORD` are that hotspot's credentials and `PARR_REMOTE_URL` is
+`http://10.42.0.1:8765`, the hotspot address.
 Build outputs contain device credentials. Keep them private and avoid verbose
 compiler logs when using real settings.
 
