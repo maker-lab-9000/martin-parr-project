@@ -57,13 +57,15 @@ work is sections 1, 3 (partly) and 4.
 - [ ] Port scene-grouped partitions from `parr.experiments.partitions` into
       `parr-train` (a `--partition manifest.json` flag) so the production
       trainer stops doing random per-image splits.
-- [ ] Lock the camera before collecting: fix white balance and exposure via
-      `v4l2-ctl` (`white_balance_automatic=0`, manual `auto_exposure`, fixed
-      `exposure_time_absolute`), and set in-camera saturation, contrast,
-      sharpness and gamma to neutral. Record the control values in
-      `captures.jsonl` (spec 7.5 already asks for this). Auto WB and auto
-      exposure change the input distribution frame to frame, which the
-      normalizer partially undoes but never fully.
+- [ ] Configure the camera for training frames exactly as it is configured at
+      capture, and record the control values in `captures.jsonl` (spec 7.5
+      already asks for this). Today that means auto exposure and auto white
+      balance on, since the service sets no controls. Do not lock one white
+      balance across different lighting: the normalizer's gains are clamped to
+      0.6 to 1.6 and cannot undo a tungsten frame shot with a daylight setting,
+      so the LUT would learn a cast compensation. Freeze white balance per scene
+      at most. Consider setting in-camera saturation, contrast and sharpness to
+      neutral, and if so, do it in the service as well so both sides match.
 - [ ] Add the flash (section 3) before the main collection run. Source data
       with flash is the single largest change you can make to the input
       distribution.

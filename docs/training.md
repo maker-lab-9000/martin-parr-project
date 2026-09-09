@@ -87,17 +87,32 @@ colour chart, toys, book spines): they are not photographs, they are coverage
 for regions of the colour cube that ordinary scenes never visit. If the camera
 has a flash, use it; the references were shot with one.
 
-**Keep the camera consistent.** Auto exposure and auto white balance change the
-input from frame to frame. On the Pi, list the controls the camera offers and
-fix them for the shoot, then record what you set:
+**Configure the camera exactly as it is used at capture.** The LUT is fitted to
+the camera plus the pipeline's normalisation as one system, so training frames
+must come through the same camera settings as real captures. The deployed
+service sets no controls, so auto exposure and auto white balance are on at
+capture time; leave them on for the shoot too, and give each frame a second to
+settle before pressing.
+
+Do **not** lock one white balance across different lighting. The pipeline's
+per-frame white balance, applied identically in training and at capture, is
+what absorbs tungsten versus daylight, but its gains are clamped to 0.6 to 1.6.
+A tungsten room shot with a daylight value locked in leaves a cast that range
+cannot remove; the trainer then learns to cool everything, and every daylight
+capture comes out wrong. If auto white balance visibly hunts within one scene,
+freeze it at the value it settled on for that scene only and re-enable it before
+moving to different light:
 
 ```sh
-v4l2-ctl -d /dev/video0 --list-ctrls
-v4l2-ctl -d /dev/video0 --set-ctrl=white_balance_automatic=0
-v4l2-ctl -d /dev/video0 --set-ctrl=white_balance_temperature=4600   # example value
+v4l2-ctl -d /dev/video0 --list-ctrls                             # names differ per camera
+v4l2-ctl -d /dev/video0 --set-ctrl=white_balance_automatic=0     # freeze at the settled value
+v4l2-ctl -d /dev/video0 --set-ctrl=white_balance_automatic=1     # re-enable before the next scene
 ```
 
-Control names differ between cameras; use the names `--list-ctrls` prints.
+Variety of lighting is good; extremes are not. Blown highlights and near-black
+frames cannot be normalised back. After training, `diagnostics.png` shows the
+white-balance gains the corpus needed; centred near 1.0 with a low clamp rate
+means the shoot was well behaved.
 
 **Shoot.** Use the Stick, or on the Pi `parr-capture --no-preview`. Frames land
 in `~/Pictures/parr/YYYY-MM-DD/` as `*_original.jpg` (the camera's own bytes)
