@@ -422,6 +422,19 @@ sudo nmcli connection modify netplan-eth0 ipv4.method auto ipv4.link-local enabl
       Python 3.12 venv is complete.
 - [x] `README.md` says `.venv/bin/pytest -q -m 'not slow'`; that now works
       because `pythonpath` is set in `pyproject.toml`. (Done 2026-09-08.)
+- [x] One ordered install guide. The service install was only described deep
+      inside the network guide and nothing stated the overall order or which
+      machine each step runs on. `docs/setup.md` now does: Mac, `.env`, Pi
+      network, Pi service, Stick, optional training, day-to-day, and a one-page
+      checklist. README trimmed to point at it. (Done 2026-09-09.)
+- [x] The sudoers rule in the guide was one long line and soft-wrapped on
+      paste into a syntax error. Now two short rules plus a `visudo -c` check
+      and a polkit recovery note. (Done 2026-09-09.)
+- [x] Step-by-step training guide, `docs/training.md`: how a run works, camera
+      frame collection, reference curation, sanity checks, training, the report
+      gate by gate with remedies, iteration rules and scene-grouped partitions,
+      deployment and verification, the run write-up, troubleshooting, defaults.
+      (Done 2026-09-09.)
 - [x] Firmware serial debug log: every capture step is logged with uptime,
       including HTTP codes, byte counts, JPEG marker checks and the return
       value of each `drawJpg`. `firmware/sticks3/README.md` documents a healthy

@@ -36,47 +36,32 @@ Without `--artifacts`, commands continue to use the untrained starter preset.
 - 64GB SD Card
 - Innomaker 1080P USB2.0 UVC Camera, 121° Lens, PS5268 Sensor
 
-## Setup
+## Getting started
 
-Mac (Python 3.11 or newer):
+Follow [the setup guide](docs/setup.md). It is ordered by dependency and says,
+for every step, which machine it runs on and why:
 
-```bash
-cd ../martin-parr-project
-python3.12 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -e '.[train,dev]'
-.venv/bin/pytest -q -m 'not slow'
-```
+1. **Mac** — clone, venv, `pip install -e '.[train,dev,deploy]'`, PlatformIO, tests.
+2. **The one `.env` file** — every credential and address, read by the deploy
+   script, the hotspot script and the firmware build.
+3. **Pi, OS and network** — Trixie, hostname `parr`, Ethernet administration,
+   then the Pi's own Wi-Fi hotspot that the Stick joins.
+4. **Pi, application and service** — venv with system OpenCV, choice of look,
+   token file, systemd unit, reboot test.
+5. **Stick** — build and flash with the credentials baked in, read the serial log.
+6. **Training, optional** — only if you want to replace the bundled starter.
 
-Raspberry Pi OS (verified on Trixie, Debian 13; a desktop is only needed for
-the two-screen mode, the Stick-only handheld runs headless):
-
-```bash
-sudo apt install python3-venv python3-opencv python3-numpy python3-pil
-python3 -m venv --system-site-packages .venv
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -e .
-```
-
-Use the Pi's system OpenCV for its GTK display support. Training additionally
-needs the `train` dependencies; normally train on the Mac and copy the artifact
-folder to the Pi.
-
-## StickS3 remote capture on the Pi
-
-The StickS3 and Pi deployment uses a local `.env` that is intentionally ignored
-by Git. Copy `.env.example` to `.env`, fill in the real credentials locally, and
-follow [the Pi and StickS3 deployment guide](docs/sticks3-remote.md). The guide
-covers the Pi's own Wi-Fi hotspot that the Stick joins, Ethernet administration
-over `parr.local`, the two-screen desktop mode and the Stick-only headless
-service; do not put a real token, Wi-Fi password, or Pi SSH password in a
-command, source file, or commit. The firmware writes a serial debug log of every
-capture step; [the firmware README](firmware/sticks3/README.md) explains how to
-read it and how to confirm the Stick is showing the graded file.
+Two supporting documents go deeper: [the network and deployment guide](docs/sticks3-remote.md)
+for the hotspot, Ethernet, service and rollback details, and
+[the firmware README](firmware/sticks3/README.md) for the Stick's build, its
+serial debug log and how to prove the displayed photo is the graded one.
 
 | Last captured photo | Ready to capture |
 | --- | --- |
 | <img src="docs/images/sticks3-ready.jpg" alt="M5Stack StickS3 showing TV colour bars and the READY prompt" height="280"> | <img src="docs/images/sticks3-captured-photo.jpg" alt="M5Stack StickS3 displaying a captured room photo" height="280"> |
+
+Never put a real token, Wi-Fi password, or Pi SSH password in a command,
+source file, or commit; `.env` is gitignored for that reason.
 
 ## From button press to displayed photo
 
@@ -135,14 +120,14 @@ Pi saves original + graded JPEG + capture log → marks job complete
    the photo archive. Network or capture failures show a status/error instead of
    being treated as a successful new photo.
 
-For battery-powered **headless use**, run with `--no-preview`, enable the remote
-listener, and omit `--show-captures`. The Stick still receives the graded preview;
-the Pi does not need a connected monitor or a display window. For **two-screen
+For battery-powered **headless use**, the systemd service runs with
+`--no-preview` and the remote listener and no `--show-captures`. The Stick
+still receives the graded preview; the Pi needs no monitor. For **two-screen
 use**, add `--show-captures` in a working Pi desktop session. See the
 [deployment guide](docs/sticks3-remote.md) for the complete configuration and
 service commands.
 
-## Try the starter look
+## Using the tools directly
 
 ```bash
 .venv/bin/parr-process /path/to/originals /path/to/parr-results
@@ -168,48 +153,33 @@ compresses out-of-gamut chroma, and adds subtle grain (`0.004`). Rebuild it with
 .venv/bin/parr-preset --out artifacts/starter-v1
 ```
 
-## Train a reference-derived look
+## Training a reference-derived look
 
-Create `data/source/` for ungraded camera photos and `data/references/` for the
-finished reference photographs. Aim for at least 30 source images (50+ is better)
-and 200 references spanning skin, food, signage, beaches, interiors and neutrals.
-Use one coherent visual period; mixing early monochrome, muted scans and later
-digital work gives the trainer contradictory targets. Avoid duplicates and
-near-duplicates across the held-out split.
+Training is optional; the camera works with the bundled starter.
+[The training guide](docs/training.md) is the step-by-step procedure: how a run
+works, collecting camera frames, curating references, training, reading the
+report gate by gate, iterating without fooling yourself, deploying to the Pi and
+writing the run down. [The setup guide, section 6](docs/setup.md#6-training-a-look-optional)
+has the short outline. The policy that applies to every reference photograph:
 
 Use photographs credited to Martin Parr from the supplied Magnum and Aperture
 sources, his official site, Foundation and publishers. Fan-submission Flickr
 groups are excluded. See [the reference guide](docs/reference-sources.md) for
 additional sources, curation notes and the difference between visual research
-and training files.
-
-Use reference files you have permission to use. The project takes local image
-folders; it does not scrape Parr's website or assume that photos *of* Parr are
-photos *by* him. The optional `parr-fetch --category 'Category:...'` command
-downloads an explicitly chosen Wikimedia Commons category, retaining licence
-metadata. It defaults to public-domain files; that is a generic corpus utility,
-not a ready-made Parr reference set.
-
-```bash
-.venv/bin/parr-train --source data/source --target data/references --out artifacts/parr-v1
-.venv/bin/parr-process /path/to/test-originals /path/to/test-results --artifacts artifacts/parr-v1
-.venv/bin/parr-capture --no-preview --show-captures --artifacts artifacts/parr-v1
-```
+and training files. Use reference files you have permission to use. The project
+takes local image folders; it does not scrape Parr's website or assume that
+photos *of* Parr are photos *by* him. The optional `parr-fetch --category
+'Category:...'` command downloads an explicitly chosen Wikimedia Commons
+category, retaining licence metadata; that is a generic corpus utility, not a
+ready-made Parr reference set.
 
 Training fits a 33³ RGB lookup table via color-distribution transfer and smooth
 least squares. It splits by image, evaluates held-out data, and produces
 `parr.cube`, `params.json`, and a report with contact sheets, tone ramps, metrics
-and quality gates. Exit code 3 means an artifact was written but a gate failed;
-inspect `report/summary.txt` before using it. A LUT models global color and tone,
-not subjects, composition, focus or lighting geometry.
-
-Target white balance and levels stretching are off by default; exposure matching
-still aligns reference brightness. Camera inputs receive the same normalization
-in training and capture. `--target-levels` opts into reference levels stretching.
-`--strength 0.8` weakens a learned grade; `--grain-strength 0` disables added grain.
-`--allow-small` permits exploratory small-corpus fits and marks unavailable
-held-out evaluation; `--proxy-source` records stand-in photos instead of actual
-camera samples. A small test run does not establish a successful visual match.
+and quality gates. A LUT models global color and tone, not subjects,
+composition, focus or lighting geometry. The dated reports in `docs/` record
+what past runs produced; `todo.md` section 1 records what is needed for better
+results.
 
 ## The look and its limits
 

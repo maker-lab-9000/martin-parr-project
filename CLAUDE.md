@@ -10,7 +10,10 @@ from a USB camera, grades, and saves. An M5Stack StickS3 acts as a wireless shut
 last-capture display, talking to the Pi over a token-authenticated HTTP API.
 
 Forked from the user's `kodachrome-film` project (see `ORIGIN.md`). Package is `parr`, distribution is
-`martin-parr-project`, commands are `parr-*`. The bundled LUT in `parr/data/` is a handcrafted,
+`martin-parr-project`, commands are `parr-*`. `docs/setup.md` is the ordered install guide (Mac, `.env`,
+Pi network, Pi service, Stick, optional training) and says which machine each step runs on and why;
+`docs/sticks3-remote.md` holds the network and service detail; `firmware/sticks3/README.md` the Stick;
+`docs/training.md` is the step-by-step training procedure and explains every report gate. The bundled LUT in `parr/data/` is a handcrafted,
 untrained starter preset (`trained: false`). Trained artifacts, training data, `data/`, `artifacts/`,
 `ektar100/`, `velvia/` are all gitignored and not in a clone.
 

@@ -295,13 +295,24 @@ sudo sed -E 's/=.*/=<redacted>/' /etc/parr-capture.env | cat -A
 
 The guarded remote restart below runs `sudo -n systemctl`, which needs a
 passwordless rule for exactly those two commands. The default Raspberry Pi OS
-user does not have one, so add it once on the Pi:
+user does not have one, so add it once on the Pi. Two short rules rather than
+one long line: sudoers has no implicit line continuation, and a long rule that
+soft-wraps on paste becomes a syntax error that disables the rule.
 
 ```sh
-echo 'george ALL=(root) NOPASSWD: /usr/bin/systemctl start parr-capture.service, /usr/bin/systemctl stop parr-capture.service' | sudo tee /etc/sudoers.d/parr-capture
+sudo tee /etc/sudoers.d/parr-capture >/dev/null <<'EOF'
+george ALL=(root) NOPASSWD: /usr/bin/systemctl start parr-capture.service
+george ALL=(root) NOPASSWD: /usr/bin/systemctl stop parr-capture.service
+EOF
 sudo chmod 440 /etc/sudoers.d/parr-capture
 sudo visudo -c
+sudo -k && sudo -n systemctl start parr-capture.service && echo passwordless-ok
 ```
+
+If `visudo -c` reports a syntax error, fix the file with
+`sudo visudo -f /etc/sudoers.d/parr-capture`. Should `sudo` itself refuse to
+run after a sudoers mistake, `pkexec rm /etc/sudoers.d/parr-capture` removes
+the file through polkit instead.
 
 With that in place, a guarded remote restart is available:
 
