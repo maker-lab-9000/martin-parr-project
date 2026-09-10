@@ -123,3 +123,43 @@ class PowerMonitor:
         self._closed.set()
         if self._thread is not None:
             self._thread.join(timeout=2.0)
+
+
+UPS_CHOICES = ("none", "x728")
+
+
+def _open_smbus(number: int):
+    import smbus2  # lazy: only present on the Pi, only needed with --ups x728
+
+    return smbus2.SMBus(number)
+
+
+def _open_input_pin(number: int) -> Callable[[], bool]:
+    from gpiozero import DigitalInputDevice  # lazy, same reason
+
+    pin = DigitalInputDevice(number, pull_up=None, active_state=True)
+    return lambda: bool(pin.value)
+
+
+def build_ups(name: str, *, open_bus=None, open_pin=None) -> PowerMonitor | None:
+    """Return a started-ready PowerMonitor for ``name``, or None for "none"."""
+    if name == "none":
+        return None
+    if name != "x728":
+        raise PowerError(f"unknown UPS {name!r}; choose one of {', '.join(UPS_CHOICES)}")
+    open_bus = open_bus or _open_smbus
+    open_pin = open_pin or _open_input_pin
+    try:
+        bus = open_bus(1)
+        pld_is_high = open_pin(X728_PLD_PIN)
+    except ImportError as exc:
+        raise PowerError(
+            f"--ups x728 needs python3-smbus2 and python3-gpiozero ({exc}). They are "
+            "present on the Pi image; this machine does not have them"
+        ) from exc
+    except (FileNotFoundError, PermissionError) as exc:
+        raise PowerError(
+            f"cannot open I2C bus 1 ({exc}). Enable it with: sudo raspi-config nonint do_i2c 0, "
+            "reboot, and make sure the service user is in the i2c group"
+        ) from exc
+    return PowerMonitor(X728Ups(bus, pld_is_high=pld_is_high))

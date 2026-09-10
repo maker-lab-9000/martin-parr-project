@@ -7,6 +7,7 @@ from parr.capture.power import (
     PowerMonitor,
     PowerStatus,
     X728Ups,
+    build_ups,
     decode_word,
 )
 
@@ -155,3 +156,47 @@ def test_start_runs_a_daemon_thread_that_polls_and_close_stops_it_promptly():
     assert not monitor._thread.is_alive()
     # The 10 s interval must not delay shutdown: close() interrupts the wait.
     assert time.monotonic() - started_close < 2.0
+
+
+def test_build_ups_none_returns_no_monitor():
+    assert build_ups("none") is None
+
+
+def test_build_ups_x728_wires_bus_one_address_0x36_and_pin_6():
+    opened = {}
+
+    def open_bus(number):
+        opened["bus"] = number
+        return FakeBus({0x02: 0x00C8, 0x04: 0x8057})
+
+    def open_pin(number):
+        opened["pin"] = number
+        return lambda: False
+
+    monitor = build_ups("x728", open_bus=open_bus, open_pin=open_pin)
+    monitor.poll_once()
+
+    assert opened == {"bus": 1, "pin": 6}
+    assert monitor.snapshot().percent == 87
+
+
+def test_build_ups_x728_explains_a_missing_i2c_bus():
+    def open_bus(number):
+        raise FileNotFoundError(2, "No such file or directory", "/dev/i2c-1")
+
+    with pytest.raises(PowerError, match="raspi-config nonint do_i2c 0"):
+        build_ups("x728", open_bus=open_bus, open_pin=lambda n: (lambda: False))
+
+
+def test_build_ups_x728_explains_missing_libraries_without_the_i2c_remedy():
+    def open_bus(number):
+        raise ModuleNotFoundError("No module named 'smbus2'", name="smbus2")
+
+    with pytest.raises(PowerError, match="python3-smbus2") as info:
+        build_ups("x728", open_bus=open_bus, open_pin=lambda n: (lambda: False))
+    assert "raspi-config" not in str(info.value)
+
+
+def test_build_ups_rejects_unknown_names():
+    with pytest.raises(PowerError, match="x728"):
+        build_ups("apc")

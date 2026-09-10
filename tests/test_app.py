@@ -55,10 +55,11 @@ def test_remote_listener_keeps_running_without_a_tty(monkeypatch, tmp_path):
     listeners = []
 
     class Listener:
-        def __init__(self, controller, token, listen):
+        def __init__(self, controller, token, listen, power=None):
             self.controller = controller
             self.token = token
             self.listen = listen
+            self.power = power
             self.started = False
             self.closed = False
             listeners.append(self)
