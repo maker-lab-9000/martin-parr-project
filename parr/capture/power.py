@@ -12,6 +12,8 @@ smbus2 and gpiozero for the real thing.
 
 from __future__ import annotations
 
+import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -56,3 +58,64 @@ class X728Ups:
         percent = min(soc // 256, 100)
         external = not self._pld_is_high()
         return PowerStatus(percent=percent, voltage_mv=voltage_mv, external_power=external)
+
+
+class PowerMonitor:
+    """Polls a provider on its own thread; ``snapshot`` never touches hardware."""
+
+    max_age_s: float = 60.0
+
+    def __init__(
+        self,
+        provider,
+        interval_s: float = 10.0,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self._provider = provider
+        self._interval_s = interval_s
+        self._clock = clock
+        self._sleep = sleep
+        self._lock = threading.Lock()
+        self._status: PowerStatus | None = None
+        self._read_at: float | None = None
+        self._closed = threading.Event()
+        self._thread: threading.Thread | None = None
+        self.last_error: str | None = None
+
+    def poll_once(self) -> None:
+        try:
+            status = self._provider.read()
+        except PowerError as exc:
+            with self._lock:
+                self.last_error = str(exc)
+            return
+        with self._lock:
+            self._status = status
+            self._read_at = self._clock()
+            self.last_error = None
+
+    def snapshot(self) -> PowerStatus | None:
+        with self._lock:
+            if self._status is None or self._read_at is None:
+                return None
+            if self._clock() - self._read_at > self.max_age_s:
+                return None
+            return self._status
+
+    def _poll_and_wait(self) -> None:
+        self.poll_once()
+        self._sleep(self._interval_s)
+
+    def _run(self) -> None:
+        while not self._closed.is_set():
+            self._poll_and_wait()
+
+    def start(self) -> None:
+        if self._thread is not None:
+            return
+        self._thread = threading.Thread(target=self._run, name="parr-power", daemon=True)
+        self._thread.start()
+
+    def close(self) -> None:
+        self._closed.set()

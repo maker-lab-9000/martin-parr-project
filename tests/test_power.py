@@ -2,7 +2,13 @@
 
 import pytest
 
-from parr.capture.power import PowerError, PowerStatus, X728Ups, decode_word
+from parr.capture.power import (
+    PowerError,
+    PowerMonitor,
+    PowerStatus,
+    X728Ups,
+    decode_word,
+)
 
 
 class FakeBus:
@@ -49,3 +55,79 @@ def test_bus_errors_become_power_errors_with_the_i2c_remedy():
 
     with pytest.raises(PowerError, match="i2cdetect"):
         X728Ups(BrokenBus(), pld_is_high=lambda: False).read()
+
+
+class ScriptedProvider:
+    def __init__(self, results):
+        self.results = list(results)
+
+    def read(self):
+        result = self.results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+
+def test_snapshot_is_none_before_the_first_successful_read():
+    monitor = PowerMonitor(ScriptedProvider([]), clock=FakeClock())
+    assert monitor.snapshot() is None
+
+
+def test_poll_once_stores_the_reading_and_snapshot_returns_it():
+    clock = FakeClock()
+    reading = PowerStatus(percent=87, voltage_mv=4000, external_power=True)
+    monitor = PowerMonitor(ScriptedProvider([reading]), clock=clock)
+
+    monitor.poll_once()
+
+    assert monitor.snapshot() == reading
+    assert monitor.last_error is None
+
+
+def test_a_failed_read_keeps_the_previous_reading_and_records_the_error():
+    clock = FakeClock()
+    reading = PowerStatus(percent=87, voltage_mv=4000, external_power=True)
+    monitor = PowerMonitor(ScriptedProvider([reading, PowerError("gauge missing")]), clock=clock)
+
+    monitor.poll_once()
+    monitor.poll_once()
+
+    assert monitor.snapshot() == reading
+    assert monitor.last_error == "gauge missing"
+
+
+def test_a_reading_older_than_max_age_is_not_served():
+    clock = FakeClock()
+    reading = PowerStatus(percent=87, voltage_mv=4000, external_power=True)
+    monitor = PowerMonitor(ScriptedProvider([reading]), clock=clock)
+    monitor.poll_once()
+
+    clock.now += monitor.max_age_s + 1
+
+    assert monitor.snapshot() is None
+
+
+def test_start_polls_on_the_interval_until_closed():
+    clock = FakeClock()
+    sleeps: list[float] = []
+    readings = [
+        PowerStatus(percent=p, voltage_mv=4000, external_power=True) for p in (90, 89, 88)
+    ]
+    monitor = PowerMonitor(
+        ScriptedProvider(readings), interval_s=10.0, clock=clock, sleep=sleeps.append
+    )
+    # Drive the loop body directly instead of a real thread: deterministic and fast.
+    for _ in range(3):
+        monitor._poll_and_wait()
+    monitor.close()
+
+    assert monitor.snapshot().percent == 88
+    assert sleeps == [10.0, 10.0, 10.0]
