@@ -1,0 +1,457 @@
+# TODO: project improvements
+
+Written 2026-09-07 after reading the code, the three training reports, the
+September 7 refinement experiment, and the trained artifacts on disk. Items are
+checkboxes grouped by theme and ordered by expected payoff within each group.
+
+Updated 2026-09-08. Section 5 (Pi hotspot, Ethernet administration) is done
+and verified on the device; the Stick captures over the hotspot and displays the
+graded thumbnail, proven by hash. The deployed look is the bundled starter
+(`parr/data`) by decision. Firmware now writes a serial debug log. Remaining
+work is sections 1, 3 (partly) and 4.
+
+---
+
+## 1. Better training results
+
+### What the evidence says
+
+- The only model that passed all gates (`personal-collection-01-v1`) never saw
+  the camera. Its source corpus was 399 public-domain web photos from the
+  Kodachrome project, carrying 10 different ICC profiles, with a normalization
+  clamp rate of 22.8%. It learned "random web photo → Parr-ish", not
+  "Innomaker frame → Parr-ish".
+- The camera-trained pilots used 15 frames from one bedroom. All three failed
+  the held-out gate and the grey-axis gate. Fifteen neighbouring frames cannot
+  span the colour cube; 71% of LUT nodes held no source pixel in earlier fits.
+- The reference corpus is 150 mixed-quality reproductions (gallery JPEGs around
+  550×450 px, book scans, Pinterest re-uploads) from several series and decades.
+  The README's own advice (one coherent period, 200+ images) was not met.
+- `lutfit.fit_lut` applies `cap_neutral_axis` once, then
+  `enforce_monotone(enforce_grey_axis(enforce_monotone(...)))`. The later
+  projections re-introduce tint, so the requested cap is not achieved
+  (measured 0.0136 against a requested 0.005).
+- The handcrafted starter itself fails `channel_monotone` and `clipped_volume`
+  when probed on the uniform cube (about 70% of interior nodes on the gamut
+  boundary). The production baseline does not pass the trainer's own gates.
+- Parr's saturation depends on direct flash. The camera has no flash, so the
+  source distribution can never contain the specular highlights and hard
+  shadows the references have. A LUT cannot invent them.
+- Measured on a real indoor capture (2026-09-08): only 1.3% of pixels had Oklab
+  chroma above 0.05 before grading. The starter, the trained model, and a
+  starter pushed to 2.2x saturation all looked the same at Stick size. There is
+  nothing for any LUT to amplify in an unlit room; the flash is not optional.
+
+### Priority 1: a real camera source corpus
+
+- [ ] Shoot at least 100 frames across at least 25 distinct scenes with the
+      Innomaker camera. Cover: tungsten interior, window daylight, overcast and
+      sunny exterior, people and skin, food, signage, painted surfaces, beach or
+      pool if possible. Vary distance and exposure.
+- [ ] Include 10 to 20 "cube coverage" frames: a ColorChecker or printed colour
+      swatches, saturated toys, fabrics. They do not need to be good photos;
+      they populate LUT nodes that real scenes never touch.
+- [ ] Reserve whole scenes for validation before looking at any result, and keep
+      a second set of whole scenes as an untouched final test. Never select a
+      candidate on the final test.
+- [ ] Port scene-grouped partitions from `parr.experiments.partitions` into
+      `parr-train` (a `--partition manifest.json` flag) so the production
+      trainer stops doing random per-image splits.
+- [ ] Configure the camera for training frames exactly as it is configured at
+      capture, and record the control values in `captures.jsonl` (spec 7.5
+      already asks for this). Today that means auto exposure and auto white
+      balance on, since the service sets no controls. Do not lock one white
+      balance across different lighting: the normalizer's gains are clamped to
+      0.6 to 1.6 and cannot undo a tungsten frame shot with a daylight setting,
+      so the LUT would learn a cast compensation. Freeze white balance per scene
+      at most. Consider setting in-camera saturation, contrast and sharpness to
+      neutral, and if so, do it in the service as well so both sides match.
+- [ ] Add the flash (section 3) before the main collection run. Source data
+      with flash is the single largest change you can make to the input
+      distribution.
+
+### Priority 2: a coherent reference corpus
+
+- [ ] Choose one period and lighting style and stick to it: the flash-lit
+      saturated 1990s work (Common Sense, The Last Resort colour reprints,
+      The Cost of Living, Benidorm). Drop the digital-era and muted images.
+- [ ] Minimum quality bar: short side ≥ 800 px, no visible paper texture or
+      page curl, no screen photographs, no watermarks, no borders. Convert
+      everything to sRGB once at ingest so the corpus profile table is uniform.
+- [ ] Balance series so no single series exceeds about 30% of the corpus, and
+      deduplicate by scene (the SIFT+RANSAC screening from the personal
+      collection review already does this).
+- [ ] Get to 200+ images before trusting a held-out number. Below that, the
+      validation split is under 40 images and the SWD noise floor dominates.
+
+### Priority 3: paired supervision (the biggest methodological upgrade)
+
+`lutfit.fit_lut` already fits from (input, target) pixel pairs. Today those
+pairs come from unpaired distribution transport, which is where content bias
+and the neutral-tint drift enter. Real pairs remove both problems.
+
+- [ ] Hand-graded pairs (cheapest, no rights issue, camera-calibrated): take
+      30 to 50 of your own camera captures, grade them in darktable, RawTherapee
+      or Lightroom with the references open beside you, export as sRGB JPEG.
+      Add `parr-train --paired SRC_DIR TGT_DIR` that matches filenames, samples
+      pixels at identical coordinates, and calls `fit_lut` directly, skipping
+      `hue_weights` and IDT. This is how commercial film-emulation LUTs are
+      built.
+- [ ] Film pairs (most faithful): shoot the same scenes on a saturated colour
+      negative stock with flash (Kodak Ektar 100, Gold 200 or Ultramax 400) and
+      on the Pi camera from a tripod; lab-scan; align with the existing
+      SIFT+RANSAC review code; sample paired pixels. Even 20 paired scenes
+      beat 150 unpaired web JPEGs. The `ektar100/` and `velvia/` Commons
+      corpora in this repo are unpaired and can only be distribution targets.
+- [ ] ColorChecker under flash, photographed by the Pi camera, gives 24 exact
+      pairs for free once you decide the target rendering of each patch. Use
+      it as a per-patch ΔE regression test for every candidate.
+
+### Priority 4: fix the fitter and the model shape
+
+- [ ] Make the neutral cap and monotonicity a joint constraint: iterate
+      `cap_neutral_axis` and the monotone/grey-axis projections until a fixed
+      point (or a bounded number of rounds), then assert the measured neutral
+      chroma is below the cap. Alternatively add the grey-axis nodes as
+      high-weight rows in the least squares so the solver respects them
+      directly instead of fixing them afterwards.
+- [ ] Decouple tone from colour. Fit a monotone 1D luma curve first, then a
+      low-parameter chroma model in Oklch: chroma gain g(L, h) and hue shift
+      δ(L, h) on a small grid (for example 8 lightness × 12 hue bins) with
+      smoothness across bins. Bake the result into the 33³ `.cube` for
+      deployment. Far fewer degrees of freedom means empty cube regions stop
+      drifting, and monotonicity is structural rather than projected.
+- [ ] Fix the starter's gamut handling so the baseline passes its own gates:
+      replace the bisection-to-boundary chroma compression in `preset.py`
+      with a soft knee that leaves interior nodes off the boundary.
+- [ ] Record provenance properly: `code_revision` is `unknown` in the trained
+      artifacts because training ran from the sibling Kodachrome venv. Run
+      `parr-train` from this repo's venv so the git hash lands in
+      `params.json`.
+
+### Priority 5: evaluation protocol and sweeps
+
+- [ ] Script a hyperparameter sweep over `lambda_smooth` {0.01, 0.03, 0.1},
+      `lambda_identity` {1, 3, 10}, `strength` {0.6, 0.8, 1.0, 1.2},
+      `iterations` {40, 80} using `parr.experiments.train`, selecting on the
+      scene-grouped dev set only.
+- [ ] Blind A/B contact sheets: randomize candidate order per page and hide
+      labels until after scoring. `parr.experiments.evaluate` already produces
+      the sheets; add the shuffle and an answer key file.
+- [ ] Add a ColorChecker ΔE table (per patch, before and after) to the report.
+- [ ] Keep every rejected artifact and its report. The refinement doc's
+      discipline (no threshold relaxed, exit code 3 retained) is right; keep it.
+
+---
+
+## 2. Should `parr.cube` and `params.json` be committed?
+
+Decision 2026-09-08: the Pi deploys the bundled starter (`parr/data`), which is
+already in the package, so nothing needs committing for the current setup. The
+question below stays open for the day a trained model is promoted.
+
+Short answer: yes for those two files, never the `report/` folder, and
+consider shipping the look as package data instead of un-ignoring a path.
+
+Facts checked:
+
+- `parr.cube` is 970 KB of text, `params.json` is 4 KB. Fine for git, but the
+  cube is effectively binary for diffing. Commit it rarely, or use Git LFS if
+  you expect to iterate through many versions.
+- `report/` contains contact sheets built from the reference photographs. Those
+  images are marked "copyright-or-unverified" in the manifest. Keep the report
+  ignored.
+- `params.json` embeds your absolute local paths including your macOS username
+  in `training.command` and `training.source.dir`, and the licence line
+  `"copyright-or-unverified": 150`. Decide whether you are happy publishing
+  that, or add a `--scrub-paths` option to `write_artifact` that records paths
+  relative to the repo.
+- A 33³ LUT is aggregate colour statistics, not a copy of any image. Committing
+  it is a much smaller step than committing the corpus, but the training data
+  itself has no redistribution permission, so this is your call.
+
+Git cannot re-include a file whose parent directory is excluded, so the current
+`/artifacts/` rule must become `/artifacts/*`. This pattern was verified in a
+scratch repo to track exactly the two files and nothing else under `artifacts/`:
+
+```gitignore
+# Data and generated output
+/data/
+/artifacts/*
+!/artifacts/personal-collection-01-v1/
+/artifacts/personal-collection-01-v1/*
+!/artifacts/personal-collection-01-v1/parr.cube
+!/artifacts/personal-collection-01-v1/params.json
+```
+
+Cleaner alternative:
+
+- [ ] Add the trained look as package data at `parr/data/looks/personal-01/`
+      and extend `Artifacts.resolve` with a `--look NAME` option (or make it the
+      default once it is proven on the camera). Then the Pi gets the model via
+      `pip install -e .` and `PI_ARTIFACT_DIR`, the systemd unit and the deploy
+      script no longer need an absolute artifact path. The README's
+      "untrained starter is the default" statement would need updating.
+
+---
+
+## 3. Streamline the setup: Pi boots into camera mode, handheld use
+
+### Operating system and boot
+
+- [ ] Use Raspberry Pi OS Lite (no desktop) for the handheld build. Faster
+      boot, lower power, fewer moving parts. `python3-opencv` from apt still
+      works headless; only the `--show-captures` two-screen mode needs GTK.
+- [ ] Disable Bluetooth (`dtoverlay=disable-bt` in `config.txt`) and consider
+      turning HDMI off when headless. Both save power and a little boot time.
+- [ ] Fit a real-time clock. The Pi 3B has none. Offline, with no home network,
+      the clock will be wrong after every boot and `YYYY-MM-DD/HHMMSS` file
+      names will lie. A DS3231 module costs a few euros; PiSugar and PiJuice
+      HATs include one. Until then, add a monotonic capture counter to the file
+      name as a fallback.
+- [ ] Protect the SD card against power loss: put `~/Pictures/parr` on its own
+      partition or a USB stick, and consider `overlayroot` for a read-only root
+      filesystem. A battery pull mid-write is the most likely way this project
+      corrupts its card.
+
+### systemd unit hardening
+
+- [ ] Move hard-coded values out of `ExecStart`. Put `PARR_LISTEN`,
+      `PARR_ARTIFACTS` and `PARR_OUT` in `/etc/parr-capture.env` alongside the
+      token and reference them as `${PARR_LISTEN}` in the unit.
+- [x] Bind to `0.0.0.0:8765` (or add `net.ipv4.ip_nonlocal_bind=1`). Binding to
+      a specific address races the hotspot bringing that address up at boot and
+      fails with "cannot assign requested address" until systemd restarts it.
+      (Done in `deploy/parr-capture.service.example`, 2026-09-08.)
+- [x] Add `StartLimitIntervalSec=0` under `[Unit]`. The camera can take several
+      seconds to enumerate; without the limit reset, systemd gives up after five
+      fast failures. (Done; `Restart=on-failure` kept so a clean `Q` exit in
+      desktop mode is not immediately restarted.)
+- [ ] Optionally bind the unit to the camera device: a udev rule tagging the
+      camera with `TAG+="systemd"` plus `BindsTo=dev-v4l-by-id-<name>.device`
+      makes the service start when the camera appears and stop when it is
+      unplugged.
+- [x] Keep `deploy_remote.build_capture_command` in sync: it now reads
+      `PARR_LISTEN` from the env file (default `0.0.0.0:8765`) instead of
+      deriving the bind address from `PI_HOST`. (Done 2026-09-08.)
+
+### Install and deploy
+
+- [ ] Write `scripts/pi_bootstrap.sh`: idempotent apt install, venv with
+      `--system-site-packages`, `pip install -e .`, copy the unit, create the
+      env file with prompts, set hostname, enable avahi, enable the hotspot
+      (section 5), enable the service. One command from a fresh Lite image.
+- [ ] Add a `Makefile` (or `justfile`) with `test`, `lint`, `firmware`,
+      `flash`, `deploy`, `pull-photos` targets so the README commands have one
+      home.
+- [x] Set `[tool.pytest.ini_options] pythonpath = ["."]` so bare `pytest`
+      collects `tests/test_config.py` and `tests/test_deployment.py`.
+      (Done 2026-09-08.)
+- [ ] Add the narrow sudoers rule for `systemctl start/stop parr-capture.service`
+      so `deploy_remote.py --restart` works. The Pi user has no passwordless
+      sudo; it only looked that way while an interactive credential was cached.
+      Commands are in `docs/sticks3-remote.md`.
+- [ ] Rotate the Pi SSH password and update `PI_SSH_PASSWORD` in `.env`.
+- [ ] Add GitHub Actions: ruff, fast pytest, and `pio test -e native`.
+- [ ] Deploy by wheel rather than editable checkout on the Pi:
+      `python -m build`, copy the wheel over Ethernet, `pip install`. The slow
+      packaging test already proves this path works.
+
+### Getting photos off the camera
+
+- [ ] When wired: `rsync -av george@parr.local:Pictures/parr/ ~/Pictures/parr-pi/`.
+      Add it as the `pull-photos` make target.
+- [ ] Later: a `GET /v1/captures?since=<id>` listing plus a full-resolution
+      download endpoint, so a phone on the Pi's hotspot can pull photos without
+      a cable.
+
+### Physical controls
+
+- [ ] Safe shutdown button: `dtoverlay=gpio-shutdown` on GPIO3 gives shutdown
+      and wake-from-halt on the Pi 3 with a single momentary switch. The
+      UPS HATs below also provide this.
+- [ ] Shutdown from the Stick: add an authenticated `POST /v1/system/shutdown`
+      that runs `systemctl poweroff` through a narrow sudoers rule, and bind it
+      to a long press on the Stick's secondary button. Include Pi battery level
+      in `/v1/status` if the HAT exposes it over I2C, and show it on the Stick.
+- [ ] Flash: drive a high-power LED module (or a small ring light) from a GPIO
+      through a MOSFET. A strobe cannot sync with a UVC video stream, so use a
+      constant "torch" for about 300 to 500 ms: switch on, let auto-exposure
+      settle a few frames (the existing `_drain` plus `warmup_frames` logic),
+      `read()`, switch off. Add a `pre_capture`/`post_capture` hook on
+      `CaptureSession.capture`. This is also a training item (section 1).
+
+---
+
+## 4. Battery for the Raspberry Pi 3B
+
+### Power budget
+
+The Pi 3B wants a 5.1 V supply rated 2.5 A. Official typical bare-board draw is
+about 500 mA. Under this project's load (Wi-Fi hotspot, USB camera streaming
+1080p MJPEG, a Python grading burst per shot) expect roughly:
+
+| State | Estimate |
+|---|---|
+| Idle, hotspot up, camera open | 2.5 to 3.5 W |
+| Capture and grade burst | 5 to 6 W |
+| Average in use | about 4 W |
+
+Measure it with an inline USB power meter before buying cells. Cable quality
+matters as much as capacity: a thin micro-USB lead drops enough voltage to
+trigger the under-voltage warning, and the first symptom is the USB camera
+resetting mid-capture.
+
+Rough runtimes at about 4 W average, allowing about 15% conversion loss:
+
+| Pack | Nominal energy | Expected runtime |
+|---|---|---|
+| 10,000 mAh USB power bank | 37 Wh | 6 to 8 h |
+| 20,000 mAh USB power bank | 74 Wh | 12 to 16 h |
+| 2 × 18650 (3,400 mAh each) in a UPS HAT | about 25 Wh | 4 to 5 h |
+| PiSugar 3 Plus (5,000 mAh) | 18.5 Wh | 3 to 4 h |
+| PiJuice standard cell (1,820 mAh) | 6.7 Wh | 1 to 1.5 h |
+
+### Options, in order of recommendation for this project
+
+- [x] **Geekworm X728 v2.5 UPS shield, chosen and fitted 2026-09-10.** Two
+      user-supplied 18650 cells, 5.1 V at up to 5 A, auto power-on jumper,
+      hardware power button with clean reboot and power-off through GPIO 5/12,
+      software power-off through GPIO 26, power-loss detection on GPIO 6, a
+      MAX17040 fuel gauge at I2C 0x36 and a DS1307 RTC at 0x68. Integration
+      guide: `docs/x728-ups.md`. Correction to the earlier advice below:
+      Geekworm says **do not use cells with built-in protection circuits**;
+      use quality unprotected flat-top cells.
+- [ ] **PiSugar 3 Plus.** 5,000 mAh built-in cell in the full-size Pi
+      footprint, RTC included, I2C battery gauge, software power button,
+      auto power-on. Neatest package for a 3D-printed case; smaller capacity
+      than two 18650s.
+- [ ] **PiJuice HAT.** Best software (RTC, wake schedules, safe shutdown, well
+      documented) but the standard cell is small; you would swap in a larger
+      3.7 V pack. Good if you value the software over the capacity.
+- [ ] **Plain USB power bank** with ≥ 2.4 A output and pass-through charging.
+      Cheapest and largest capacity. Downsides: no safe shutdown, no RTC, and
+      many banks switch off when the load drops below about 100 mA, which the
+      Pi never does in this setup, so that is usually fine. Avoid banks without
+      pass-through if you want to charge while shooting.
+- [ ] Waveshare UPS HAT (B) is a similar two-cell design with an INA219 gauge;
+      confirm 3B compatibility before buying.
+
+Whatever you choose:
+
+- [ ] Wire a safe-shutdown path (HAT GPIO signal or the GPIO3 button). Never
+      rely on cutting power.
+- [ ] Use quality 18650 cells from a reputable brand with a rated discharge
+      current well above 3 A. For the X728 specifically, unprotected flat-top
+      cells: Geekworm states that built-in protection circuits trip under the
+      shield's charge and discharge currents.
+- [ ] Optional later step: a Pi Zero 2 W has the same CPU family at lower clock
+      and roughly halves the power draw, but only 512 MB RAM. Test 1080p grading
+      memory headroom before switching.
+
+---
+
+## 5. Stick S3 directly on the Pi's Wi-Fi, Ethernet for administration
+
+Feasible and a good fit. The Pi 3B's onboard radio (2.4 GHz b/g/n) supports
+access-point mode with the standard `brcmfmac` driver, and the ESP32-S3 is
+2.4 GHz only, so the two match. The firmware uses `WiFi.mode(WIFI_STA)` and
+`WiFi.begin(ssid, password)`, which is plain WPA2-PSK; no firmware change is
+needed beyond rebuilding with the new SSID, passphrase and API URL.
+
+### Pi as hotspot (Raspberry Pi OS Trixie, NetworkManager with netplan)
+
+Done and verified 2026-09-08. Kept here as the record of what was actually
+needed; the live procedure is `docs/sticks3-remote.md`.
+
+- [x] Set the Wi-Fi country first (`sudo raspi-config nonint do_wifi_country DE`).
+      Without it the radio stays soft-blocked.
+- [x] Create an autoconnecting AP profile with a fixed address. Implemented as
+      `scripts/pi_hotspot.py`, which writes a root-only NetworkManager keyfile
+      from `.env` instead of passing the passphrase to `nmcli`.
+- [x] Disable Protected Management Frames in that profile (`pmf=1`). Not in the
+      original plan; found on the device. NetworkManager's "optional" default
+      makes hostapd install an AES-CMAC key, the Pi 3B's BCM43430 firmware has
+      no MFP, and the kernel refuses with "key setting validation failed", so
+      the AP never started.
+- [x] Disable autoconnect on the home Wi-Fi profile (`netplan-wlan0-<SSID>` on
+      Trixie, not `preconfigured`).
+
+`ipv4.method shared` runs a DHCP server for the Stick and NATs to Ethernet if
+that is up, so the Pi keeps internet access when you wire it to a router.
+
+- [x] Point the firmware and the service at the AP address. `.env` carries
+      `PARR_REMOTE_URL=http://10.42.0.1:8765` and `PARR_LISTEN=0.0.0.0:8765`;
+      `PI_HOST=parr.local` is the SSH address. Stick rebuilt and flashed.
+- [x] Set `--remote-listen 0.0.0.0:8765` in the unit. (Done 2026-09-08.)
+- [x] Repo side: `scripts/pi_hotspot.py` writes the hotspot as a root-only
+      NetworkManager keyfile from `.env`; `.env.example` and
+      `docs/sticks3-remote.md` describe the hotspot topology. (Done 2026-09-08;
+      the Pi-side steps above and below still need to be run on the device.)
+- [x] Verified: after an unattended reboot the hotspot is up and the service is
+      listening within about 30 s (SSH back after 57 s including the reboot
+      itself). The Stick's reconnect backoff handles the gap.
+- [x] The API is plain HTTP with a bearer token. On a private WPA2 hotspot with
+      a strong passphrase that is acceptable; the token is kept, and a request
+      without it gets 401.
+
+### Ethernet for administration
+
+The Pi 3B port is auto-MDI-X, so a normal patch cable straight into a laptop
+works.
+
+- [x] Set a memorable hostname (`sudo raspi-config nonint do_hostname parr`);
+      avahi is installed by default on Raspberry Pi OS, and macOS resolves
+      `parr.local` natively. Verified.
+- [x] Make the wired profile keep a link-local address alongside DHCP, so a
+      direct cable gives `ssh george@parr.local` with no static IP dance while
+      a router still hands out DHCP. Done on the netplan-generated profile:
+
+```sh
+sudo nmcli connection modify netplan-eth0 ipv4.method auto ipv4.link-local enabled
+```
+
+  NetworkManager persisted it as `/etc/netplan/90-NM-<uuid>.yaml`, and it
+  survived a reboot.
+
+- [ ] Enable macOS Internet Sharing from Wi-Fi to the Ethernet port when you
+      want the Pi to reach apt and pip. The Pi then gets a `192.168.2.x`
+      address and full internet through the Mac. Not yet tried.
+- [x] Update `docs/sticks3-remote.md` to describe this topology instead of the
+      home-LAN one, and remove the hard-coded `192.168.178.56` from the service
+      example and the guide. (Done 2026-09-08.)
+
+---
+
+## 6. Smaller items noticed along the way
+
+- [ ] `.venv-python39-backup-20260906/` and `build/` are in the working tree;
+      both are gitignored, but delete the old venv once you are sure the
+      Python 3.12 venv is complete.
+- [x] `README.md` says `.venv/bin/pytest -q -m 'not slow'`; that now works
+      because `pythonpath` is set in `pyproject.toml`. (Done 2026-09-08.)
+- [x] One ordered install guide. The service install was only described deep
+      inside the network guide and nothing stated the overall order or which
+      machine each step runs on. `docs/setup.md` now does: Mac, `.env`, Pi
+      network, Pi service, Stick, optional training, day-to-day, and a one-page
+      checklist. README trimmed to point at it. (Done 2026-09-09.)
+- [x] The sudoers rule in the guide was one long line and soft-wrapped on
+      paste into a syntax error. Now two short rules plus a `visudo -c` check
+      and a polkit recovery note. (Done 2026-09-09.)
+- [x] Step-by-step training guide, `docs/training.md`: how a run works, camera
+      frame collection, reference curation, sanity checks, training, the report
+      gate by gate with remedies, iteration rules and scene-grouped partitions,
+      deployment and verification, the run write-up, troubleshooting, defaults.
+      (Done 2026-09-09.)
+- [x] Firmware serial debug log: every capture step is logged with uptime,
+      including HTTP codes, byte counts, JPEG marker checks and the return
+      value of each `drawJpg`. `firmware/sticks3/README.md` documents a healthy
+      log and a hash recipe that proves the displayed image is the graded file.
+      (Done 2026-09-08.)
+- [ ] The Stick shows no battery level of its own. M5Unified exposes
+      `M5.Power.getBatteryLevel()`; a small indicator on the READY screen is a
+      few lines in `display.cpp`.
+- [ ] The deployment plan's manual checklist item "double presses, camera
+      disconnection, disk-save failure, invalid token, missing desktop session"
+      in `docs/superpowers/plans/2026-09-06-sticks3-remote-capture.md` is still
+      unchecked. Run it once on the hotspot topology.

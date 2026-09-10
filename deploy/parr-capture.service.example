@@ -2,13 +2,25 @@
 Description=Martin Parr remote capture service (headless Stick-only mode)
 After=network-online.target
 Wants=network-online.target
+# The camera can take a few seconds to enumerate after boot; without this,
+# systemd stops retrying after five quick failures.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 User=george
 WorkingDirectory=/home/george/repos/martin-parr-project
+# /etc/parr-capture.env is root-owned, mode 600, and holds PARR_REMOTE_TOKEN.
 EnvironmentFile=/etc/parr-capture.env
-ExecStart=/home/george/repos/martin-parr-project/.venv/bin/parr-capture --no-preview --remote-listen 192.168.178.56:8765 --artifacts /home/george/repos/martin-parr-project/artifacts/personal-collection-01-v1
+# Bind on all interfaces: the Stick arrives over the Pi's own hotspot
+# (10.42.0.1), while administration arrives over Ethernet. Binding to the
+# hotspot address alone races NetworkManager bringing it up at boot.
+# --artifacts names the look. parr/data is the bundled untrained starter that
+# ships with the package and exists in every checkout. To deploy a trained
+# model, point this at its directory (params.json + parr.cube), for example
+# /home/george/repos/martin-parr-project/artifacts/personal-collection-01-v1,
+# and use the same path for PI_ARTIFACT_DIR in .env.
+ExecStart=/home/george/repos/martin-parr-project/.venv/bin/parr-capture --no-preview --remote-listen 0.0.0.0:8765 --artifacts /home/george/repos/martin-parr-project/parr/data
 Restart=on-failure
 RestartSec=3
 StandardInput=null

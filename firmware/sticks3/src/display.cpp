@@ -139,17 +139,25 @@ void StickDisplay::drawElapsedOnly(ClientState state, uint32_t elapsed_seconds) 
 }
 
 void StickDisplay::drawPhoto() {
-  if (photo_size_ == 0) return;
+  if (photo_size_ == 0) {
+    Serial.println("[display] drawPhoto: no stored photo");
+    return;
+  }
   const int16_t target_width = std::min<int16_t>(width_, (height_ * 240) / 135);
   const int16_t target_height = std::min<int16_t>(height_, (width_ * 135) / 240);
   const int16_t x = (width_ - target_width) / 2;
   const int16_t y = (height_ - target_height) / 2;
   M5.Display.fillScreen(TFT_BLACK);
-  M5.Display.drawJpg(photo_, photo_size_, x, y, target_width, target_height);
+  const bool drawn = M5.Display.drawJpg(photo_, photo_size_, x, y, target_width, target_height);
+  Serial.printf("[display] drawPhoto: M5GFX drawJpg %u bytes at %d,%d %dx%d on %dx%d screen -> %s\n",
+                static_cast<unsigned>(photo_size_), x, y, target_width, target_height, width_, height_,
+                drawn ? "ok" : "FAILED");
 }
 
 bool StickDisplay::decodeAndStore(const uint8_t* jpeg, size_t jpeg_size) {
   if (!decodesSuccessfully(jpeg, jpeg_size)) {
+    Serial.printf("[display] JPEGDEC validation FAILED for %u bytes; photo not replaced\n",
+                  static_cast<unsigned>(jpeg_size));
     return false;
   }
   // M5GFX exposes a draw-based decoder. JPEGDEC completed the candidate
@@ -158,7 +166,9 @@ bool StickDisplay::decodeAndStore(const uint8_t* jpeg, size_t jpeg_size) {
   const int16_t target_height = std::min<int16_t>(height_, (width_ * 135) / 240);
   const int16_t x = (width_ - target_width) / 2;
   const int16_t y = (height_ - target_height) / 2;
-  M5.Display.drawJpg(jpeg, jpeg_size, x, y, target_width, target_height);
+  const bool drawn = M5.Display.drawJpg(jpeg, jpeg_size, x, y, target_width, target_height);
+  Serial.printf("[display] JPEGDEC validation ok; M5GFX drawJpg %u bytes at %d,%d %dx%d -> %s\n",
+                static_cast<unsigned>(jpeg_size), x, y, target_width, target_height, drawn ? "ok" : "FAILED");
   std::memcpy(photo_, jpeg, jpeg_size);
   photo_size_ = jpeg_size;
   return true;
@@ -175,6 +185,10 @@ void StickDisplay::render(const CaptureClient& client, uint32_t now_ms) {
   const bool screen_changed = state != last_state_ || (ready_matters && ready != last_ready_);
   const bool counter_changed = elapsed != last_elapsed_seconds_;
   if (!screen_changed && !counter_changed) return;
+  if (state != last_state_) {
+    Serial.printf("[display] render %s (pi ready=%d, stored photo=%u bytes)\n", clientStateName(state), ready,
+                  static_cast<unsigned>(photo_size_));
+  }
   last_state_ = state;
   last_elapsed_seconds_ = elapsed;
   last_ready_ = ready;

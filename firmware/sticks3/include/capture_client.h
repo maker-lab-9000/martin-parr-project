@@ -12,6 +12,9 @@ enum class ClientState : uint8_t {
   Error,
 };
 
+// Upper-case name of a state for the serial debug log; never nullptr.
+const char* clientStateName(ClientState state);
+
 enum class JobStatus : uint8_t { Pending, Processing, Complete, Failed, Missing };
 enum class WorkKind : uint8_t { None, Connect, Status, Submit, Poll, Download };
 enum class ErrorReason : uint8_t { None, Transport, Timeout, Interrupted, Rejected, Image };

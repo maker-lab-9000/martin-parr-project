@@ -5,6 +5,19 @@
 
 CaptureClient::CaptureClient() = default;
 
+const char* clientStateName(ClientState state) {
+  switch (state) {
+    case ClientState::Connecting: return "CONNECTING";
+    case ClientState::Ready: return "READY";
+    case ClientState::Requesting: return "REQUESTING";
+    case ClientState::Processing: return "PROCESSING";
+    case ClientState::Downloading: return "DOWNLOADING";
+    case ClientState::Photo: return "PHOTO";
+    case ClientState::Error: return "ERROR";
+  }
+  return "UNKNOWN";
+}
+
 void CaptureClient::setWifiConnected(bool connected, uint32_t now_ms) {
   wifi_connected_ = connected;
   if (!connected) {
