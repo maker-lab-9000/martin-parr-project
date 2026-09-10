@@ -490,10 +490,6 @@ def main(argv: list[str] | None = None) -> int:
     except PowerError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    if power is not None:
-        power.start()
-        print(f"Reading the {args.ups} UPS every 10 s.")
-
     try:
         pipeline = Pipeline(Artifacts.resolve(args.artifacts))
     except ArtifactsError as exc:
@@ -514,6 +510,9 @@ def main(argv: list[str] | None = None) -> int:
     controller: CaptureController | None = None
     remote: RemoteCaptureServer | None = None
     try:
+        if power is not None:
+            power.start()
+            print(f"Reading the {args.ups} UPS every 10 s.")
         if args.remote_listen:
             controller = CaptureController(session)
             try:
