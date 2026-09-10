@@ -82,6 +82,19 @@ bitmap (bit 0 VIN, bit 1 VIN/OUT, bit 2 battery):
 [1203] battery 87%+ (level 87, external power, power sources 0x05, 4012 mV)
 ```
 
+The bottom-left corner shows a second badge for the Pi's own UPS battery, as
+published by the Pi in `GET /v1/status`'s `pi_battery` object: `Pi 87%+` while
+the Pi is on external power, `Pi --%` when the Pi has no UPS attached or the
+published value is more than a minute old. It turns red at 15% or below while
+the Pi is on battery. This badge is fed purely from the status poll, not from
+the Stick's own PM1, and is driven by its own `BatteryMonitor` instance so a
+one-point wobble in the Pi's reading does not repaint the badge. Each change
+is logged, for example:
+
+```text
+[1556] pi battery 87%+ (known=1, external power)
+```
+
 ## Reading the serial debug log
 
 The firmware logs every hop of a capture on the serial port, each line

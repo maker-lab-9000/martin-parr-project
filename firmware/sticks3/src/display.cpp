@@ -50,8 +50,9 @@ void StickDisplay::drawColourBars() {
   M5.Display.fillRect(0, height_ - 24, width_, 24, TFT_BLACK);
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
   M5.Display.setTextSize(1);
-  // Centred in the space left of the battery badge, not under it.
-  M5.Display.drawString("READY  •  press primary button", (width_ - kBatteryBadgeWidth) / 2, height_ - 12);
+  // Centred between the Pi badge (left) and the Stick badge (right).
+  const int16_t caption_x = kPiBadgeWidth + (width_ - kPiBadgeWidth - kBatteryBadgeWidth) / 2;
+  M5.Display.drawString("READY  \xE2\x80\xA2  press button", caption_x, height_ - 12);
 }
 
 void StickDisplay::setBatteryLabel(const char* label, bool low) {
@@ -61,17 +62,30 @@ void StickDisplay::setBatteryLabel(const char* label, bool low) {
   drawBatteryBadge();
 }
 
+void StickDisplay::setPiBatteryLabel(const char* label, bool low) {
+  std::strncpy(pi_battery_label_, label == nullptr ? "" : label, sizeof(pi_battery_label_) - 1);
+  pi_battery_label_[sizeof(pi_battery_label_) - 1] = '\0';
+  pi_battery_low_ = low;
+  drawBatteryBadge();
+}
+
 void StickDisplay::drawBatteryBadge() {
-  if (battery_label_[0] == '\0') return;
-  const int16_t x = width_ - kBatteryBadgeWidth;
-  const int16_t y = height_ - kBatteryBadgeHeight;
-  M5.Display.fillRect(x, y, kBatteryBadgeWidth, kBatteryBadgeHeight, TFT_BLACK);
   M5.Display.setTextSize(1);
   M5.Display.setTextDatum(middle_center);
-  // Red below the low threshold while discharging; white otherwise. The trailing
-  // "+" in the label marks charging.
-  M5.Display.setTextColor(battery_low_ ? TFT_RED : TFT_WHITE, TFT_BLACK);
-  M5.Display.drawString(battery_label_, x + kBatteryBadgeWidth / 2, y + kBatteryBadgeHeight / 2);
+  const int16_t y = height_ - kBatteryBadgeHeight;
+  if (battery_label_[0] != '\0') {
+    const int16_t x = width_ - kBatteryBadgeWidth;
+    M5.Display.fillRect(x, y, kBatteryBadgeWidth, kBatteryBadgeHeight, TFT_BLACK);
+    // Red below the low threshold while discharging; white otherwise. The trailing
+    // "+" in the label marks charging.
+    M5.Display.setTextColor(battery_low_ ? TFT_RED : TFT_WHITE, TFT_BLACK);
+    M5.Display.drawString(battery_label_, x + kBatteryBadgeWidth / 2, y + kBatteryBadgeHeight / 2);
+  }
+  if (pi_battery_label_[0] != '\0') {
+    M5.Display.fillRect(0, y, kPiBadgeWidth, kBatteryBadgeHeight, TFT_BLACK);
+    M5.Display.setTextColor(pi_battery_low_ ? TFT_RED : TFT_WHITE, TFT_BLACK);
+    M5.Display.drawString(pi_battery_label_, kPiBadgeWidth / 2, y + kBatteryBadgeHeight / 2);
+  }
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
 }
 

@@ -9,6 +9,7 @@
 #include "battery_status.h"
 #include "capture_client.h"
 #include "display.h"
+#include "status_fields.h"
 
 // Task 4 injects these build flags or a generated local configuration file.
 // Empty defaults intentionally leave this firmware unable to join a network.
@@ -29,6 +30,7 @@ namespace {
 CaptureClient capture;
 StickDisplay display;
 BatteryMonitor battery;
+BatteryMonitor pi_battery;   // fed from /v1/status, not from the Stick's PM1
 SemaphoreHandle_t capture_mutex = nullptr;
 SemaphoreHandle_t jpeg_mutex = nullptr;
 TaskHandle_t network_task = nullptr;
@@ -166,6 +168,25 @@ void processWork(const WorkItem& work) {
       last_status_code = status;
       last_ready = ready;
       last_active = active;
+    }
+    if (status == HTTP_CODE_OK) {
+      const PiBattery pi = parsePiBattery(payload.c_str());
+      const ChargeState charge = pi.known
+          ? (pi.external_power ? ChargeState::Charging : ChargeState::Discharging)
+          : ChargeState::Unknown;
+      static bool pi_seen_once = false;
+      // BatteryMonitor smooths and debounces; the Pi already averages, but the
+      // deadband still stops a one-point wobble from repainting the badge.
+      if (pi_battery.update(pi.known ? pi.percent : -1, charge, millis()) || !pi_seen_once) {
+        pi_seen_once = true;
+        char label[16];
+        snprintf(label, sizeof(label), "Pi %s", pi_battery.label());
+        lockClient();
+        display.setPiBatteryLabel(label, pi_battery.low());
+        unlockClient();
+        STICK_LOG("pi battery %s (known=%d, %s)", pi_battery.label(), pi.known,
+                  pi.external_power ? "external power" : "on battery");
+      }
     }
     lockClient();
     if (status == HTTP_CODE_OK) {
