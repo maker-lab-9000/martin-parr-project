@@ -13,6 +13,7 @@ import pytest
 from PIL import Image
 
 from parr.capture.controller import CaptureController
+from parr.capture.power import PowerStatus
 from parr.capture.remote import RemoteCaptureServer
 
 
@@ -197,4 +198,37 @@ def test_expired_job_is_not_reused_after_the_bounded_registry_forgets_it():
         assert _json(server, "POST", "/v1/captures", first_body)[0] == 404
     finally:
         server.close()
+        controller.close()
+
+
+def test_status_reports_pi_battery_when_a_power_source_is_configured(tmp_path):
+    session = BlockingSession()
+    controller = CaptureController(session)
+    reading = PowerStatus(percent=87, voltage_mv=4012, external_power=True)
+    server = RemoteCaptureServer(
+        controller, "secret-token", ("127.0.0.1", 0), power=lambda: reading
+    )
+    server.start()
+    try:
+        status = _json(server, "GET", "/v1/status")[2]
+    finally:
+        server.close()
+        controller.close()
+
+    assert status["pi_battery"] == {"percent": 87, "voltage_mv": 4012, "external_power": True}
+    assert set(status) >= {"instance_id", "ready", "active_capture_id", "last_completed_id"}
+
+
+def test_status_reports_pi_battery_null_without_a_power_source_or_reading(remote):
+    server, _session = remote
+    assert _json(server, "GET", "/v1/status")[2]["pi_battery"] is None
+
+    session = BlockingSession()
+    controller = CaptureController(session)
+    unknown = RemoteCaptureServer(controller, "secret-token", ("127.0.0.1", 0), power=lambda: None)
+    unknown.start()
+    try:
+        assert _json(unknown, "GET", "/v1/status")[2]["pi_battery"] is None
+    finally:
+        unknown.close()
         controller.close()
