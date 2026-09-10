@@ -52,7 +52,8 @@ void StickDisplay::drawColourBars() {
   M5.Display.setTextSize(1);
   // Centred between the Pi badge (left) and the Stick badge (right).
   const int16_t caption_x = kPiBadgeWidth + (width_ - kPiBadgeWidth - kBatteryBadgeWidth) / 2;
-  M5.Display.drawString("READY  \xE2\x80\xA2  press button", caption_x, height_ - 12);
+  // 20 characters at 6 px = 120 px, inside the 128 px between the two 56 px badges.
+  M5.Display.drawString("READY \xE2\x80\xA2 press button", caption_x, height_ - 12);
 }
 
 void StickDisplay::setBatteryLabel(const char* label, bool low) {

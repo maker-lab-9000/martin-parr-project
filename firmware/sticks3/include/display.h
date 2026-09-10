@@ -11,7 +11,7 @@ class StickDisplay {
 
   // Width reserved in the bottom-right corner for the battery badge, so the
   // READY caption is centred in the remaining space instead of under it.
-  static constexpr int16_t kBatteryBadgeWidth = 40;
+  static constexpr int16_t kBatteryBadgeWidth = 56;
   static constexpr int16_t kBatteryBadgeHeight = 14;
   // Bottom-left badge for the Pi's UPS battery ("Pi 87%+"); the READY caption
   // is centred in the space between the two badges.
@@ -42,7 +42,7 @@ class StickDisplay {
 
   uint8_t photo_[kMaxJpegBytes] = {};
   size_t photo_size_ = 0;
-  char battery_label_[8] = "";
+  char battery_label_[12] = "";
   bool battery_low_ = false;
   char pi_battery_label_[12] = "";
   bool pi_battery_low_ = false;

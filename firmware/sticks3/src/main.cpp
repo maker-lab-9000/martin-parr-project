@@ -318,7 +318,9 @@ void pollBattery(uint32_t now_ms) {
   uint8_t sources = 0;
   const ChargeState charge = chargeState(&sources);
   if (battery.update(level, charge, now_ms)) {
-    display.setBatteryLabel(battery.label(), battery.low());
+    char label[16];
+    snprintf(label, sizeof(label), "S3 %s", battery.label());  // "S3 87%+" beside "Pi 87%+"
+    display.setBatteryLabel(label, battery.low());
     Serial.printf("[%lu] battery %s (level %d, %s, power sources 0x%02x, %d mV)\n",
                   static_cast<unsigned long>(now_ms), battery.label(), level,
                   charge == ChargeState::Charging ? "external power"
