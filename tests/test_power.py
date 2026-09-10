@@ -131,3 +131,27 @@ def test_start_polls_on_the_interval_until_closed():
 
     assert monitor.snapshot().percent == 88
     assert sleeps == [10.0, 10.0, 10.0]
+
+
+def test_start_runs_a_daemon_thread_that_polls_and_close_stops_it_promptly():
+    import time
+
+    reading = PowerStatus(percent=87, voltage_mv=4000, external_power=True)
+
+    class Endless:
+        def read(self):
+            return reading
+
+    monitor = PowerMonitor(Endless(), interval_s=10.0)  # real clock, real (interruptible) sleep
+    monitor.start()
+    deadline = time.monotonic() + 2.0
+    while monitor.snapshot() is None and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert monitor.snapshot() == reading
+    assert monitor._thread is not None and monitor._thread.daemon
+
+    started_close = time.monotonic()
+    monitor.close()
+    assert not monitor._thread.is_alive()
+    # The 10 s interval must not delay shutdown: close() interrupts the wait.
+    assert time.monotonic() - started_close < 2.0

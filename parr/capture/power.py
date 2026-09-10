@@ -70,18 +70,20 @@ class PowerMonitor:
         provider,
         interval_s: float = 10.0,
         clock: Callable[[], float] = time.monotonic,
-        sleep: Callable[[float], None] = time.sleep,
+        sleep: Callable[[float], None] | None = None,
     ) -> None:
         self._provider = provider
         self._interval_s = interval_s
         self._clock = clock
-        self._sleep = sleep
         self._lock = threading.Lock()
         self._status: PowerStatus | None = None
         self._read_at: float | None = None
         self._closed = threading.Event()
         self._thread: threading.Thread | None = None
         self.last_error: str | None = None
+        self._sleep = (
+            sleep if sleep is not None else (lambda seconds: self._closed.wait(seconds))
+        )
 
     def poll_once(self) -> None:
         try:
@@ -119,3 +121,5 @@ class PowerMonitor:
 
     def close(self) -> None:
         self._closed.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
