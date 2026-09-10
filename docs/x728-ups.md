@@ -221,6 +221,12 @@ def word(reg):
 print(f"cell {word(0x02) * 1.25 / 1000 / 16:.3f} V, charge {min(word(0x04) / 256, 100):.1f} %")
 PY
 gpioget --numeric -c 0 6                            # 0 with charger connected, 1 without
+```
+
+While `parr-capture --ups x728` is running it holds BCM 6, so `gpioget` reports the
+line busy; stop the service first or read `external_power` from `/v1/status` instead.
+
+```sh
 timedatectl | grep 'RTC time'                       # a plausible date, not n/a
 systemctl is-active x728-pwr x728-asd               # active, active
 ```

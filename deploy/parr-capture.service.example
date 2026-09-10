@@ -10,6 +10,9 @@ StartLimitIntervalSec=0
 Type=simple
 User=george
 WorkingDirectory=/home/george/repos/martin-parr-project
+# Without this, Python block-buffers stdout when it isn't a tty, and the
+# service's start-up lines never reach the journal.
+Environment=PYTHONUNBUFFERED=1
 # /etc/parr-capture.env is root-owned, mode 600, and holds PARR_REMOTE_TOKEN.
 EnvironmentFile=/etc/parr-capture.env
 # Bind on all interfaces: the Stick arrives over the Pi's own hotspot

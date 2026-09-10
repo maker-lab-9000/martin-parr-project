@@ -258,13 +258,15 @@ only way it will ever start.
 
 For a battery-powered handheld, fit the Geekworm X728 UPS shield. `--ups
 x728` on the `parr-capture` service (§4.4) is the only project-side switch;
-everything else needed to read the gauge is Geekworm's own installer. Its own
-guide, [docs/x728-ups.md](x728-ups.md), covers the prerequisites this Pi was
-missing (the header I2C bus is disabled by default), the pin and address map,
-Geekworm's power-button service, the low-battery shutdown policy suitable for
-a camera, the DS1307 real-time clock that finally gives offline captures the
-right date, and a verification checklist. The plan to show the UPS battery on
-the Stick is `docs/superpowers/plans/2026-09-10-ups-battery-on-stick.md`.
+reading the gauge needs the header I2C bus enabled, which is disabled by
+default ([docs/x728-ups.md](x728-ups.md) section 4). Geekworm's installer
+provides the power-button service, which is unrelated to reading the gauge.
+The guide, [docs/x728-ups.md](x728-ups.md), covers that bus setup, the pin
+and address map, Geekworm's power-button service, the low-battery shutdown
+policy suitable for a camera, the DS1307 real-time clock that finally gives
+offline captures the right date, and a verification checklist. With `--ups
+x728`, the service publishes `pi_battery` and the Stick shows it bottom-left
+as `Pi 77%`, `Pi 77%+` on external power, and `Pi --%` when unknown.
 
 ## 5. StickS3
 

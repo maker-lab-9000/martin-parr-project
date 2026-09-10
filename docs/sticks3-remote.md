@@ -220,10 +220,11 @@ From a phone or laptop joined to `parr-cam` (or from the Pi itself):
 curl -s -H "Authorization: Bearer $PARR_REMOTE_TOKEN" http://10.42.0.1:8765/v1/status
 ```
 
-Expect `"ready":true`, plus a `"pi_battery"` object when the service was
-started with `--ups x728`. Allow up to 30 seconds after a boot before the port
-answers: the service imports OpenCV, loads the LUT and warms up the camera
-first, and on a Pi 3B that takes 15 to 25 seconds. Then power the Stick: colour
+Expect `"ready":true`. `"pi_battery"` is always present; it is `null` unless
+the service runs with `--ups x728`. Allow up to 30 seconds after a boot
+before the port answers: the service imports OpenCV, loads the LUT and warms
+up the camera first, and on a Pi 3B that takes 15 to 25 seconds. Then power
+the Stick: colour
 bars, READY, one capture per deliberate press, graded thumbnail displayed. The
 Stick's serial log shows each step; `firmware/sticks3/README.md` explains how to
 read it and how to prove the displayed image is the graded file. Pull photos

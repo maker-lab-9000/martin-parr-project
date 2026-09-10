@@ -105,6 +105,27 @@ def test_a_failed_read_keeps_the_previous_reading_and_records_the_error():
     assert monitor.last_error == "gauge missing"
 
 
+def test_poll_once_survives_repeated_failures_and_warns_once_then_recovers(capsys):
+    clock = FakeClock()
+    reading = PowerStatus(percent=87, voltage_mv=4000, external_power=True)
+    provider = ScriptedProvider([RuntimeError("boom"), RuntimeError("boom"), reading])
+    monitor = PowerMonitor(provider, clock=clock)
+
+    monitor.poll_once()
+    assert monitor.last_error == "boom"
+    assert monitor.snapshot() is None
+    assert capsys.readouterr().err == "warning: UPS read failed: boom\n"
+
+    monitor.poll_once()  # still failing: no repeat warning
+    assert monitor.last_error == "boom"
+    assert capsys.readouterr().err == ""
+
+    monitor.poll_once()
+    assert monitor.last_error is None
+    assert monitor.snapshot() == reading
+    assert capsys.readouterr().err == "UPS read recovered\n"
+
+
 def test_a_reading_older_than_max_age_is_not_served():
     clock = FakeClock()
     reading = PowerStatus(percent=87, voltage_mv=4000, external_power=True)
@@ -194,6 +215,24 @@ def test_build_ups_x728_explains_missing_libraries_without_the_i2c_remedy():
 
     with pytest.raises(PowerError, match="python3-smbus2") as info:
         build_ups("x728", open_bus=open_bus, open_pin=lambda n: (lambda: False))
+    assert "raspi-config" not in str(info.value)
+
+
+def test_build_ups_x728_explains_a_pin_claim_failure():
+    def open_pin(number):
+        raise RuntimeError("GPIO busy")
+
+    with pytest.raises(PowerError, match="BCM 6") as info:
+        build_ups("x728", open_bus=lambda n: FakeBus({}), open_pin=open_pin)
+    assert "I2C" not in str(info.value)
+
+
+def test_build_ups_x728_explains_missing_gpiozero_for_the_pin():
+    def open_pin(number):
+        raise ModuleNotFoundError("No module named 'gpiozero'", name="gpiozero")
+
+    with pytest.raises(PowerError, match="python3-gpiozero") as info:
+        build_ups("x728", open_bus=lambda n: FakeBus({}), open_pin=open_pin)
     assert "raspi-config" not in str(info.value)
 
 

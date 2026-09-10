@@ -12,6 +12,7 @@ smbus2 and gpiozero for the real thing.
 
 from __future__ import annotations
 
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -86,16 +87,26 @@ class PowerMonitor:
         )
 
     def poll_once(self) -> None:
+        # Catches Exception, not just PowerError: a provider bug must not kill
+        # the polling thread silently, leaving /v1/status serving a frozen
+        # snapshot forever. last_error tracks ok/error state so the warning
+        # and recovery lines print once each, not on every poll.
         try:
             status = self._provider.read()
-        except PowerError as exc:
+        except Exception as exc:
             with self._lock:
+                first_failure = self.last_error is None
                 self.last_error = str(exc)
+            if first_failure:
+                print(f"warning: UPS read failed: {exc}", file=sys.stderr)
             return
         with self._lock:
+            recovered = self.last_error is not None
             self._status = status
             self._read_at = self._clock()
             self.last_error = None
+        if recovered:
+            print("UPS read recovered", file=sys.stderr)
 
     def snapshot(self) -> PowerStatus | None:
         with self._lock:
@@ -141,6 +152,13 @@ def _open_input_pin(number: int) -> Callable[[], bool]:
     return lambda: bool(pin.value)
 
 
+def _missing_dependency_error(exc: ImportError) -> PowerError:
+    return PowerError(
+        f"--ups x728 needs python3-smbus2 and python3-gpiozero ({exc}). They are "
+        "present on the Pi image; this machine does not have them"
+    )
+
+
 def build_ups(name: str, *, open_bus=None, open_pin=None) -> PowerMonitor | None:
     """Return a started-ready PowerMonitor for ``name``, or None for "none"."""
     if name == "none":
@@ -151,15 +169,21 @@ def build_ups(name: str, *, open_bus=None, open_pin=None) -> PowerMonitor | None
     open_pin = open_pin or _open_input_pin
     try:
         bus = open_bus(1)
-        pld_is_high = open_pin(X728_PLD_PIN)
     except ImportError as exc:
-        raise PowerError(
-            f"--ups x728 needs python3-smbus2 and python3-gpiozero ({exc}). They are "
-            "present on the Pi image; this machine does not have them"
-        ) from exc
+        raise _missing_dependency_error(exc) from exc
     except (FileNotFoundError, PermissionError) as exc:
         raise PowerError(
             f"cannot open I2C bus 1 ({exc}). Enable it with: sudo raspi-config nonint do_i2c 0, "
             "reboot, and make sure the service user is in the i2c group"
+        ) from exc
+    try:
+        pld_is_high = open_pin(X728_PLD_PIN)
+    except ImportError as exc:
+        raise _missing_dependency_error(exc) from exc
+    except Exception as exc:
+        raise PowerError(
+            f"cannot claim BCM {X728_PLD_PIN} for power-loss detection ({exc}). Is another "
+            "process reading the pin, such as Geekworm's power-loss sample, and is the "
+            "service user in the gpio group?"
         ) from exc
     return PowerMonitor(X728Ups(bus, pld_is_high=pld_is_high))

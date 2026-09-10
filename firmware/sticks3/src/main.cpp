@@ -169,24 +169,25 @@ void processWork(const WorkItem& work) {
       last_ready = ready;
       last_active = active;
     }
-    if (status == HTTP_CODE_OK) {
-      const PiBattery pi = parsePiBattery(payload.c_str());
-      const ChargeState charge = pi.known
-          ? (pi.external_power ? ChargeState::Charging : ChargeState::Discharging)
-          : ChargeState::Unknown;
-      static bool pi_seen_once = false;
-      // BatteryMonitor smooths and debounces; the Pi already averages, but the
-      // deadband still stops a one-point wobble from repainting the badge.
-      if (pi_battery.update(pi.known ? pi.percent : -1, charge, millis()) || !pi_seen_once) {
-        pi_seen_once = true;
-        char label[16];
-        snprintf(label, sizeof(label), "Pi %s", pi_battery.label());
-        lockClient();
-        display.setPiBatteryLabel(label, pi_battery.low());
-        unlockClient();
-        STICK_LOG("pi battery %s (known=%d, %s)", pi_battery.label(), pi.known,
-                  pi.external_power ? "external power" : "on battery");
-      }
+    // A stale reading is worse than none: run this for every result, not just
+    // HTTP 200, so a transport failure repaints the badge to "Pi --%" instead
+    // of leaving the last known percentage on screen.
+    const PiBattery pi = status == HTTP_CODE_OK ? parsePiBattery(payload.c_str()) : PiBattery{};
+    const ChargeState charge = pi.known
+        ? (pi.external_power ? ChargeState::Charging : ChargeState::Discharging)
+        : ChargeState::Unknown;
+    static bool pi_seen_once = false;
+    // BatteryMonitor smooths and debounces; the Pi already averages, but the
+    // deadband still stops a one-point wobble from repainting the badge.
+    if (pi_battery.update(pi.known ? pi.percent : -1, charge, millis()) || !pi_seen_once) {
+      pi_seen_once = true;
+      char label[16];
+      snprintf(label, sizeof(label), "Pi %s", pi_battery.label());
+      lockClient();
+      display.setPiBatteryLabel(label, pi_battery.low());
+      unlockClient();
+      STICK_LOG("pi battery %s (known=%d, %s)", pi_battery.label(), pi.known,
+                pi.external_power ? "external power" : "on battery");
     }
     lockClient();
     if (status == HTTP_CODE_OK) {
