@@ -55,10 +55,11 @@ def test_remote_listener_keeps_running_without_a_tty(monkeypatch, tmp_path):
     listeners = []
 
     class Listener:
-        def __init__(self, controller, token, listen):
+        def __init__(self, controller, token, listen, power=None):
             self.controller = controller
             self.token = token
             self.listen = listen
+            self.power = power
             self.started = False
             self.closed = False
             listeners.append(self)
@@ -80,6 +81,34 @@ def test_remote_listener_keeps_running_without_a_tty(monkeypatch, tmp_path):
     assert app.main(["--fake", "--no-preview", "--remote-listen", "127.0.0.1:8765"]) == 0
     assert len(listeners) == 1
     assert listeners[0].started and listeners[0].closed
+
+
+def test_ups_monitor_is_never_left_running_when_startup_fails(tmp_path, monkeypatch):
+    from parr.capture import app
+
+    class FakeMonitor:
+        def __init__(self):
+            self.started = False
+            self.closed = False
+
+        def start(self):
+            self.started = True
+
+        def close(self):
+            self.closed = True
+
+        def snapshot(self):
+            return None
+
+    monitor = FakeMonitor()
+    monkeypatch.setattr(app, "build_ups", lambda name: monitor)
+
+    code = app.main(
+        ["--fake", "--no-preview", "--ups", "x728", "--artifacts", str(tmp_path / "missing")]
+    )
+
+    assert code == 2
+    assert not monitor.started or monitor.closed
 
 
 def test_raw_mode_writes_the_camera_bytes_verbatim(tmp_path, pipeline):

@@ -204,11 +204,11 @@ Cleaner alternative:
       works headless; only the `--show-captures` two-screen mode needs GTK.
 - [ ] Disable Bluetooth (`dtoverlay=disable-bt` in `config.txt`) and consider
       turning HDMI off when headless. Both save power and a little boot time.
-- [ ] Fit a real-time clock. The Pi 3B has none. Offline, with no home network,
+- [x] Fit a real-time clock. The Pi 3B has none. Offline, with no home network,
       the clock will be wrong after every boot and `YYYY-MM-DD/HHMMSS` file
-      names will lie. A DS3231 module costs a few euros; PiSugar and PiJuice
-      HATs include one. Until then, add a monotonic capture counter to the file
-      name as a fallback.
+      names will lie. Solved by the DS1307 RTC on the Geekworm X728 UPS
+      shield (section 4); see `docs/x728-ups.md` for the overlay. (Done
+      2026-09-10.)
 - [ ] Protect the SD card against power loss: put `~/Pictures/parr` on its own
       partition or a USB stick, and consider `overlayroot` for a read-only root
       filesystem. A battery pull mid-write is the most likely way this project
@@ -272,8 +272,11 @@ Cleaner alternative:
       UPS HATs below also provide this.
 - [ ] Shutdown from the Stick: add an authenticated `POST /v1/system/shutdown`
       that runs `systemctl poweroff` through a narrow sudoers rule, and bind it
-      to a long press on the Stick's secondary button. Include Pi battery level
-      in `/v1/status` if the HAT exposes it over I2C, and show it on the Stick.
+      to a long press on the Stick's secondary button.
+- [x] Include Pi battery level in `/v1/status` and show it on the Stick.
+      `parr-capture --ups x728` reads the X728 fuel gauge and publishes
+      `pi_battery` (`percent`, `voltage_mv`, `external_power`); the Stick
+      shows it in a bottom-left badge. (Done 2026-09-10.)
 - [ ] Flash: drive a high-power LED module (or a small ring light) from a GPIO
       through a MOSFET. A strobe cannot sync with a UVC video stream, so use a
       constant "torch" for about 300 to 500 ms: switch on, let auto-exposure
@@ -314,10 +317,14 @@ Rough runtimes at about 4 W average, allowing about 15% conversion loss:
 
 ### Options, in order of recommendation for this project
 
-- [ ] **Geekworm X728 (V2.x) UPS HAT.** Two user-supplied 18650 cells, 5.1 V/3 A
-      output, auto power-on when power is applied, hardware power button, and a
-      GPIO shutdown signal with a Python daemon for safe power-off. Supports the
-      3B. The best fit for a handheld that gets switched off by pulling power.
+- [x] **Geekworm X728 v2.5 UPS shield, chosen and fitted 2026-09-10.** Two
+      user-supplied 18650 cells, 5.1 V at up to 5 A, auto power-on jumper,
+      hardware power button with clean reboot and power-off through GPIO 5/12,
+      software power-off through GPIO 26, power-loss detection on GPIO 6, a
+      MAX17040 fuel gauge at I2C 0x36 and a DS1307 RTC at 0x68. Integration
+      guide: `docs/x728-ups.md`. Correction to the earlier advice below:
+      Geekworm says **do not use cells with built-in protection circuits**;
+      use quality unprotected flat-top cells.
 - [ ] **PiSugar 3 Plus.** 5,000 mAh built-in cell in the full-size Pi
       footprint, RTC included, I2C battery gauge, software power button,
       auto power-on. Neatest package for a 3D-printed case; smaller capacity
@@ -337,8 +344,10 @@ Whatever you choose:
 
 - [ ] Wire a safe-shutdown path (HAT GPIO signal or the GPIO3 button). Never
       rely on cutting power.
-- [ ] Use protected 18650 cells from a reputable brand if you go the UPS HAT
-      route, and keep the cells' rated discharge current well above 3 A.
+- [ ] Use quality 18650 cells from a reputable brand with a rated discharge
+      current well above 3 A. For the X728 specifically, unprotected flat-top
+      cells: Geekworm states that built-in protection circuits trip under the
+      shield's charge and discharge currents.
 - [ ] Optional later step: a Pi Zero 2 W has the same CPU family at lower clock
       and roughly halves the power draw, but only 512 MB RAM. Test 1080p grading
       memory headroom before switching.

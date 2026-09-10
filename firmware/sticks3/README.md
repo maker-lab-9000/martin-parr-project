@@ -50,6 +50,51 @@ On first flash, verify physical hardware before enabling network credentials:
 2. The boot smoke screen appears, the short speaker tone is audible, and colour bars follow.
 3. Press and hold the primary button: it should yield only one shutter tone and one request.
 
+## Battery indicator
+
+The bottom-right corner of every screen shows the Stick's own battery as a
+small badge: `87%` on battery, `87%+` while external power is attached over
+USB, `--%` when the power chip cannot report a level. It turns red at 15% or
+below on battery. The READY caption is centred in the space left of the badge.
+
+The level comes from M5Unified's `M5.Power.getBatteryLevel()`, which on the
+StickS3 derives it from the PM1 power chip's battery voltage. The voltage sags
+while the Wi-Fi radio transmits, so raw readings swing by five or six points
+between polls (81, 75, 80, 75 was measured). Readings are averaged with a time
+constant of about four polls, and the shown level then holds until the average
+differs from it by at least 3 points. A sustained change of a few points shows
+within a minute or so; a steady drain is tracked with a lag of a couple of
+points. The `+` mark means external power is present, read from the PM1's
+power-source register. It deliberately does not follow M5Unified's
+`isCharging()`, which on the StickS3 reads the charger's CHG_STAT pin: with the
+cable attached that pin cycles on and off for about 20 seconds at a time as the
+charger regulates, which made the mark blink. If the power-source read fails
+the charger pin is used instead, with a two-poll debounce before the mark is
+dropped. An unknown level shows `--%` at once; an unknown power state leaves
+the mark as it was. Expect the level to move in steps rather than smoothly, and
+to read high while a charger is attached. The chip is polled every 10 seconds
+by `BatteryMonitor` (`include/battery_status.h`), which is Arduino-free and
+covered by the native tests; the display repaints the badge only when the text
+changes. Each change is also logged on the serial port, with the PM1 source
+bitmap (bit 0 VIN, bit 1 VIN/OUT, bit 2 battery):
+
+```text
+[1203] battery 87%+ (level 87, external power, power sources 0x05, 4012 mV)
+```
+
+The bottom-left corner shows a second badge for the Pi's own UPS battery, as
+published by the Pi in `GET /v1/status`'s `pi_battery` object: `Pi 87%+` while
+the Pi is on external power, `Pi --%` when the Pi has no UPS attached or the
+published value is more than a minute old. It turns red at 15% or below while
+the Pi is on battery. This badge is fed purely from the status poll, not from
+the Stick's own PM1, and is driven by its own `BatteryMonitor` instance so a
+one-point wobble in the Pi's reading does not repaint the badge. Each change
+is logged, for example:
+
+```text
+[1556] pi battery 87%+ (known=1, external power)
+```
+
 ## Reading the serial debug log
 
 The firmware logs every hop of a capture on the serial port, each line

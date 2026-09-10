@@ -49,7 +49,56 @@ void StickDisplay::drawColourBars() {
   }
   M5.Display.fillRect(0, height_ - 24, width_, 24, TFT_BLACK);
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-  M5.Display.drawString("READY  •  press primary button", width_ / 2, height_ - 12);
+  M5.Display.setTextSize(1);
+  // Centred between the Pi badge (left) and the Stick badge (right).
+  const int16_t caption_x = kPiBadgeWidth + (width_ - kPiBadgeWidth - kBatteryBadgeWidth) / 2;
+  M5.Display.drawString("READY  \xE2\x80\xA2  press button", caption_x, height_ - 12);
+}
+
+void StickDisplay::setBatteryLabel(const char* label, bool low) {
+  std::strncpy(battery_label_, label == nullptr ? "" : label, sizeof(battery_label_) - 1);
+  battery_label_[sizeof(battery_label_) - 1] = '\0';
+  battery_low_ = low;
+  drawBatteryBadge();
+}
+
+void StickDisplay::setPiBatteryLabel(const char* label, bool low) {
+  std::strncpy(pi_battery_label_, label == nullptr ? "" : label, sizeof(pi_battery_label_) - 1);
+  pi_battery_label_[sizeof(pi_battery_label_) - 1] = '\0';
+  pi_battery_low_ = low;
+  drawBatteryBadge();
+}
+
+void StickDisplay::drawBatteryBadge() {
+  M5.Display.setTextSize(1);
+  M5.Display.setTextDatum(middle_center);
+  const int16_t y = height_ - kBatteryBadgeHeight;
+  if (battery_label_[0] != '\0') {
+    const int16_t x = width_ - kBatteryBadgeWidth;
+    M5.Display.fillRect(x, y, kBatteryBadgeWidth, kBatteryBadgeHeight, TFT_BLACK);
+    // Red below the low threshold while discharging; white otherwise. The trailing
+    // "+" in the label marks charging.
+    M5.Display.setTextColor(battery_low_ ? TFT_RED : TFT_WHITE, TFT_BLACK);
+    M5.Display.drawString(battery_label_, x + kBatteryBadgeWidth / 2, y + kBatteryBadgeHeight / 2);
+  }
+  if (pi_battery_label_[0] != '\0') {
+    M5.Display.fillRect(0, y, kPiBadgeWidth, kBatteryBadgeHeight, TFT_BLACK);
+    M5.Display.setTextColor(pi_battery_low_ ? TFT_RED : TFT_WHITE, TFT_BLACK);
+    M5.Display.drawString(pi_battery_label_, kPiBadgeWidth / 2, y + kBatteryBadgeHeight / 2);
+  }
+  M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+}
+
+void StickDisplay::drawMessageElapsed(uint32_t elapsed_seconds) {
+  // Clear only the counter's own box (up to "120s" at size 1) before redrawing,
+  // so "9s" fully replaces "10s" without touching the title or detail lines.
+  M5.Display.fillRect(width_ / 2 - 18, height_ / 2 + 19, 36, 14, TFT_BLACK);
+  M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+  M5.Display.setTextSize(1);
+  M5.Display.setTextDatum(middle_center);
+  char elapsed[24];
+  snprintf(elapsed, sizeof(elapsed), "%lus", static_cast<unsigned long>(elapsed_seconds));
+  M5.Display.drawString(elapsed, width_ / 2, height_ / 2 + 26);
 }
 
 void StickDisplay::drawMessage(const char* title, const char* detail, uint32_t elapsed_seconds) {
@@ -59,9 +108,18 @@ void StickDisplay::drawMessage(const char* title, const char* detail, uint32_t e
   M5.Display.drawString(title, width_ / 2, height_ / 2 - 22);
   M5.Display.setTextSize(1);
   M5.Display.drawString(detail, width_ / 2, height_ / 2 + 4);
+  drawMessageElapsed(elapsed_seconds);
+}
+
+void StickDisplay::drawOverlayElapsed(uint32_t elapsed_seconds) {
+  // The counter sits at the right end of the black top strip; clear its box only.
+  M5.Display.fillRect(width_ - 32, 0, 32, 14, TFT_BLACK);
+  M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+  M5.Display.setTextSize(1);
+  M5.Display.setTextDatum(middle_center);
   char elapsed[24];
   snprintf(elapsed, sizeof(elapsed), "%lus", static_cast<unsigned long>(elapsed_seconds));
-  M5.Display.drawString(elapsed, width_ / 2, height_ / 2 + 26);
+  M5.Display.drawString(elapsed, width_ - 14, 7);
 }
 
 void StickDisplay::drawBarsOverlay(const char* title, const char* detail, uint32_t elapsed_seconds) {
@@ -69,11 +127,29 @@ void StickDisplay::drawBarsOverlay(const char* title, const char* detail, uint32
   M5.Display.fillRect(0, 0, width_, 32, TFT_BLACK);
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
   M5.Display.setTextSize(1);
-  char elapsed[24];
-  snprintf(elapsed, sizeof(elapsed), "%lus", static_cast<unsigned long>(elapsed_seconds));
   M5.Display.drawString(title, width_ / 2, 7);
   M5.Display.drawString(detail, width_ / 2, 18);
-  M5.Display.drawString(elapsed, width_ - 14, 7);
+  drawOverlayElapsed(elapsed_seconds);
+}
+
+void StickDisplay::drawElapsedOnly(ClientState state, uint32_t elapsed_seconds) {
+  switch (state) {
+    case ClientState::Requesting:
+    case ClientState::Processing:
+    case ClientState::Downloading:
+      drawOverlayElapsed(elapsed_seconds);
+      break;
+    case ClientState::Connecting:
+      drawMessageElapsed(elapsed_seconds);
+      break;
+    case ClientState::Error:
+      // The error screen shows a counter only when there is no photo behind it.
+      if (!hasPhoto()) drawMessageElapsed(elapsed_seconds);
+      break;
+    case ClientState::Ready:
+    case ClientState::Photo:
+      break;
+  }
 }
 
 void StickDisplay::drawPhoto() {
@@ -116,7 +192,13 @@ void StickDisplay::render(const CaptureClient& client, uint32_t now_ms) {
   const ClientState state = client.state();
   const uint32_t elapsed = client.elapsedSeconds(now_ms);
   const bool ready = client.readyForCapture();
-  if (state == last_state_ && elapsed == last_elapsed_seconds_ && ready == last_ready_) return;
+  // Only the photo screen draws anything that depends on readiness. During a
+  // capture the Pi reports itself busy, which flips `ready`; that must not
+  // trigger a full repaint of the colour bars.
+  const bool ready_matters = state == ClientState::Photo;
+  const bool screen_changed = state != last_state_ || (ready_matters && ready != last_ready_);
+  const bool counter_changed = elapsed != last_elapsed_seconds_;
+  if (!screen_changed && !counter_changed) return;
   if (state != last_state_) {
     Serial.printf("[display] render %s (pi ready=%d, stored photo=%u bytes)\n", clientStateName(state), ready,
                   static_cast<unsigned>(photo_size_));
@@ -124,6 +206,11 @@ void StickDisplay::render(const CaptureClient& client, uint32_t now_ms) {
   last_state_ = state;
   last_elapsed_seconds_ = elapsed;
   last_ready_ = ready;
+  if (!screen_changed) {
+    // Once a second while waiting: repaint the seconds box, nothing else.
+    drawElapsedOnly(state, elapsed);
+    return;
+  }
   switch (state) {
     case ClientState::Ready:
       drawColourBars();
@@ -161,4 +248,6 @@ void StickDisplay::render(const CaptureClient& client, uint32_t now_ms) {
       M5.Display.drawString(client.errorDetail(), width_ / 2, 10);
       break;
   }
+  // Every branch above repainted the full screen, so the badge goes back on top.
+  drawBatteryBadge();
 }

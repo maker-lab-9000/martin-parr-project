@@ -6,8 +6,10 @@
 
 #include <algorithm>
 
+#include "battery_status.h"
 #include "capture_client.h"
 #include "display.h"
+#include "status_fields.h"
 
 // Task 4 injects these build flags or a generated local configuration file.
 // Empty defaults intentionally leave this firmware unable to join a network.
@@ -27,6 +29,8 @@
 namespace {
 CaptureClient capture;
 StickDisplay display;
+BatteryMonitor battery;
+BatteryMonitor pi_battery;   // fed from /v1/status, not from the Stick's PM1
 SemaphoreHandle_t capture_mutex = nullptr;
 SemaphoreHandle_t jpeg_mutex = nullptr;
 TaskHandle_t network_task = nullptr;
@@ -165,6 +169,26 @@ void processWork(const WorkItem& work) {
       last_ready = ready;
       last_active = active;
     }
+    // A stale reading is worse than none: run this for every result, not just
+    // HTTP 200, so a transport failure repaints the badge to "Pi --%" instead
+    // of leaving the last known percentage on screen.
+    const PiBattery pi = status == HTTP_CODE_OK ? parsePiBattery(payload.c_str()) : PiBattery{};
+    const ChargeState charge = pi.known
+        ? (pi.external_power ? ChargeState::Charging : ChargeState::Discharging)
+        : ChargeState::Unknown;
+    static bool pi_seen_once = false;
+    // BatteryMonitor smooths and debounces; the Pi already averages, but the
+    // deadband still stops a one-point wobble from repainting the badge.
+    if (pi_battery.update(pi.known ? pi.percent : -1, charge, millis()) || !pi_seen_once) {
+      pi_seen_once = true;
+      char label[16];
+      snprintf(label, sizeof(label), "Pi %s", pi_battery.label());
+      lockClient();
+      display.setPiBatteryLabel(label, pi_battery.low());
+      unlockClient();
+      STICK_LOG("pi battery %s (known=%d, %s)", pi_battery.label(), pi.known,
+                pi.external_power ? "external power" : "on battery");
+    }
     lockClient();
     if (status == HTTP_CODE_OK) {
       const String instance_id = jsonString(payload, "instance_id");
@@ -266,6 +290,43 @@ void networkWorker(void*) {
 
 void playShutter() { M5.Speaker.tone(1800, 55); }
 
+ChargeState chargerPinReport() {
+  switch (M5.Power.isCharging()) {
+    case m5::Power_Class::is_charging: return ChargeState::Charging;
+    case m5::Power_Class::is_discharging: return ChargeState::Discharging;
+    default: return ChargeState::Unknown;
+  }
+}
+
+// The PM1 reports which rails are powering the board. A reply of `none` means
+// the read failed (a running board always has at least the battery), so that
+// is treated as unknown and the charger pin decides.
+ChargeState chargeState(uint8_t* sources_out) {
+  const uint8_t sources = static_cast<uint8_t>(M5.Power.M5pm1.getPowerSource());
+  *sources_out = sources;
+  const bool known = sources != m5::M5PM1_Class::none;
+  const bool external = (sources & (m5::M5PM1_Class::vin | m5::M5PM1_Class::vinout)) != 0;
+  return chargeStateFrom(known, external, chargerPinReport());
+}
+
+// Reads the PM1 power chip on the monitor's cadence (every 10 s) and repaints
+// the corner badge only when the visible text changes. Runs on the UI task,
+// which owns the display; the I2C reads are short.
+void pollBattery(uint32_t now_ms) {
+  if (!battery.pollDue(now_ms)) return;
+  const int level = static_cast<int>(M5.Power.getBatteryLevel());
+  uint8_t sources = 0;
+  const ChargeState charge = chargeState(&sources);
+  if (battery.update(level, charge, now_ms)) {
+    display.setBatteryLabel(battery.label(), battery.low());
+    Serial.printf("[%lu] battery %s (level %d, %s, power sources 0x%02x, %d mV)\n",
+                  static_cast<unsigned long>(now_ms), battery.label(), level,
+                  charge == ChargeState::Charging ? "external power"
+                  : charge == ChargeState::Discharging ? "on battery" : "power state unknown",
+                  sources, M5.Power.getBatteryVoltage());
+  }
+}
+
 void smokeTest() {
   M5.Display.fillScreen(TFT_BLACK);
   M5.Display.setTextDatum(middle_center);
@@ -307,6 +368,7 @@ void loop() {
     }
     xSemaphoreGive(jpeg_mutex);
   }
+  pollBattery(millis());
   static ClientState last_logged_state = ClientState::Connecting;
   if (capture.state() != last_logged_state) {
     if (capture.state() == ClientState::Error) {
