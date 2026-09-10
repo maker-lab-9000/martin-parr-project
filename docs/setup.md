@@ -210,12 +210,14 @@ curl -s -o /dev/null -w '%{http_code}\n' http://10.42.0.1:8765/v1/status   # 401
 ```
 
 The unit runs `parr-capture --no-preview --remote-listen 0.0.0.0:8765
---artifacts <dir>`. `--no-preview` because there is no screen; `0.0.0.0`
-because the hotspot address may not exist yet at the moment the service
-starts, and binding to all interfaces avoids that race; `Restart=on-failure`
-with `StartLimitIntervalSec=0` because the camera can enumerate after the
-service starts and the retries must never give up. Start-up takes 15 to 25
-seconds on a Pi 3B: OpenCV import, LUT load, camera warm-up.
+--artifacts <dir> --ups x728`. `--no-preview` because there is no screen;
+`0.0.0.0` because the hotspot address may not exist yet at the moment the
+service starts, and binding to all interfaces avoids that race; `--ups x728`
+reads the Geekworm fuel gauge for the Stick's Pi-battery badge and is dropped
+on a Pi without the shield; `Restart=on-failure` with `StartLimitIntervalSec=0`
+because the camera can enumerate after the service starts and the retries
+must never give up. Start-up takes 15 to 25 seconds on a Pi 3B: OpenCV import,
+LUT load, camera warm-up.
 
 For the optional two-screen mode, where a monitor on the Pi also shows each
 photo, the same command with `--show-captures` must be launched from the Pi's
@@ -254,7 +256,9 @@ only way it will ever start.
 
 ### 4.7 UPS (optional)
 
-For a battery-powered handheld, fit the Geekworm X728 UPS shield. Its own
+For a battery-powered handheld, fit the Geekworm X728 UPS shield. `--ups
+x728` on the `parr-capture` service (§4.4) is the only project-side switch;
+everything else needed to read the gauge is Geekworm's own installer. Its own
 guide, [docs/x728-ups.md](x728-ups.md), covers the prerequisites this Pi was
 missing (the header I2C bus is disabled by default), the pin and address map,
 Geekworm's power-button service, the low-battery shutdown policy suitable for

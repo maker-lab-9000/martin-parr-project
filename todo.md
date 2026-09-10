@@ -204,11 +204,11 @@ Cleaner alternative:
       works headless; only the `--show-captures` two-screen mode needs GTK.
 - [ ] Disable Bluetooth (`dtoverlay=disable-bt` in `config.txt`) and consider
       turning HDMI off when headless. Both save power and a little boot time.
-- [ ] Fit a real-time clock. The Pi 3B has none. Offline, with no home network,
+- [x] Fit a real-time clock. The Pi 3B has none. Offline, with no home network,
       the clock will be wrong after every boot and `YYYY-MM-DD/HHMMSS` file
-      names will lie. A DS3231 module costs a few euros; PiSugar and PiJuice
-      HATs include one. Until then, add a monotonic capture counter to the file
-      name as a fallback.
+      names will lie. Solved by the DS1307 RTC on the Geekworm X728 UPS
+      shield (section 4); see `docs/x728-ups.md` for the overlay. (Done
+      2026-09-10.)
 - [ ] Protect the SD card against power loss: put `~/Pictures/parr` on its own
       partition or a USB stick, and consider `overlayroot` for a read-only root
       filesystem. A battery pull mid-write is the most likely way this project
@@ -272,8 +272,11 @@ Cleaner alternative:
       UPS HATs below also provide this.
 - [ ] Shutdown from the Stick: add an authenticated `POST /v1/system/shutdown`
       that runs `systemctl poweroff` through a narrow sudoers rule, and bind it
-      to a long press on the Stick's secondary button. Include Pi battery level
-      in `/v1/status` if the HAT exposes it over I2C, and show it on the Stick.
+      to a long press on the Stick's secondary button.
+- [x] Include Pi battery level in `/v1/status` and show it on the Stick.
+      `parr-capture --ups x728` reads the X728 fuel gauge and publishes
+      `pi_battery` (`percent`, `voltage_mv`, `external_power`); the Stick
+      shows it in a bottom-left badge. (Done 2026-09-10.)
 - [ ] Flash: drive a high-power LED module (or a small ring light) from a GPIO
       through a MOSFET. A strobe cannot sync with a UVC video stream, so use a
       constant "torch" for about 300 to 500 ms: switch on, let auto-exposure
