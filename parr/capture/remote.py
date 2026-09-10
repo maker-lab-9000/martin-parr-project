@@ -204,7 +204,16 @@ class RemoteCaptureServer:
 
     def _status_payload(self) -> dict[str, Any]:
         snapshot = self._controller.snapshot()
-        battery = self._power() if self._power is not None else None
+        battery = None
+        if self._power is not None:
+            try:
+                battery = self._power()
+            except Exception:
+                # Power reader must not take down /v1/status; degrade to null and continue.
+                # The reader is expected to be a cached snapshot, never performing blocking I/O,
+                # so any exception indicates a serious bug in the reader implementation. We still
+                # degrade rather than crash to keep the response reliable for firmware parsing.
+                pass
         return {
             "instance_id": self.instance_id,
             "ready": not snapshot.closed,

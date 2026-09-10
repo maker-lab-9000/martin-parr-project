@@ -232,3 +232,24 @@ def test_status_reports_pi_battery_null_without_a_power_source_or_reading(remote
     finally:
         unknown.close()
         controller.close()
+
+
+def test_status_survives_a_power_reader_that_raises():
+    # The reader is a cached snapshot and should never raise, but a status
+    # endpoint must degrade to pi_battery null rather than drop the response.
+    def broken():
+        raise RuntimeError("gauge exploded")
+
+    session = BlockingSession()
+    controller = CaptureController(session)
+    server = RemoteCaptureServer(controller, "secret-token", ("127.0.0.1", 0), power=broken)
+    server.start()
+    try:
+        status_code, _headers, status = _json(server, "GET", "/v1/status")
+    finally:
+        server.close()
+        controller.close()
+
+    assert status_code == 200
+    assert status["pi_battery"] is None
+    assert status["ready"] is True
