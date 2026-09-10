@@ -252,6 +252,16 @@ You want `parr-ap:wlan0` and `active`. Everything from here on assumes the Pi
 comes back on its own after a power cycle, because in the field that is the
 only way it will ever start.
 
+### 4.7 UPS (optional)
+
+For a battery-powered handheld, fit the Geekworm X728 UPS shield. Its own
+guide, [docs/x728-ups.md](x728-ups.md), covers the prerequisites this Pi was
+missing (the header I2C bus is disabled by default), the pin and address map,
+Geekworm's power-button service, the low-battery shutdown policy suitable for
+a camera, the DS1307 real-time clock that finally gives offline captures the
+right date, and a verification checklist. The plan to show the UPS battery on
+the Stick is `docs/superpowers/plans/2026-09-10-ups-battery-on-stick.md`.
+
 ## 5. StickS3
 
 Last, because it has nothing to show until the Pi is up, and because its

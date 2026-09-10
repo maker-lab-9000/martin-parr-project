@@ -33,6 +33,7 @@ Without `--artifacts`, commands continue to use the untrained starter preset.
 ## Hardware
 - Raspberry Pi 3B, 1GB RAM
 - M5Stack StickS3 (display, trigger)
+- x728 UPS Shield
 - 64GB SD Card
 - Innomaker 1080P USB2.0 UVC Camera, 121° Lens, PS5268 Sensor
 

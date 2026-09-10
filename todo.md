@@ -314,10 +314,14 @@ Rough runtimes at about 4 W average, allowing about 15% conversion loss:
 
 ### Options, in order of recommendation for this project
 
-- [ ] **Geekworm X728 (V2.x) UPS HAT.** Two user-supplied 18650 cells, 5.1 V/3 A
-      output, auto power-on when power is applied, hardware power button, and a
-      GPIO shutdown signal with a Python daemon for safe power-off. Supports the
-      3B. The best fit for a handheld that gets switched off by pulling power.
+- [x] **Geekworm X728 v2.5 UPS shield, chosen and fitted 2026-09-10.** Two
+      user-supplied 18650 cells, 5.1 V at up to 5 A, auto power-on jumper,
+      hardware power button with clean reboot and power-off through GPIO 5/12,
+      software power-off through GPIO 26, power-loss detection on GPIO 6, a
+      MAX17040 fuel gauge at I2C 0x36 and a DS1307 RTC at 0x68. Integration
+      guide: `docs/x728-ups.md`. Correction to the earlier advice below:
+      Geekworm says **do not use cells with built-in protection circuits**;
+      use quality unprotected flat-top cells.
 - [ ] **PiSugar 3 Plus.** 5,000 mAh built-in cell in the full-size Pi
       footprint, RTC included, I2C battery gauge, software power button,
       auto power-on. Neatest package for a 3D-printed case; smaller capacity
@@ -337,8 +341,10 @@ Whatever you choose:
 
 - [ ] Wire a safe-shutdown path (HAT GPIO signal or the GPIO3 button). Never
       rely on cutting power.
-- [ ] Use protected 18650 cells from a reputable brand if you go the UPS HAT
-      route, and keep the cells' rated discharge current well above 3 A.
+- [ ] Use quality 18650 cells from a reputable brand with a rated discharge
+      current well above 3 A. For the X728 specifically, unprotected flat-top
+      cells: Geekworm states that built-in protection circuits trip under the
+      shield's charge and discharge currents.
 - [ ] Optional later step: a Pi Zero 2 W has the same CPU family at lower clock
       and roughly halves the power draw, but only 512 MB RAM. Test 1080p grading
       memory headroom before switching.
