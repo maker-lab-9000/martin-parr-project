@@ -53,8 +53,8 @@ On first flash, verify physical hardware before enabling network credentials:
 ## Battery indicator
 
 The bottom-right corner of every screen shows the Stick's own battery as a
-small badge: `87%` on battery, `87%+` while external power is attached over
-USB, `--%` when the power chip cannot report a level. It turns red at 15% or
+small badge prefixed `S3`: `S3 87%` on battery, `S3 87%+` while external power
+is attached over USB, `S3 --%` when the power chip cannot report a level. It turns red at 15% or
 below on battery. The READY caption is centred in the space left of the badge.
 
 The level comes from M5Unified's `M5.Power.getBatteryLevel()`, which on the
