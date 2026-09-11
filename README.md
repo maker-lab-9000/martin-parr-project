@@ -181,6 +181,128 @@ composition, focus or lighting geometry. The dated reports in `docs/` record
 what past runs produced; `todo.md` section 1 records what is needed for better
 results.
 
+## How the colour model works
+
+There is no neural network in this project. The "model" is a 33 × 33 × 33
+colour lookup table, the same `.cube` format that DaVinci Resolve or Photoshop
+would open, fitted with classical colour statistics: distribution matching,
+regularised least squares and a handful of safety checks. That choice is
+deliberate. The training data is a few hundred images with no pairs between
+camera frames and reference photographs, and the result has to run on a
+Raspberry Pi 3B with no machine-learning runtime installed.
+
+### At capture time, on the Pi
+
+Every graded frame goes through three steps, in a fixed order, in
+`parr/pipeline.py`:
+
+1. **Normalisation** (`parr/normalize.py`). Per-frame white balance and an
+   exposure or levels correction, computed in linear light and applied to
+   the luma channel only, so contrast changes do not inflate saturation. It
+   compiles into three 256-entry tables plus one for tone, applied with
+   OpenCV's `LUT` and two `cvtColor` calls: about 100 ms for 1080p on the Pi.
+   The same code, in floating point, prepared every training image, so the LUT
+   sees the input distribution it was fitted on.
+2. **The 3D LUT** (`parr/lut.py`). Trilinear interpolation over the 35,937
+   nodes, executed by Pillow's `ImageFilter.Color3DLUT` in C with 16-bit fixed
+   point. A NumPy reference implementation exists for tests and the trainer.
+3. **Grain** (`parr/grain.py`). Gaussian noise on luminance only, blurred by
+   `blur_sigma` so it clumps like film rather than looking like sensor noise,
+   scaled by `4Y(1 − Y)` so it vanishes in deep shadow and blown highlights.
+   The seed is recorded per capture, so any graded file can be regenerated
+   from its original.
+
+### At training time, on the Mac
+
+`parr-train` (`parr/train/`) turns two folders of images into that LUT:
+
+1. **Corpus building** (`dataset.py`). Each corpus is split **by image**
+   before any pixel is sampled, 20 % held out. Every image is oriented from
+   EXIF, colour-managed to sRGB from its embedded ICC profile, cropped 6 % per
+   edge, downscaled to 512 px, normalised, and sampled: 3000 pixels per image,
+   capped at 400,000 per pool, kept only where Oklab lightness lies in
+   (0.02, 0.98).
+2. **Oklab** (`color.py`). All statistics are computed in Oklab, Björn
+   Ottosson's perceptual space, so "match the distribution" means "match what
+   the eye sees" and hue angles behave in the blues.
+3. **Hue reweighting** (`transport.py`). The two corpora show different
+   subjects. Target pixels are reweighted across 24 hue bins so the target's
+   hue histogram matches the source's, which removes the largest content bias.
+   Weights are clipped to 0.2 to 5, so this is a heuristic, and the residual
+   is published in the report.
+4. **Iterative Distribution Transfer** (Pitié, Kokaram and Dahyot, 2005).
+   Forty rounds of: pick a random 3D rotation, project both pixel clouds onto
+   its axes, match the source's marginal to the weighted target's along each
+   axis by quantile mapping, rotate back. Each source pixel ends up with a
+   partner colour in the target distribution. `--strength` blends between the
+   original and the moved colour, and may extrapolate up to 2.
+5. **LUT fit** (`lutfit.py`). A trilinear LUT is linear in its node values, so
+   fitting is ordinary least squares with a sparse design matrix of eight
+   non-zeros per pixel. Two regularisers are added: a second-difference
+   smoothness term along all three grid axes, and an identity term that holds
+   nodes no source pixel ever touched in place (71 % of the cube, in the first
+   real fit). The normal equations are solved with SciPy's conjugate-gradient
+   solver and a Jacobi preconditioner. A neutral-axis cap limits tint on greys,
+   and monotonicity is then enforced exactly with SciPy's isotonic regression.
+6. **Evaluation** (`evaluate.py`). The headline metric is a **sliced
+   Wasserstein distance** from the graded held-out source pixels to the target
+   cloud, using 256 fixed random projections and fixed samples so "before" and
+   "after" differ only by the LUT. It is repeated over five seeds and the
+   spread reported, so an improvement can be compared against noise. Five
+   gates then pass or fail with thresholds fixed before any tuning:
+   improvement above three times the seed spread, grey axis monotone, each
+   channel monotone, neutral input staying neutral, and the cube interior off
+   the gamut boundary.
+7. **Report and publish** (`report.py`, `artifacts.py`). Contact sheets of
+   held-out frames, tone ramps, normalisation diagnostics and `metrics.json`,
+   then an atomic swap of the finished artifact into place so a crash can never
+   leave a new LUT beside old parameters.
+
+The full procedure, from an empty `data/` folder to a verified deployment, is
+[the training guide](docs/training.md).
+
+### Libraries
+
+| Library | Where | What it does here |
+|---|---|---|
+| NumPy | everywhere | All array maths: colour conversions, sampling, transport, evaluation |
+| Pillow | runtime and trainer | Image I/O, EXIF orientation, ICC conversion (`ImageCms`), the `Color3DLUT` filter, `.cube` round-trips, contact sheets |
+| OpenCV (`cv2`) | runtime and trainer | Colour-space conversions, the 256-entry `LUT` tables, Gaussian blur for grain, resizing, and V4L2 camera capture on the Pi |
+| SciPy | trainer only | Sparse matrices, the conjugate-gradient solver, isotonic regression |
+| requests, tqdm | `parr-fetch` only | Wikimedia Commons downloads with licence checks |
+| smbus2, gpiozero | Pi only, `--ups x728` | Reading the UPS fuel gauge over I2C and the power-loss pin |
+| Paramiko | Mac only, deploy script | SSH to the Pi with a reject-unknown-hosts policy |
+| pytest, ruff, build | development | Tests, lint, wheel build |
+
+Not used: PyTorch, TensorFlow, scikit-learn, or any GPU. Nothing is downloaded
+at runtime and no data leaves the machine.
+
+### Dependencies by role
+
+`pyproject.toml` keeps the base install small and puts the rest behind extras:
+
+| Install | Pulls in | Who needs it |
+|---|---|---|
+| `pip install -e .` | NumPy, Pillow | The Pi, which gets OpenCV from apt |
+| `.[opencv]` | + `opencv-python` | Any non-Pi machine that runs the pipeline |
+| `.[train]` | + SciPy, requests, tqdm, `opencv-python` | The Mac, for `parr-train` and `parr-fetch` |
+| `.[deploy]` | + Paramiko | The Mac, for `scripts/deploy_remote.py` |
+| `.[dev]` | + pytest, ruff, build, `opencv-python` | Anyone running the tests |
+
+On the Pi, `python3-opencv`, `python3-numpy` and `python3-pil` come from apt
+and the venv is created with `--system-site-packages`, because the apt OpenCV
+is built with GTK for the two-screen mode and the pip wheel is not; `smbus2`
+and `gpiozero` are preinstalled on Raspberry Pi OS. OpenCV is imported through
+one guard, `parr/_cv2.py`, which explains the right fix when it is missing.
+
+### What a LUT cannot do
+
+It maps each input colour to one output colour, everywhere in the frame. It
+cannot add flash lighting, local contrast, sharpness or depth, and it cannot
+invent colour: an unlit grey room comes out grey through every LUT, as measured
+in `todo.md` section 1. Those limits, and the roadmap for better fits, are the
+subject of the next section and of the training guide.
+
 ## The look and its limits
 
 Parr's [own FAQ](https://martinparr.com/faq/) describes consumer films including
