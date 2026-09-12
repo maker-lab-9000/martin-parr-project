@@ -153,6 +153,9 @@ compresses out-of-gamut chroma, and adds subtle grain (`0.004`). Rebuild it with
 .venv/bin/parr-preset --out artifacts/starter-v1
 ```
 
+Pass `--highlights 0.6` to hold coloured highlights back from clipping; `0`
+(the default) is the current look.
+
 ## Training a reference-derived look
 
 Training is optional; the camera works with the bundled starter.

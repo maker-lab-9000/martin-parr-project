@@ -10,6 +10,7 @@ import numpy as np
 from .artifacts import write_artifact
 from .color import oklab_to_linear, oklab_to_srgb, srgb_to_oklab
 from .grain import GrainParams
+from .highlight import protect_highlights
 from .lut import LUT3D
 from .normalize import NormalizeParams
 
@@ -44,13 +45,15 @@ def starter_lut(size: int = 33) -> LUT3D:
     return LUT3D(np.clip(neutral_tone * (1 - blend) + graded * blend, 0, 1).astype(np.float32))
 
 
-def write_starter(out: str | Path) -> Path:
+def write_starter(out: str | Path, highlights: float = 0.0) -> Path:
+    lut = protect_highlights(starter_lut(), highlights)
     return write_artifact(
-        out, starter_lut(), NormalizeParams(levels=True), GrainParams(),
+        out, lut, NormalizeParams(levels=True), GrainParams(),
         training={
             "kind": "handcrafted-preset",
             "trained": False,
             "preset_version": 1,
+            "highlights": highlights,
             "note": "Untrained saturated color-negative starter. No Martin Parr images used. "
                     "Not a calibrated film-stock or photographer emulation.",
         },
@@ -60,10 +63,18 @@ def write_starter(out: str | Path) -> Path:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, prog="parr-preset")
     parser.add_argument("--out", type=Path, default=Path("artifacts/starter"))
+    parser.add_argument(
+        "--highlights", type=float, default=0.0,
+        help="protect coloured highlights: 0 = off, up to 1 removes the tone lift at the top",
+    )
     args = parser.parse_args(argv)
     if args.out.exists():
         parser.error(f"destination already exists: {args.out}; choose a new directory")
-    print(f"Wrote untrained starter preset to {write_starter(args.out)}")
+    try:
+        destination = write_starter(args.out, args.highlights)
+    except ValueError as exc:
+        parser.error(str(exc))
+    print(f"Wrote untrained starter preset to {destination}")
     return 0
 
 

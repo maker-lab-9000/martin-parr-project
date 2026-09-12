@@ -48,12 +48,13 @@ from .. import __version__
 from ..artifacts import publish, write_artifact
 from ..color import oklab_to_srgb
 from ..grain import GrainParams
+from ..highlight import protect_highlights
 from ..imageio import list_images
 from ..lut import LUT3D
 from ..normalize import NormalizeParams
 from .dataset import CorpusTooSmall, PixelPool, SampleConfig, build_corpus
 from .evaluate import check_gates, evaluate
-from .lutfit import fit_lut
+from .lutfit import enforce_grey_axis, enforce_monotone, fit_lut
 from .report import write_report
 from .transport import hue_weights, iterative_distribution_transfer
 
@@ -72,6 +73,7 @@ class FitConfig:
     strength: float = 1.0
     seed: int = 0
     neutral_axis_cap: float = 0.005   # halved from 0.01: 0.01 left indoor whites visibly cool
+    highlights: float = 0.0
 
     def __post_init__(self) -> None:
         if not 2 <= self.lut_size <= 65:
@@ -84,6 +86,10 @@ class FitConfig:
             raise ValueError(f"chroma_floor must be in [0, 0.5), got {self.chroma_floor}")
         if self.neutral_axis_cap < 0:
             raise ValueError(f"neutral_axis_cap must be non-negative, got {self.neutral_axis_cap}")
+        if not math.isfinite(self.highlights) or not 0.0 <= self.highlights <= 1.0:
+            raise ValueError(
+                f"highlights must be finite and in [0, 1], got {self.highlights!r}"
+            )
         for name in ("lambda_smooth", "lambda_identity"):
             value = getattr(self, name)
             if not math.isfinite(value) or value < 0:
@@ -130,6 +136,11 @@ def fit(
         lambda_identity=cfg.lambda_identity,
         neutral_axis_cap=cfg.neutral_axis_cap,
     )
+    if cfg.highlights > 0.0:
+        say(f"protecting highlights at {cfg.highlights}")
+        lut = enforce_monotone(
+            enforce_grey_axis(enforce_monotone(protect_highlights(lut, cfg.highlights)))
+        )
     return FitResult(lut, partner_lab.astype(np.float32), weights)
 
 
@@ -301,6 +312,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lambda-identity", type=float, default=fd.lambda_identity)
     parser.add_argument("--neutral-axis-cap", type=float, default=fd.neutral_axis_cap,
                         help="max Oklab chroma the LUT may give a neutral input; 0 = fully neutral")
+    parser.add_argument(
+        "--highlights", type=float, default=fd.highlights,
+        help="protect coloured highlights: 0 = off, up to 1 removes the top tone lift",
+    )
     parser.add_argument("--val-fraction", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--grain-strength", type=float, default=GrainParams().strength)
@@ -337,7 +352,7 @@ def main(argv: list[str] | None = None) -> int:
             lut_size=args.lut_size, iterations=args.iterations, hue_bins=args.hue_bins,
             lambda_smooth=args.lambda_smooth, lambda_identity=args.lambda_identity,
             neutral_axis_cap=args.neutral_axis_cap,
-            strength=args.strength, seed=args.seed,
+            strength=args.strength, seed=args.seed, highlights=args.highlights,
         )
         sample_cfg = SampleConfig(
             max_side=args.max_side, pixels_per_image=args.pixels_per_image,

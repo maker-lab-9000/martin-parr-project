@@ -296,6 +296,7 @@ The knobs:
 | `--lambda-smooth` | 0.01 | Higher = smoother LUT, less banding, less detail in the grade. |
 | `--lambda-identity` | 1.0 | Higher = untouched cube regions stay closer to identity. Protects greys and rare colours. |
 | `--neutral-axis-cap` | 0.005 | Max tint allowed on neutral input; 0 forces greys fully neutral. Not a hard bound after the later projections; check `neutral_axis_max_chroma`. |
+| `--highlights` | 0.0 | Protects coloured highlights by reducing the LUT's tone lift at the top of the range; 0 is off. Applied after the fit and before the final monotone projection. |
 | `--hue-bins` | 24 | Resolution of the content-bias reweighting. |
 | `--iterations` | 40 | Transport rounds. More is slower and rarely changes the result. |
 | `--target-levels` | off | Stretch reference black and white points. For flat scans only. |
