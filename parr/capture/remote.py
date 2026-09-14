@@ -8,6 +8,7 @@ import socket
 import threading
 import uuid
 from collections import OrderedDict
+from collections.abc import Callable
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
@@ -15,6 +16,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from .controller import CaptureController, JobSnapshot
+from .power import PowerStatus
 from .thumbnail import ThumbnailError, fitted_jpeg
 
 MAX_BODY_BYTES = 8 * 1024
@@ -55,11 +57,15 @@ class RemoteCaptureServer:
         controller: CaptureController,
         token: str,
         listen: tuple[str, int],
+        power: Callable[[], PowerStatus | None] | None = None,
     ) -> None:
         if not token:
             raise ValueError("a non-empty remote token is required")
         self._controller = controller
         self._token = token
+        # Optional UPS reader. Called on the request thread, so it must be a
+        # cheap copy of a cached value (PowerMonitor.snapshot), never an I2C read.
+        self._power = power
         self.instance_id = str(uuid.uuid4())
         self._jobs: OrderedDict[str, None] = OrderedDict()
         self._lock = threading.Lock()
@@ -198,12 +204,30 @@ class RemoteCaptureServer:
 
     def _status_payload(self) -> dict[str, Any]:
         snapshot = self._controller.snapshot()
+        battery = None
+        if self._power is not None:
+            try:
+                battery = self._power()
+            except Exception:
+                # Power reader must not take down /v1/status; degrade to null and continue.
+                # The reader is expected to be a cached snapshot, never performing blocking I/O,
+                # so any exception indicates a serious bug in the reader implementation. We still
+                # degrade rather than crash to keep the response reliable for firmware parsing.
+                pass
         return {
             "instance_id": self.instance_id,
             "ready": not snapshot.closed,
             "active_capture_id": snapshot.active_job.request_id if snapshot.active_job else None,
             "last_completed_id": (
                 snapshot.last_completed_job.request_id if snapshot.last_completed_job else None
+            ),
+            "pi_battery": (
+                {
+                    "percent": battery.percent,
+                    "voltage_mv": battery.voltage_mv,
+                    "external_power": battery.external_power,
+                }
+                if battery is not None else None
             ),
         }
 

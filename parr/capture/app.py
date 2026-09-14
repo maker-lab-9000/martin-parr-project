@@ -66,6 +66,7 @@ from ..pipeline import Pipeline
 from .camera import Camera, CameraError, FakeCamera, V4L2Camera
 from .controller import CaptureController, JobSnapshot
 from .picamera import DEFAULT_TUNING_FILE, Picamera2Camera
+from .power import UPS_CHOICES, PowerError, build_ups
 from .remote import RemoteCaptureServer
 
 cv2 = require_cv2()
@@ -484,6 +485,10 @@ def main(argv: list[str] | None = None) -> int:
         "--remote-listen", type=_remote_listen, metavar="HOST:PORT",
         help="serve the authenticated remote capture API (requires PARR_REMOTE_TOKEN)",
     )
+    parser.add_argument(
+        "--ups", choices=UPS_CHOICES, default="none",
+        help="UPS to read the Pi's battery from and publish in /v1/status (default: none)",
+    )
     args = parser.parse_args(argv)
 
     if args.camera == "picamera2" and args.device is not None:
@@ -496,6 +501,12 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --remote-listen requires PARR_REMOTE_TOKEN", file=sys.stderr)
         return 2
 
+    power = None
+    try:
+        power = build_ups(args.ups)
+    except PowerError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     try:
         pipeline = Pipeline(Artifacts.resolve(args.artifacts))
     except ArtifactsError as exc:
@@ -529,10 +540,16 @@ def main(argv: list[str] | None = None) -> int:
     controller: CaptureController | None = None
     remote: RemoteCaptureServer | None = None
     try:
+        if power is not None:
+            power.start()
+            print(f"Reading the {args.ups} UPS every 10 s.")
         if args.remote_listen:
             controller = CaptureController(session)
             try:
-                remote = RemoteCaptureServer(controller, remote_token, args.remote_listen)
+                remote = RemoteCaptureServer(
+                    controller, remote_token, args.remote_listen,
+                    power=power.snapshot if power else None,
+                )
                 remote.start()
             except OSError as exc:
                 print(f"error: could not start remote listener: {exc}", file=sys.stderr)
@@ -592,6 +609,8 @@ def main(argv: list[str] | None = None) -> int:
             run_headless_loop(session, keys.read)
         return 0
     finally:
+        if power is not None:
+            power.close()
         if remote is not None:
             remote.close()
         if controller is not None:
