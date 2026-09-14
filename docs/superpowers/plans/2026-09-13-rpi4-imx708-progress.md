@@ -84,3 +84,51 @@ Implementation plan: [Picamera2 acquisition](2026-09-14-picamera2-acquisition.md
 - Hardware checklist: [Picamera2 bring-up](../../picamera2-bringup.md). Hardware identity, SSH access and native capture acceptance remain pending. Existing deploy script/service examples omit backend selection; migration must set the intended backend/tuning explicitly.
 
 - CLI selection checks: **63 app tests passed**. Explicit backend/tuning, automatic selection, fake bypass and dependency/conflict errors verified. Native session/thumbnail acceptance test and final suite remain in progress.
+
+## 2026-09-14 — Phase 1 hardware acceptance on the Pi 4 (192.168.178.87)
+
+Hardware confirmed and Phase 1 accepted on the real board.
+
+- **Board / stack:** Raspberry Pi 4 Model B Rev 1.4, 8 GB, Raspberry Pi OS Trixie,
+  kernel 6.18; Picamera2 0.3.37, libcamera 0.7.2 from apt.
+- **Camera:** `imx708_wide` — the Wide variant, so `imx708_wide.json` is correct.
+  Native 4608 × 2592, 10-bit `SBGGR10_CSI2P` (not 12-bit; the backend reads bit
+  depth from the live config). `config.txt` already carries `dtoverlay=imx708`
+  with `imx477` commented; RTC overlay and I2C present.
+- **Capture test:** a direct `Picamera2Camera` + `CaptureSession` run saved two
+  native 4608 × 2592 frames. `captures.jsonl` recorded `frame_source=picamera2`,
+  `sensor_mode=4608x2592 SBGGR10_CSI2P`, `bit_depth=10`, `tuning_file`, and a
+  measured `fps` of 14.35 from `FrameDuration`. The graded JPEG was pulled back
+  and inspected: correct colour, red/blue not swapped, sharp, starter look
+  applied. Colour management (BGR→RGB) verified on real pixels.
+- **Phase 4 signal (informal):** at full 4608 × 2592 the pipeline took about
+  3.4 s per frame and shutter-to-saved about 4.5 s on the Pi 4. This informs the
+  Phase 4 full-res-versus-binned decision; a formal benchmark is still separate.
+
+### Branch-lineage fix
+
+`plan/rpi4-imx708-camera` was cut from `main` before the UPS battery work merged
+(PR #9/#11), so it had the Picamera2 backend but not the `--ups` flag. The
+installed unit (from the UPS deployment) passes `--ups x728`, so the first deploy
+crash-looped with `unrecognized arguments: --ups x728`. Fixed by merging
+`origin/main` into the branch (one import conflict in `parr/capture/app.py`,
+resolved to keep both the `--camera` and `--ups` wiring). Full suite 475 passed,
+ruff clean.
+
+### Service state
+
+The installed unit now runs `... --ups x728 --camera picamera2 --tuning-file
+imx708_wide.json`. After the merge was pulled and the service restarted:
+`active/running`, `NRestarts=0`, listening on `0.0.0.0:8765`, `/v1/status`
+returns `ready:true` with `pi_battery` present and 401 without the token. The Pi
+is on branch `plan/rpi4-imx708-camera`; it should return to `main` once this
+branch merges.
+
+### Still pending (manual / next)
+
+- End-to-end Stick capture over the Pi's hotspot (this Pi was reached on the home
+  network; the hotspot path was not exercised here).
+- Autofocus control, per-shot AE/AWB metadata and original/DNG output are Phases
+  2–3, not in this backend.
+- A dedicated Phase 4 benchmark, and the pilot corpus (20–30 originals) once
+  Phases 2–3 land.
