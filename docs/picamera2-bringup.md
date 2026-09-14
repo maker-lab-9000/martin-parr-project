@@ -78,7 +78,53 @@ Autofocus control, per-shot exposure/AWB metadata and retained request saves
 belong to Phases 2–3. Do not label these Phase 1 files as the production training
 corpus before the capture pipeline and source/runtime input boundary are fixed.
 
-## 4. Record acceptance and collect the pilot later
+## 4. Phase 2/3 capture test: metadata, autofocus, original + DNG
+
+Phases 2 and 3 are implemented and covered by fake-backed tests (see
+`tests/test_picamera.py`); the hardware acceptance below is still pending.
+
+The Picamera2 backend now defaults to continuous autofocus and auto
+exposure/AWB (there is no flash mode, so both stay auto unless a controlled
+shoot needs otherwise), and every capture writes three files instead of one:
+
+```sh
+.venv/bin/parr-capture --camera picamera2 --tuning-file imx708_wide.json \
+  --no-preview --out ~/Pictures/parr-imx708-phase23
+```
+
+- `_original.jpg`: the ISP's own 8-bit rendering, as before.
+- `<stem>.dng`: a raw sidecar saved from the same capture request, enabled by
+  default. Pass `--no-dng` to skip it for long sessions; it costs storage
+  (roughly 28 MB per shot at 4608 × 2592 10-bit raw, versus a few MB for the
+  two JPEGs). With `--no-dng`, `Frame.dng` is never populated, so — since
+  Picamera2 has no separate camera JPEG either — the original falls back to
+  `_ungraded.jpg` rather than `_original.jpg` (the same "neither JPEG nor DNG"
+  rule the module docstring in `parr/capture/app.py` describes).
+- `_parr.jpg`: the graded output, as before.
+
+`captures.jsonl` gains two keys when the frame carries them: `camera_metadata`
+(a filtered, JSON-serialisable subset of the request's metadata — for
+example `ExposureTime`, `AnalogueGain`, `Lux`, `LensPosition`, `AfState`) and
+`dng` (the sidecar's filename, only present when one was written).
+
+For a controlled reference-matching shoot, AE and AWB can be locked instead of
+left auto: `--ae-lock` freezes exposure, `--awb-lock` freezes white balance,
+and `--colour-gains R,B` fixes explicit gains (which also disables AWB).
+`--autofocus {continuous,auto,manual}` and `--af-range {normal,macro,full}`
+control the lens; the default is continuous AF at normal range.
+
+Confirm on real hardware:
+
+- The DNG opens in darktable or RawTherapee with correct colour (not a
+  garbled Bayer pattern or an inverted channel order).
+- Repeated captures at different subject distances move `LensPosition` in
+  `camera_metadata`, and `AfState` reflects the autofocus state machine
+  (searching vs. focused).
+- `ExposureTime`, `AnalogueGain` and `Lux` in `camera_metadata` are plausible
+  for the scene, and `--no-dng` reliably removes the `.dng` file without
+  otherwise changing behaviour.
+
+## 5. Record acceptance and collect the pilot later
 
 Append the actual board/OS/packages, camera product, tuning, command, saved
 sizes, colour observation, repeated-capture result and remaining failures to

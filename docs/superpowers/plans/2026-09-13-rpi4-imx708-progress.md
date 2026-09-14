@@ -9,8 +9,8 @@ Dependency review: 2026-09-13, following highlight-protection commits
 | Phase | Status | Next prerequisite |
 | --- | --- | --- |
 | 1: Picamera2 acquisition | Implementation in progress | Task-by-task plan; fake-request tests can start without photos. Hardware required for acceptance. |
-| 2: capture controls and metadata | Not implemented | Phase 1 acquisition and hardware control tests. |
-| 3: original / DNG / graded output | Not implemented | Request ownership and source/runtime pixel boundary settled with Phases 1–2. |
+| 2: capture controls and metadata | Implemented; fake-backed tests pass | Hardware acceptance: autofocus (`LensPosition`, `AfState`) and metadata verified on the sensor. |
+| 3: original / DNG / graded output | Implemented; fake-backed tests pass | Hardware acceptance: DNG opens correctly in darktable/RawTherapee. |
 | 4: benchmark | Not recorded for this roadmap | Synthetic benchmark can start now; real Pi 4 capture and DNG timings follow 1–3. |
 | F: lighting experiment | Not recorded for IMX708 | Stable originals, pilot captures and paired lighting test. |
 | 6: gentler normalisation | Not implemented | Code can start independently; choose parameters on IMX708 pilot photos before fitting. |
@@ -132,3 +132,49 @@ branch merges.
   2–3, not in this backend.
 - A dedicated Phase 4 benchmark, and the pilot corpus (20–30 originals) once
   Phases 2–3 land.
+
+## 2026-09-14 — Phases 2 and 3 implemented (fake-backed tests only)
+
+Plan: [IMX708 Autofocus, Metadata and Original/DNG Output](2026-09-14-imx708-af-metadata-dng.md),
+Tasks 1–4 on `plan/imx708-af-metadata-dng`.
+
+- **Phase 2 (autofocus, AE/AWB control, metadata):** `Picamera2Camera` neutralises
+  Sharpness/Contrast/Saturation and noise reduction, defaults to continuous
+  autofocus at normal range, and leaves AE/AWB auto (no flash, per the 2026-09-14
+  decision recorded in the implementation plan); `--ae-lock`, `--awb-lock` and
+  `--colour-gains R,B` are available for controlled shoots. Each `read()` filters
+  the request's metadata to a fixed, JSON-serialisable key set
+  (`ExposureTime`, `AnalogueGain`, `DigitalGain`, `ColourGains`,
+  `ColourTemperature`, `Lux`, `LensPosition`, `AfState`, `FocusFoM`,
+  `FrameDuration`, `SensorTimestamp`) and drops the rest.
+- **Phase 3 (original / DNG / graded output):** `CaptureSession.capture()` names
+  the Picamera2 original `_original.jpg`, writes a `<stem>.dng` sidecar from the
+  same request when `save_dng` is enabled, and records `camera_metadata` and
+  `dng` in `captures.jsonl`. `--no-dng` disables the sidecar on both the backend
+  and the session; with no DNG and no separate camera JPEG, the original then
+  falls back to `_ungraded.jpg`, matching the existing "neither JPEG nor DNG" rule.
+- **Task 4 (this entry):** added an end-to-end fake-backed test in
+  `tests/test_picamera.py` that drives the real `Picamera2Camera` (via the
+  injected fake `picamera2`/`libcamera` modules and a fake capture request)
+  through a real `CaptureSession`, asserting the day folder holds
+  `*_original.jpg`, `*.dng` and `*_parr.jpg`; that the last `captures.jsonl`
+  record carries `frame_source == "picamera2"`, `camera_metadata`, `dng` and the
+  sensor fields; and that `fitted_jpeg` on the graded file returns a
+  240 × 135 thumbnail. A second test drives `Picamera2Camera(save_dng=False)`
+  (the `--no-dng` path) through the same session and confirms no `.dng` file,
+  no `dng` key, zero calls to the fake request's `save_dng`, and — as an
+  initially-surprising but correct consequence of the existing naming rule —
+  the original is saved as `_ungraded.jpg`, not `_original.jpg`. Full suite:
+  522 passed, 1 deselected (`-m 'not slow'`); Ruff clean. Documentation updated:
+  `docs/picamera2-bringup.md`, `docs/setup.md`, `README.md`.
+- **Hardware acceptance still pending** (fake-backed tests are not hardware
+  acceptance): the DNG opens correctly in darktable/RawTherapee with correct
+  colour; autofocus moves `LensPosition` and `AfState` is verified across
+  subject distances on the sensor; `ExposureTime`, `AnalogueGain` and `Lux` are
+  plausible for the scene; and the API-verification checklist from the
+  implementation plan — `get_metadata()` key names actually present on this
+  sensor, whether `save_dng(path)` also accepts a file object, presence of
+  `AfModeEnum`/`AfRangeEnum`/`autofocus_cycle()` and whether the Wide module
+  reports `AfState` and moves `LensPosition`, and whether the
+  `NoiseReductionMode` enum path exists on the installed libcamera (0.7.2) or
+  must be skipped.

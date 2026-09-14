@@ -784,6 +784,12 @@ def test_native_capture_session_saves_full_size_outputs_metadata_and_thumbnail(
         assert ungraded.size == NATIVE_SIZE
         assert graded.size == NATIVE_SIZE
 
+    day_dir = result.original.parent
+    assert [p.name for p in day_dir.glob("*_original.jpg")] == [result.original.name]
+    assert [p.name for p in day_dir.glob("*_parr.jpg")] == [result.parr.name]
+    dng_names = [p.name for p in day_dir.glob("*.dng")]
+    assert len(dng_names) == 1
+
     record_path, = (tmp_path / "captures").rglob("captures.jsonl")
     record = json.loads(record_path.read_text())
     assert record["frame_source"] == "picamera2"
@@ -795,8 +801,57 @@ def test_native_capture_session_saves_full_size_outputs_metadata_and_thumbnail(
     assert record["tuning_file"] == "delivered-variant.json"
     assert record["camera_metadata"] == {"FrameDuration": 40_000}
     assert record["dng"] == result.original.name.replace("_original.jpg", ".dng")
-    dng_path = result.original.parent / record["dng"]
+    assert record["dng"] == dng_names[0]
+    dng_path = day_dir / record["dng"]
     assert dng_path.read_bytes()[:4] == b"II*\x00"
 
     with Image.open(io.BytesIO(fitted_jpeg(result.parr))) as thumbnail:
         assert thumbnail.size == (240, 135)
+
+
+def test_native_capture_session_omits_dng_when_backend_disables_it(
+    install_picamera, tmp_path,
+):
+    """A ``--no-dng`` run: Picamera2Camera(save_dng=False) never asks the request
+    to extract a DNG, so the frame has neither a camera JPEG nor a DNG, and the
+    original is named ``_ungraded.jpg`` (not ``_original.jpg``); see the
+    "_ungraded.jpg" rule in the module docstring in parr/capture/app.py.
+    """
+    bgr = np.broadcast_to(
+        np.array([[[25, 110, 220]]], dtype=np.uint8),
+        (NATIVE_SIZE[1], NATIVE_SIZE[0], 3),
+    )
+    request = FakeRequest(bgr, metadata={"FrameDuration": 40_000})
+    install_picamera(request=request)
+    camera = Picamera2Camera("delivered-variant.json", save_dng=False)
+
+    artifact_dir = tmp_path / "artifact"
+    write_artifact(
+        artifact_dir,
+        LUT3D.identity(2),
+        NormalizeParams(white_balance=False),
+        GrainParams(enabled=False),
+    )
+    session = CaptureSession(
+        camera,
+        Pipeline(Artifacts.load(artifact_dir)),
+        tmp_path / "captures",
+        seed_rng=np.random.default_rng(0),
+    )
+    try:
+        result = session.capture()
+    finally:
+        camera.close()
+
+    assert request.save_dng_calls == 0
+    assert result.original.name.endswith("_ungraded.jpg")
+
+    day_dir = result.original.parent
+    assert not list(day_dir.glob("*.dng"))
+    assert [p.name for p in day_dir.glob("*_ungraded.jpg")] == [result.original.name]
+    assert [p.name for p in day_dir.glob("*_parr.jpg")] == [result.parr.name]
+
+    record_path, = (tmp_path / "captures").rglob("captures.jsonl")
+    record = json.loads(record_path.read_text())
+    assert "dng" not in record
+    assert record["camera_metadata"] == {"FrameDuration": 40_000}

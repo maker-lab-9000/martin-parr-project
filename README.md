@@ -167,6 +167,19 @@ metadata, is in [the Picamera2 bring-up checklist](docs/picamera2-bringup.md).
 An installed Picamera2 changes the default backend, so a Pi still on the USB
 camera should pass `--camera v4l2` explicitly until it is migrated.
 
+On Picamera2, a capture saves three files instead of two: `_original.jpg` (the
+ISP's own rendering, no separate camera JPEG exists), a `<stem>.dng` raw
+sidecar from the same request (on by default, roughly 28 MB per shot; skip it
+with `--no-dng` for long sessions — with no DNG and no camera JPEG, the
+original then falls back to `_ungraded.jpg`), and the usual `_parr.jpg`.
+`captures.jsonl` adds `camera_metadata` (a filtered, JSON-safe subset such as
+`ExposureTime`, `AnalogueGain`, `Lux`, `LensPosition`, `AfState`) and `dng`
+(the sidecar filename) when present. Autofocus defaults to continuous AF at
+normal range (`--autofocus {continuous,auto,manual}`, `--af-range
+{normal,macro,full}`); since there is no flash, exposure and white balance
+stay auto by default too — `--ae-lock`, `--awb-lock` and `--colour-gains R,B`
+are for optional controlled, reference-matching shoots only.
+
 The preset increases midtone color and contrast with a smooth tone curve,
 compresses out-of-gamut chroma, and adds subtle grain (`0.004`). Rebuild it with:
 
