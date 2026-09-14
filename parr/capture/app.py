@@ -26,18 +26,22 @@ so the saved original and the graded image always come from one acquisition.
 
 Output layout
 -------------
-``OUT/YYYY-MM-DD/HHMMSS_original.jpg`` holds the camera's own JPEG bytes,
-written verbatim. When the camera could not supply them the file is named
-``_ungraded.jpg`` instead, so the name never overstates the contents.
-``HHMMSS_parr.jpg`` is the graded version, and one JSON line per
+``OUT/YYYY-MM-DD/HHMMSS_original.jpg`` holds the original for the shot.
+For the USB camera (V4L2) it is the camera's own JPEG bytes, written verbatim.
+For Picamera2, which has no separate camera JPEG, it is a single JPEG encode of
+the ISP's RGB frame. ``HHMMSS_parr.jpg`` is the graded version.
+``_ungraded.jpg`` is used only when there is neither a camera JPEG nor a DNG.
+When the backend supplies a raw frame and DNG saving is enabled, a
+``<stem>.dng`` sidecar is written alongside the original. One JSON line per
 capture lands in ``captures.jsonl``.
 
 That line is an audit record, not a status message. It carries the grain
 seed and the LUT hash, which together let anyone regenerate the graded file
 from the original; the negotiated stream format, so a camera that quietly
-dropped to a different mode is visible; and two timings, because the
-pipeline cost and the time from shutter to durable file are different
-numbers and only the second is what the user waits for.
+dropped to a different mode is visible; two timings, because the pipeline cost
+and the time from shutter to durable file are different numbers and only the
+second is what the user waits for; ``camera_metadata`` (per-shot camera metadata)
+when present; and ``dng`` (the sidecar filename) when a DNG was written.
 """
 
 from __future__ import annotations
