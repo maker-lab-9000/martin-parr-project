@@ -1,7 +1,11 @@
 import numpy as np
+import pytest
 
 from parr.artifacts import Artifacts
 from parr.color import srgb_to_oklab
+from parr.highlight import protect_highlights
+from parr.lut import read_cube, write_cube
+from parr.preset import main as preset_main
 from parr.preset import starter_lut, write_starter
 from parr.train.fit import build_parser
 
@@ -31,6 +35,47 @@ def test_starter_artifact_records_untrained_provenance(tmp_path):
     assert art.training["trained"] is False
     assert art.training["kind"] == "handcrafted-preset"
     assert art.grain.strength == 0.004
+
+
+def test_write_starter_applies_highlight_protection_and_records_it(tmp_path):
+    path = write_starter(tmp_path / "protected", highlights=0.6)
+    art = Artifacts.load(path)
+    expected_path = tmp_path / "expected.cube"
+    write_cube(protect_highlights(starter_lut(), 0.6), expected_path)
+
+    assert art.training["highlights"] == 0.6
+    assert np.array_equal(art.lut.table, read_cube(expected_path).table)
+
+
+def test_write_starter_default_preserves_the_unprotected_cube_exactly(tmp_path):
+    plain_path = write_starter(tmp_path / "plain")
+    explicit_path = write_starter(tmp_path / "explicit", highlights=0.0)
+    expected_path = tmp_path / "expected.cube"
+    write_cube(starter_lut(), expected_path)
+
+    plain = Artifacts.load(plain_path)
+    assert plain.training["highlights"] == 0.0
+    assert (plain_path / "parr.cube").read_bytes() == expected_path.read_bytes()
+    assert (plain_path / "parr.cube").read_bytes() == (explicit_path / "parr.cube").read_bytes()
+
+
+def test_preset_cli_accepts_highlights(tmp_path):
+    path = tmp_path / "cli"
+    code = preset_main(["--out", str(path), "--highlights", "0.5"])
+
+    assert code == 0
+    assert Artifacts.load(path).training["highlights"] == 0.5
+
+
+@pytest.mark.parametrize("value", ["-0.1", "1.1", "nan", "inf"])
+def test_preset_cli_rejects_invalid_highlights_without_an_artifact(tmp_path, capsys, value):
+    path = tmp_path / "invalid"
+
+    with pytest.raises(SystemExit, match="2"):
+        preset_main(["--out", str(path), "--highlights", value])
+
+    assert "highlights must be finite and in [0, 1]" in capsys.readouterr().err
+    assert not path.exists()
 
 
 def test_training_skips_reference_levels_stretch_by_default():

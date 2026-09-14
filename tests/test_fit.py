@@ -6,10 +6,14 @@ import pytest
 from parr.artifacts import Artifacts
 from parr.color import lch_to_oklab, oklab_to_lch, oklab_to_srgb, srgb_to_oklab
 from parr.grain import GrainParams
+from parr.highlight import protect_highlights
 from parr.imageio import save_jpeg
 from parr.lut import LUT3D
+from parr.preset import starter_lut
 from parr.train.dataset import PixelPool, SampleConfig
+from parr.train.evaluate import channels_are_monotone, grey_axis_is_monotone
 from parr.train.fit import FitConfig, build_parser, fit, main, train
+from parr.train.lutfit import enforce_grey_axis, enforce_monotone
 
 
 def _curve_and_rotation(lab, gamma=1.15, chroma=1.25, degrees=10.0):
@@ -88,6 +92,10 @@ def test_strength_zero_gives_an_identity_lut():
         ({"iterations": 0}, "iterations"),
         ({"hue_bins": 0}, "hue_bins"),
         ({"strength": 2.5}, "strength"),
+        ({"highlights": -0.1}, "highlights"),
+        ({"highlights": 1.1}, "highlights"),
+        ({"highlights": np.inf}, "highlights"),
+        ({"highlights": np.nan}, "highlights"),
         ({"lambda_smooth": -1.0}, "lambda_smooth"),
     ],
 )
@@ -185,12 +193,14 @@ def test_main_refuses_a_small_corpus_then_accepts_the_flag(tmp_path, capsys):
     _image_dir(tmp_path / "tgt", 3, 1, transform=lambda im: im**1.2)
     args = ["--source", str(tmp_path / "src"), "--target", str(tmp_path / "tgt"),
             "--out", str(tmp_path / "o"), "--lut-size", "9", "--iterations", "5",
-            "--max-side", "64", "--pixels-per-image", "300", "--proxy-source"]
+            "--max-side", "64", "--pixels-per-image", "300", "--proxy-source",
+            "--highlights", "0.5"]
     assert main(args) == 1
     assert "--allow-small" in capsys.readouterr().err
     assert main([*args, "--allow-small"]) in (0, 3)
     data = json.loads((tmp_path / "o" / "params.json").read_text())
     assert data["training"]["fit"]["strength"] == 1.0
+    assert data["training"]["fit"]["highlights"] == 0.5
     assert data["grain"]["strength"] == pytest.approx(GrainParams().strength)
 
 
@@ -224,8 +234,83 @@ def test_cli_defaults_track_fitconfig():
     defaults = vars(build_parser().parse_args(["--source", "x"]))
     cfg = FitConfig()
     for name in ("lambda_identity", "lambda_smooth", "lut_size", "iterations",
-                 "hue_bins", "strength", "seed", "neutral_axis_cap"):
+                 "hue_bins", "strength", "seed", "neutral_axis_cap", "highlights"):
         assert defaults[name] == getattr(cfg, name), name
+
+
+def test_fitconfig_highlights_defaults_to_zero():
+    assert FitConfig().highlights == 0.0
+
+
+def test_train_cli_exposes_highlights_with_the_fitconfig_default():
+    parser = build_parser()
+
+    assert parser.parse_args(["--source", "s"]).highlights == FitConfig().highlights
+    assert parser.parse_args(["--source", "s", "--highlights", "0.5"]).highlights == 0.5
+
+
+@pytest.mark.parametrize("value", ["-0.1", "1.1", "nan", "inf"])
+def test_train_cli_rejects_invalid_highlights_without_an_artifact(tmp_path, capsys, value):
+    _image_dir(tmp_path / "src", 1, 0)
+    _image_dir(tmp_path / "tgt", 1, 1)
+    out = tmp_path / "artifact"
+
+    code = main([
+        "--source", str(tmp_path / "src"), "--target", str(tmp_path / "tgt"),
+        "--out", str(out), "--highlights", value,
+    ])
+
+    assert code == 1
+    assert "highlights must be finite and in [0, 1]" in capsys.readouterr().err
+    assert not out.exists()
+
+
+def test_reprojection_after_protection_restores_monotonicity():
+    protected = protect_highlights(starter_lut(), 0.8)
+    reprojected = enforce_monotone(enforce_grey_axis(enforce_monotone(protected)))
+
+    assert not channels_are_monotone(protected)
+    assert grey_axis_is_monotone(reprojected)
+    assert channels_are_monotone(reprojected)
+
+
+def _lifting_pools() -> tuple[PixelPool, PixelPool]:
+    rng = np.random.default_rng(42)
+    source_srgb = (rng.random((400, 3), dtype=np.float32) * 0.65 + 0.1).astype(np.float32)
+    target_lab = srgb_to_oklab(source_srgb)
+    target_lab[:, 0] = np.minimum(target_lab[:, 0] + 0.12, 0.98)
+    target_srgb = np.clip(oklab_to_srgb(target_lab), 0, 1).astype(np.float32)
+    return PixelPool(source_srgb, 4), PixelPool(target_srgb, 4)
+
+
+def _fit_lifting_lut(highlights: float) -> LUT3D:
+    source, target = _lifting_pools()
+    cfg = FitConfig(lut_size=9, iterations=2, seed=3, highlights=highlights)
+    return fit(source, target, cfg).lut
+
+
+def test_fit_applies_highlight_protection_and_keeps_the_result_monotone():
+    plain = _fit_lifting_lut(highlights=0.0)
+    protected = _fit_lifting_lut(highlights=0.8)
+    input_l = srgb_to_oklab(LUT3D.identity(plain.size).table)[..., 0]
+    plain_l = srgb_to_oklab(plain.table)[..., 0]
+    protected_l = srgb_to_oklab(protected.table)[..., 0]
+    lifted_highlights = (input_l >= 0.75) & (plain_l > input_l + 1e-4)
+
+    assert np.count_nonzero(lifted_highlights) > 20
+    assert protected_l[lifted_highlights].mean() < plain_l[lifted_highlights].mean() - 0.005
+    assert channels_are_monotone(protected)
+    assert grey_axis_is_monotone(protected)
+
+
+def test_fit_default_highlights_preserves_the_zero_strength_table_exactly():
+    source, target = _lifting_pools()
+    default = fit(source, target, FitConfig(lut_size=9, iterations=2, seed=3)).lut
+    explicit = fit(
+        source, target, FitConfig(lut_size=9, iterations=2, seed=3, highlights=0.0)
+    ).lut
+
+    assert np.array_equal(default.table, explicit.table)
 
 
 def test_strength_above_one_extrapolates_the_learned_look():

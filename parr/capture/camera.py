@@ -63,22 +63,32 @@ class StreamInfo:
     fps: float
     fourcc: str
     raw_mjpeg: bool
+    sensor_mode: str | None = None
+    bit_depth: int | None = None
+    tuning_file: str | None = None
 
     def to_dict(self) -> dict:
-        return {
+        values = {
             "width": int(self.width),
             "height": int(self.height),
             "fps": round(float(self.fps), 2),
             "fourcc": self.fourcc,
             "raw_mjpeg": bool(self.raw_mjpeg),
         }
+        if self.sensor_mode is not None:
+            values["sensor_mode"] = self.sensor_mode
+        if self.bit_depth is not None:
+            values["bit_depth"] = int(self.bit_depth)
+        if self.tuning_file is not None:
+            values["tuning_file"] = self.tuning_file
+        return values
 
 
 @dataclass
 class Frame:
     rgb: np.ndarray
     jpeg: bytes | None
-    source: str  # "raw-mjpeg" when jpeg holds the camera's own bytes, else "decoded"
+    source: str  # "raw-mjpeg", "decoded", or "picamera2"
 
 
 class Camera(Protocol):

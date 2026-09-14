@@ -1,0 +1,486 @@
+import builtins
+import io
+import json
+import sys
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+from PIL import Image
+
+from parr.artifacts import Artifacts, write_artifact
+from parr.capture.app import CaptureSession
+from parr.capture.camera import CameraError, Frame
+from parr.capture.picamera import DEFAULT_TUNING_FILE, Picamera2Camera
+from parr.capture.thumbnail import fitted_jpeg
+from parr.grain import GrainParams
+from parr.lut import LUT3D
+from parr.normalize import NormalizeParams
+from parr.pipeline import Pipeline
+
+NATIVE_SIZE = (4608, 2592)
+RAW_FORMAT = "SBGGR10_CSI2P"
+
+
+def _actual_configuration():
+    return {
+        "main": {"size": NATIVE_SIZE, "format": "RGB888", "stride": 13824},
+        "raw": {"size": NATIVE_SIZE, "format": RAW_FORMAT, "stride": 5760},
+        "sensor": {"output_size": NATIVE_SIZE, "bit_depth": 10},
+        "buffer_count": 2,
+        "queue": False,
+    }
+
+
+class FakeRequest:
+    def __init__(
+        self,
+        array,
+        *,
+        metadata=None,
+        make_array_error=None,
+        metadata_error=None,
+        release_error=None,
+        mutate_on_release=False,
+    ):
+        self.array = array
+        self.metadata = metadata if metadata is not None else {}
+        self.make_array_error = make_array_error
+        self.metadata_error = metadata_error
+        self.release_error = release_error
+        self.mutate_on_release = mutate_on_release
+        self.release_count = 0
+        self.requested_stream = None
+
+    def make_array(self, stream):
+        self.requested_stream = stream
+        if self.make_array_error is not None:
+            raise self.make_array_error
+        return self.array
+
+    def get_metadata(self):
+        if self.metadata_error is not None:
+            raise self.metadata_error
+        return self.metadata
+
+    def release(self):
+        self.release_count += 1
+        if self.mutate_on_release:
+            self.array[...] = 0
+        if self.release_error is not None:
+            raise self.release_error
+
+
+@pytest.fixture
+def install_picamera(monkeypatch):
+    def install(
+        *,
+        actual=None,
+        request=None,
+        tuning_error=None,
+        init_error=None,
+        configure_error=None,
+        start_error=None,
+        capture_error=None,
+        stop_error=None,
+        close_error=None,
+    ):
+        state = SimpleNamespace(instance=None, loaded_tuning=[])
+
+        class FakePicamera2:
+            @staticmethod
+            def load_tuning_file(filename):
+                state.loaded_tuning.append(filename)
+                if tuning_error is not None:
+                    raise tuning_error
+                return {"loaded-from": filename}
+
+            def __init__(self, *, tuning):
+                self.tuning = tuning
+                self.created_config = None
+                self.configured_with = None
+                self.configure_count = 0
+                self.start_count = 0
+                self.capture_count = 0
+                self.stop_count = 0
+                self.close_count = 0
+                state.instance = self
+                if init_error is not None:
+                    raise init_error
+
+            def create_still_configuration(self, **kwargs):
+                self.created_config = kwargs
+                return {"created": kwargs}
+
+            def configure(self, config):
+                self.configure_count += 1
+                self.configured_with = config
+                if configure_error is not None:
+                    raise configure_error
+
+            def camera_configuration(self):
+                return actual if actual is not None else _actual_configuration()
+
+            def start(self):
+                self.start_count += 1
+                if start_error is not None:
+                    raise start_error
+
+            def capture_request(self):
+                self.capture_count += 1
+                if capture_error is not None:
+                    raise capture_error
+                return request
+
+            def stop(self):
+                self.stop_count += 1
+                if stop_error is not None:
+                    raise stop_error
+
+            def close(self):
+                self.close_count += 1
+                if close_error is not None:
+                    raise close_error
+
+        monkeypatch.setitem(sys.modules, "picamera2", SimpleNamespace(Picamera2=FakePicamera2))
+        return state
+
+    return install
+
+
+def test_constructor_uses_explicit_native_still_configuration(install_picamera):
+    state = install_picamera()
+    camera = Picamera2Camera("delivered-lens.json")
+
+    assert state.loaded_tuning == ["delivered-lens.json"]
+    assert state.instance.tuning == {"loaded-from": "delivered-lens.json"}
+    assert state.instance.created_config == {
+        "main": {"size": NATIVE_SIZE, "format": "RGB888"},
+        "raw": {"size": NATIVE_SIZE},
+        "buffer_count": 2,
+        "queue": False,
+    }
+    assert state.instance.configured_with == {"created": state.instance.created_config}
+    assert state.instance.start_count == 1
+    assert camera.stream_info.to_dict() == {
+        "width": 4608,
+        "height": 2592,
+        "fps": 0.0,
+        "fourcc": "RGB888",
+        "raw_mjpeg": False,
+        "sensor_mode": "4608x2592 SBGGR10_CSI2P",
+        "bit_depth": 10,
+        "tuning_file": "delivered-lens.json",
+    }
+    camera.close()
+
+
+def test_default_tuning_file_matches_the_initial_camera_variant(install_picamera):
+    state = install_picamera()
+    camera = Picamera2Camera()
+    assert state.loaded_tuning == [DEFAULT_TUNING_FILE]
+    assert camera.stream_info.tuning_file == "imx708_wide.json"
+    camera.close()
+
+
+def test_import_is_lazy_and_missing_picamera2_is_actionable(monkeypatch):
+    monkeypatch.delitem(sys.modules, "picamera2", raising=False)
+    real_import = builtins.__import__
+
+    def missing_picamera(name, *args, **kwargs):
+        if name == "picamera2":
+            raise ModuleNotFoundError("No module named 'picamera2'", name="picamera2")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", missing_picamera)
+    with pytest.raises(CameraError, match="Picamera2.*install"):
+        Picamera2Camera()
+
+
+def test_native_library_load_failure_is_wrapped_as_camera_error(monkeypatch):
+    monkeypatch.delitem(sys.modules, "picamera2", raising=False)
+    real_import = builtins.__import__
+
+    def broken_native_library(name, *args, **kwargs):
+        if name == "picamera2":
+            raise OSError("libcamera.so could not be loaded")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", broken_native_library)
+    with pytest.raises(CameraError, match="Picamera2.*install") as exc_info:
+        Picamera2Camera()
+    assert isinstance(exc_info.value.__cause__, OSError)
+
+
+def test_tuning_load_failure_is_actionable_without_creating_camera(install_picamera):
+    state = install_picamera(tuning_error=OSError("bad tuning data"))
+    with pytest.raises(CameraError, match="imx708_wide.json") as exc_info:
+        Picamera2Camera()
+    assert isinstance(exc_info.value.__cause__, OSError)
+    assert state.instance is None
+
+
+def test_configure_failure_closes_camera_and_preserves_primary_error(install_picamera):
+    state = install_picamera(
+        configure_error=RuntimeError("configure exploded"),
+        close_error=RuntimeError("close exploded"),
+    )
+    with pytest.raises(CameraError, match="configure exploded") as exc_info:
+        Picamera2Camera()
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert state.instance.stop_count == 0
+    assert state.instance.close_count == 1
+
+
+def test_start_failure_stops_and_closes_camera_without_masking_error(install_picamera):
+    state = install_picamera(
+        start_error=RuntimeError("start exploded"),
+        stop_error=RuntimeError("stop exploded"),
+        close_error=RuntimeError("close exploded"),
+    )
+    with pytest.raises(CameraError, match="start exploded") as exc_info:
+        Picamera2Camera()
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert state.instance.stop_count == 1
+    assert state.instance.close_count == 1
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("main", "size", (2304, 1296)),
+        ("main", "format", "BGR888"),
+        ("raw", "size", (2304, 1296)),
+    ],
+)
+def test_negotiated_non_native_stream_is_rejected_before_start(
+    install_picamera, section, field, value
+):
+    actual = _actual_configuration()
+    actual[section][field] = value
+    state = install_picamera(actual=actual)
+
+    with pytest.raises(CameraError, match="negotiated"):
+        Picamera2Camera()
+
+    assert state.instance.start_count == 0
+    assert state.instance.close_count == 1
+
+
+def test_read_returns_owned_contiguous_rgb_and_updates_measured_fps(install_picamera):
+    bgr = np.zeros((2592, 4608, 3), dtype=np.uint8)
+    bgr[0, 0] = [10, 40, 230]
+    request = FakeRequest(
+        bgr,
+        metadata={"FrameDuration": 50_000},
+        mutate_on_release=True,
+    )
+    state = install_picamera(request=request)
+    camera = Picamera2Camera()
+
+    frame = camera.read()
+
+    assert isinstance(frame, Frame)
+    assert frame.rgb.dtype == np.uint8
+    assert frame.rgb.flags.c_contiguous
+    assert frame.jpeg is None
+    assert frame.source == "picamera2"
+    assert frame.rgb[0, 0].tolist() == [230, 40, 10]
+    assert request.requested_stream == "main"
+    assert request.release_count == 1
+    assert camera.stream_info.fps == 20.0
+    assert state.instance.capture_count == 1
+    camera.close()
+
+
+def test_non_finite_frame_duration_does_not_claim_a_measured_fps(install_picamera):
+    bgr = np.broadcast_to(
+        np.array([[[10, 40, 230]]], dtype=np.uint8),
+        (2592, 4608, 3),
+    )
+    request = FakeRequest(bgr, metadata={"FrameDuration": float("nan")})
+    install_picamera(request=request)
+    camera = Picamera2Camera()
+
+    camera.read()
+
+    assert camera.stream_info.fps == 0.0
+    assert request.release_count == 1
+    camera.close()
+
+
+@pytest.mark.parametrize(
+    ("shape", "dtype"),
+    [
+        ((2592, 4608, 3), np.uint16),
+        ((4, 4), np.uint8),
+        ((4, 4, 4), np.uint8),
+        ((4, 4, 3), np.uint8),
+    ],
+    ids=["wrong-dtype", "missing-channels", "too-many-channels", "wrong-size"],
+)
+def test_invalid_main_array_is_rejected_and_request_is_released(
+    install_picamera, shape, dtype
+):
+    array = np.broadcast_to(np.zeros((1,) * len(shape), dtype=dtype), shape)
+    request = FakeRequest(array)
+    install_picamera(request=request)
+    camera = Picamera2Camera()
+
+    with pytest.raises(CameraError, match="main array"):
+        camera.read()
+
+    assert request.release_count == 1
+    camera.close()
+
+
+@pytest.mark.parametrize(
+    ("request_kwargs", "message"),
+    [
+        ({"make_array_error": RuntimeError("array failed")}, "array failed"),
+        ({"metadata_error": RuntimeError("metadata failed")}, "metadata failed"),
+    ],
+)
+def test_request_processing_failure_is_wrapped_and_released(
+    install_picamera, request_kwargs, message
+):
+    array = np.broadcast_to(
+        np.array([[[10, 40, 230]]], dtype=np.uint8),
+        (2592, 4608, 3),
+    )
+    request = FakeRequest(array, **request_kwargs)
+    install_picamera(request=request)
+    camera = Picamera2Camera()
+
+    with pytest.raises(CameraError, match=message) as exc_info:
+        camera.read()
+
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert request.release_count == 1
+    camera.close()
+
+
+def test_release_failure_does_not_mask_request_processing_failure(install_picamera):
+    request = FakeRequest(
+        np.zeros((4, 4, 3), dtype=np.uint8),
+        make_array_error=RuntimeError("array failed"),
+        release_error=RuntimeError("release failed"),
+    )
+    install_picamera(request=request)
+    camera = Picamera2Camera()
+
+    with pytest.raises(CameraError, match="array failed") as exc_info:
+        camera.read()
+
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert request.release_count == 1
+    camera.close()
+
+
+def test_release_failure_after_successful_processing_is_actionable(install_picamera):
+    array = np.broadcast_to(
+        np.array([[[10, 40, 230]]], dtype=np.uint8),
+        (2592, 4608, 3),
+    )
+    request = FakeRequest(array, release_error=RuntimeError("release failed"))
+    install_picamera(request=request)
+    camera = Picamera2Camera()
+
+    with pytest.raises(CameraError, match="release failed") as exc_info:
+        camera.read()
+
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert request.release_count == 1
+    camera.close()
+
+
+def test_capture_failure_is_wrapped_without_a_request_to_release(install_picamera):
+    state = install_picamera(capture_error=RuntimeError("capture failed"))
+    camera = Picamera2Camera()
+
+    with pytest.raises(CameraError, match="capture failed") as exc_info:
+        camera.read()
+
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert state.instance.capture_count == 1
+    camera.close()
+
+
+def test_close_is_idempotent_and_read_after_close_is_rejected(install_picamera):
+    state = install_picamera()
+    camera = Picamera2Camera()
+
+    camera.close()
+    camera.close()
+
+    assert state.instance.stop_count == 1
+    assert state.instance.close_count == 1
+    with pytest.raises(CameraError, match="closed"):
+        camera.read()
+    assert state.instance.capture_count == 0
+
+
+def test_close_calls_close_if_stop_fails_and_preserves_stop_error(install_picamera):
+    state = install_picamera(
+        stop_error=RuntimeError("stop failed"),
+        close_error=RuntimeError("close failed"),
+    )
+    camera = Picamera2Camera()
+
+    with pytest.raises(CameraError, match="stop failed") as exc_info:
+        camera.close()
+
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert state.instance.stop_count == 1
+    assert state.instance.close_count == 1
+    camera.close()
+    assert state.instance.stop_count == 1
+    assert state.instance.close_count == 1
+
+
+def test_native_capture_session_saves_full_size_outputs_metadata_and_thumbnail(
+    install_picamera, tmp_path,
+):
+    bgr = np.broadcast_to(
+        np.array([[[25, 110, 220]]], dtype=np.uint8),
+        (NATIVE_SIZE[1], NATIVE_SIZE[0], 3),
+    )
+    request = FakeRequest(bgr, metadata={"FrameDuration": 40_000})
+    install_picamera(request=request)
+    camera = Picamera2Camera("delivered-variant.json")
+
+    artifact_dir = tmp_path / "artifact"
+    write_artifact(
+        artifact_dir,
+        LUT3D.identity(2),
+        NormalizeParams(white_balance=False),
+        GrainParams(enabled=False),
+    )
+    session = CaptureSession(
+        camera,
+        Pipeline(Artifacts.load(artifact_dir)),
+        tmp_path / "captures",
+        seed_rng=np.random.default_rng(0),
+    )
+    try:
+        result = session.capture()
+    finally:
+        camera.close()
+
+    assert result.original.name.endswith("_ungraded.jpg")
+    with Image.open(result.original) as ungraded, Image.open(result.parr) as graded:
+        assert ungraded.size == NATIVE_SIZE
+        assert graded.size == NATIVE_SIZE
+
+    record_path, = (tmp_path / "captures").rglob("captures.jsonl")
+    record = json.loads(record_path.read_text())
+    assert record["frame_source"] == "picamera2"
+    assert record["width"] == 4608
+    assert record["height"] == 2592
+    assert record["fps"] == 25.0
+    assert record["sensor_mode"] == "4608x2592 SBGGR10_CSI2P"
+    assert record["bit_depth"] == 10
+    assert record["tuning_file"] == "delivered-variant.json"
+
+    with Image.open(io.BytesIO(fitted_jpeg(result.parr))) as thumbnail:
+        assert thumbnail.size == (240, 135)
