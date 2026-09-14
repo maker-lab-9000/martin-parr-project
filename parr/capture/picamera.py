@@ -9,6 +9,7 @@ so USB and fake-camera use do not require Raspberry Pi camera packages.
 from __future__ import annotations
 
 import math
+import tempfile
 from typing import Any
 
 import numpy as np
@@ -19,11 +20,45 @@ DEFAULT_TUNING_FILE = "imx708_wide.json"
 _NATIVE_SIZE = (4608, 2592)
 _MAIN_FORMAT = "RGB888"
 
+METADATA_KEYS = (
+    "ExposureTime",
+    "AnalogueGain",
+    "DigitalGain",
+    "ColourGains",
+    "ColourTemperature",
+    "Lux",
+    "LensPosition",
+    "AfState",
+    "FocusFoM",
+    "FrameDuration",
+    "SensorTimestamp",
+)
+
+
+def serialisable_metadata(raw: dict) -> dict:
+    out: dict = {}
+    for key in METADATA_KEYS:
+        if key not in raw:
+            continue
+        value = raw[key]
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            out[key] = value
+        elif isinstance(value, (tuple, list)) and all(isinstance(v, (int, float)) for v in value):
+            out[key] = [float(v) for v in value]
+        else:
+            try:
+                out[key] = int(value)  # libcamera enums (e.g. AfState) are int-like
+            except (TypeError, ValueError):
+                pass
+    return out
+
 
 class Picamera2Camera:
     """Acquire full-sensor RGB frames from an IMX708 through Picamera2."""
 
-    def __init__(self, tuning_file: str = DEFAULT_TUNING_FILE) -> None:
+    def __init__(self, tuning_file: str = DEFAULT_TUNING_FILE, save_dng: bool = True) -> None:
         try:
             from picamera2 import Picamera2
         except (ImportError, OSError) as exc:
@@ -45,6 +80,7 @@ class Picamera2Camera:
 
         self._camera: Any | None = camera
         self._started = False
+        self._save_dng = save_dng
         start_attempted = False
         try:
             config = camera.create_still_configuration(
@@ -93,9 +129,15 @@ class Picamera2Camera:
                         f"uint8 with shape {expected_shape}, got {bgr.dtype} {bgr.shape}"
                     )
                 rgb = np.array(bgr[..., ::-1], dtype=np.uint8, order="C", copy=True)
-                metadata = request.get_metadata()
-                self._update_fps(metadata)
-                return Frame(rgb=rgb, jpeg=None, source="picamera2")
+                metadata = serialisable_metadata(request.get_metadata())
+                self._update_fps({"FrameDuration": metadata.get("FrameDuration", 0)})
+                dng = None
+                if self._save_dng:
+                    with tempfile.NamedTemporaryFile(suffix=".dng", delete=True) as tmp:
+                        request.save_dng(tmp.name)
+                        tmp.seek(0)
+                        dng = tmp.read()
+                return Frame(rgb=rgb, jpeg=None, source="picamera2", metadata=metadata, dng=dng)
             except CameraError:
                 processing_failed = True
                 raise

@@ -42,6 +42,8 @@ class FakeRequest:
         metadata_error=None,
         release_error=None,
         mutate_on_release=False,
+        dng_bytes=b"II*\x00fake-dng-payload",
+        save_dng_error=None,
     ):
         self.array = array
         self.metadata = metadata if metadata is not None else {}
@@ -49,8 +51,12 @@ class FakeRequest:
         self.metadata_error = metadata_error
         self.release_error = release_error
         self.mutate_on_release = mutate_on_release
+        self.dng_bytes = dng_bytes
+        self.save_dng_error = save_dng_error
         self.release_count = 0
         self.requested_stream = None
+        self.save_dng_calls = 0
+        self.save_dng_path = None
 
     def make_array(self, stream):
         self.requested_stream = stream
@@ -62,6 +68,14 @@ class FakeRequest:
         if self.metadata_error is not None:
             raise self.metadata_error
         return self.metadata
+
+    def save_dng(self, path):
+        self.save_dng_calls += 1
+        self.save_dng_path = path
+        if self.save_dng_error is not None:
+            raise self.save_dng_error
+        with open(path, "wb") as fh:
+            fh.write(self.dng_bytes)
 
     def release(self):
         self.release_count += 1
@@ -394,6 +408,97 @@ def test_release_failure_after_successful_processing_is_actionable(install_picam
     camera.close()
 
 
+class _FakeLibcameraEnum:
+    """Mimics a libcamera enum control value: int-like but not an int subclass."""
+
+    def __init__(self, value):
+        self._value = value
+
+    def __int__(self):
+        return self._value
+
+
+def test_read_populates_serialisable_metadata_subset(install_picamera):
+    array = np.broadcast_to(
+        np.array([[[10, 40, 230]]], dtype=np.uint8),
+        (2592, 4608, 3),
+    )
+    raw_metadata = {
+        "ExposureTime": 9995,
+        "ColourGains": (1.8, 2.1),
+        "AfState": _FakeLibcameraEnum(2),
+        "FocusFoM": object(),  # non-serialisable: cannot be coerced, dropped
+        "ScalerCrop": (10, 20, 100, 100),  # extra key: not in METADATA_KEYS, dropped
+        "SomeVendorBlob": {"nested": True},  # extra key: dropped
+    }
+    request = FakeRequest(array, metadata=raw_metadata)
+    install_picamera(request=request)
+    camera = Picamera2Camera()
+
+    frame = camera.read()
+
+    assert frame.metadata["ExposureTime"] == 9995
+    assert frame.metadata["ColourGains"] == [1.8, 2.1]
+    assert frame.metadata["AfState"] == 2
+    assert "ScalerCrop" not in frame.metadata
+    assert "SomeVendorBlob" not in frame.metadata
+    assert "FocusFoM" not in frame.metadata
+    assert "LensPosition" not in frame.metadata  # absent from raw metadata entirely
+    assert "SensorTimestamp" not in frame.metadata  # absent from raw metadata entirely
+    camera.close()
+
+
+def test_read_includes_dng_bytes_when_enabled(install_picamera):
+    array = np.broadcast_to(
+        np.array([[[10, 40, 230]]], dtype=np.uint8),
+        (2592, 4608, 3),
+    )
+    request = FakeRequest(array)
+    install_picamera(request=request)
+    camera = Picamera2Camera()
+
+    frame = camera.read()
+
+    assert frame.dng[:4] == b"II*\x00"
+    assert request.save_dng_calls == 1
+    assert request.release_count == 1
+    camera.close()
+
+
+def test_read_omits_dng_when_disabled(install_picamera):
+    array = np.broadcast_to(
+        np.array([[[10, 40, 230]]], dtype=np.uint8),
+        (2592, 4608, 3),
+    )
+    request = FakeRequest(array)
+    install_picamera(request=request)
+    camera = Picamera2Camera(save_dng=False)
+
+    frame = camera.read()
+
+    assert frame.dng is None
+    assert request.save_dng_calls == 0
+    assert request.release_count == 1
+    camera.close()
+
+
+def test_dng_extraction_failure_still_releases_the_request(install_picamera):
+    array = np.broadcast_to(
+        np.array([[[10, 40, 230]]], dtype=np.uint8),
+        (2592, 4608, 3),
+    )
+    request = FakeRequest(array, save_dng_error=RuntimeError("dng failed"))
+    install_picamera(request=request)
+    camera = Picamera2Camera()
+
+    with pytest.raises(CameraError, match="dng failed") as exc_info:
+        camera.read()
+
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert request.release_count == 1
+    camera.close()
+
+
 def test_capture_failure_is_wrapped_without_a_request_to_release(install_picamera):
     state = install_picamera(capture_error=RuntimeError("capture failed"))
     camera = Picamera2Camera()
@@ -467,7 +572,10 @@ def test_native_capture_session_saves_full_size_outputs_metadata_and_thumbnail(
     finally:
         camera.close()
 
-    assert result.original.name.endswith("_ungraded.jpg")
+    # Picamera2 has no camera JPEG, but supplies a DNG by default, so the saved
+    # original is named "_original.jpg" (not "_ungraded.jpg") and a DNG sidecar
+    # is written alongside it; see the module docstring in parr/capture/app.py.
+    assert result.original.name.endswith("_original.jpg")
     with Image.open(result.original) as ungraded, Image.open(result.parr) as graded:
         assert ungraded.size == NATIVE_SIZE
         assert graded.size == NATIVE_SIZE
@@ -481,6 +589,10 @@ def test_native_capture_session_saves_full_size_outputs_metadata_and_thumbnail(
     assert record["sensor_mode"] == "4608x2592 SBGGR10_CSI2P"
     assert record["bit_depth"] == 10
     assert record["tuning_file"] == "delivered-variant.json"
+    assert record["camera_metadata"] == {"FrameDuration": 40_000}
+    assert record["dng"] == result.original.name.replace("_original.jpg", ".dng")
+    dng_path = result.original.parent / record["dng"]
+    assert dng_path.read_bytes()[:4] == b"II*\x00"
 
     with Image.open(io.BytesIO(fitted_jpeg(result.parr))) as thumbnail:
         assert thumbnail.size == (240, 135)
