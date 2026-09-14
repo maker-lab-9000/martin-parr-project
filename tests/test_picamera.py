@@ -85,6 +85,35 @@ class FakeRequest:
             raise self.release_error
 
 
+class _AfModeEnum:
+    """Mimics ``libcamera.controls.AfModeEnum``: distinct sentinel values."""
+
+    Continuous = "AfMode.Continuous"
+    Auto = "AfMode.Auto"
+    Manual = "AfMode.Manual"
+
+
+class _AfRangeEnum:
+    """Mimics ``libcamera.controls.AfRangeEnum``."""
+
+    Normal = "AfRange.Normal"
+    Macro = "AfRange.Macro"
+    Full = "AfRange.Full"
+
+
+class _NoiseReductionModeEnum:
+    """Mimics ``libcamera.controls.draft.NoiseReductionModeEnum``."""
+
+    HighQuality = "NoiseReductionMode.HighQuality"
+
+
+def _fake_libcamera_module(*, with_noise_reduction=True):
+    controls_ns = SimpleNamespace(AfModeEnum=_AfModeEnum, AfRangeEnum=_AfRangeEnum)
+    if with_noise_reduction:
+        controls_ns.draft = SimpleNamespace(NoiseReductionModeEnum=_NoiseReductionModeEnum)
+    return SimpleNamespace(controls=controls_ns)
+
+
 @pytest.fixture
 def install_picamera(monkeypatch):
     def install(
@@ -98,6 +127,8 @@ def install_picamera(monkeypatch):
         capture_error=None,
         stop_error=None,
         close_error=None,
+        autofocus_cycle_error=None,
+        with_noise_reduction=True,
     ):
         state = SimpleNamespace(instance=None, loaded_tuning=[])
 
@@ -118,6 +149,8 @@ def install_picamera(monkeypatch):
                 self.capture_count = 0
                 self.stop_count = 0
                 self.close_count = 0
+                self.set_controls_calls = []
+                self.autofocus_cycle_count = 0
                 state.instance = self
                 if init_error is not None:
                     raise init_error
@@ -135,6 +168,9 @@ def install_picamera(monkeypatch):
             def camera_configuration(self):
                 return actual if actual is not None else _actual_configuration()
 
+            def set_controls(self, controls):
+                self.set_controls_calls.append(dict(controls))
+
             def start(self):
                 self.start_count += 1
                 if start_error is not None:
@@ -145,6 +181,11 @@ def install_picamera(monkeypatch):
                 if capture_error is not None:
                     raise capture_error
                 return request
+
+            def autofocus_cycle(self):
+                self.autofocus_cycle_count += 1
+                if autofocus_cycle_error is not None:
+                    raise autofocus_cycle_error
 
             def stop(self):
                 self.stop_count += 1
@@ -157,6 +198,8 @@ def install_picamera(monkeypatch):
                     raise close_error
 
         monkeypatch.setitem(sys.modules, "picamera2", SimpleNamespace(Picamera2=FakePicamera2))
+        libcamera_module = _fake_libcamera_module(with_noise_reduction=with_noise_reduction)
+        monkeypatch.setitem(sys.modules, "libcamera", libcamera_module)
         return state
 
     return install
@@ -479,6 +522,167 @@ def test_read_omits_dng_when_disabled(install_picamera):
     assert frame.dng is None
     assert request.save_dng_calls == 0
     assert request.release_count == 1
+    camera.close()
+
+
+def test_default_construction_applies_neutral_rendering_and_continuous_af(install_picamera):
+    state = install_picamera()
+    camera = Picamera2Camera()
+
+    assert state.instance.set_controls_calls == [{
+        "Sharpness": 1.0,
+        "Contrast": 1.0,
+        "Saturation": 1.0,
+        "NoiseReductionMode": _NoiseReductionModeEnum.HighQuality,
+        "AfMode": _AfModeEnum.Continuous,
+        "AfRange": _AfRangeEnum.Normal,
+    }]
+    camera.close()
+
+
+def test_noise_reduction_mode_is_omitted_on_older_libcamera(install_picamera):
+    state = install_picamera(with_noise_reduction=False)
+    camera = Picamera2Camera()
+
+    controls = state.instance.set_controls_calls[-1]
+    assert "NoiseReductionMode" not in controls
+    assert controls["Sharpness"] == 1.0
+    camera.close()
+
+
+@pytest.mark.parametrize(
+    ("autofocus", "expected"),
+    [
+        ("continuous", _AfModeEnum.Continuous),
+        ("auto", _AfModeEnum.Auto),
+        ("manual", _AfModeEnum.Manual),
+    ],
+)
+def test_autofocus_argument_maps_to_af_mode_enum(install_picamera, autofocus, expected):
+    state = install_picamera()
+    camera = Picamera2Camera(autofocus=autofocus)
+
+    assert state.instance.set_controls_calls[-1]["AfMode"] == expected
+    camera.close()
+
+
+@pytest.mark.parametrize(
+    ("af_range", "expected"),
+    [
+        ("normal", _AfRangeEnum.Normal),
+        ("macro", _AfRangeEnum.Macro),
+        ("full", _AfRangeEnum.Full),
+    ],
+)
+def test_af_range_argument_maps_to_af_range_enum(install_picamera, af_range, expected):
+    state = install_picamera()
+    camera = Picamera2Camera(af_range=af_range)
+
+    assert state.instance.set_controls_calls[-1]["AfRange"] == expected
+    camera.close()
+
+
+def test_unknown_autofocus_mode_raises_camera_error_without_opening_hardware(install_picamera):
+    state = install_picamera()
+
+    with pytest.raises(CameraError, match="autofocus"):
+        Picamera2Camera(autofocus="turbo")
+
+    assert state.instance is None
+
+
+def test_unknown_af_range_raises_camera_error_without_opening_hardware(install_picamera):
+    state = install_picamera()
+
+    with pytest.raises(CameraError, match="af_range"):
+        Picamera2Camera(af_range="wide")
+
+    assert state.instance is None
+
+
+def test_colour_gains_sets_gains_and_disables_awb(install_picamera):
+    state = install_picamera()
+    camera = Picamera2Camera(colour_gains=(1.8, 2.1))
+
+    controls = state.instance.set_controls_calls[-1]
+    assert controls["ColourGains"] == (1.8, 2.1)
+    assert controls["AwbEnable"] is False
+    camera.close()
+
+
+def test_awb_lock_without_colour_gains_disables_awb_but_sets_no_gains(install_picamera):
+    state = install_picamera()
+    camera = Picamera2Camera(awb_lock=True)
+
+    controls = state.instance.set_controls_calls[-1]
+    assert controls["AwbEnable"] is False
+    assert "ColourGains" not in controls
+    camera.close()
+
+
+def test_ae_lock_disables_ae(install_picamera):
+    state = install_picamera()
+    camera = Picamera2Camera(ae_lock=True)
+
+    assert state.instance.set_controls_calls[-1]["AeEnable"] is False
+    camera.close()
+
+
+def test_default_leaves_ae_and_awb_auto(install_picamera):
+    state = install_picamera()
+    camera = Picamera2Camera()
+
+    controls = state.instance.set_controls_calls[-1]
+    assert "AeEnable" not in controls
+    assert "AwbEnable" not in controls
+    assert "ColourGains" not in controls
+    camera.close()
+
+
+def test_autofocus_auto_triggers_exactly_one_cycle_per_read(install_picamera):
+    array = np.broadcast_to(
+        np.array([[[10, 40, 230]]], dtype=np.uint8),
+        (2592, 4608, 3),
+    )
+    request = FakeRequest(array)
+    state = install_picamera(request=request)
+    camera = Picamera2Camera(autofocus="auto")
+
+    camera.read()
+    camera.read()
+    camera.read()
+
+    assert state.instance.autofocus_cycle_count == 3
+    assert state.instance.capture_count == 3
+    camera.close()
+
+
+@pytest.mark.parametrize("autofocus", ["continuous", "manual"])
+def test_autofocus_continuous_and_manual_never_cycle(install_picamera, autofocus):
+    array = np.broadcast_to(
+        np.array([[[10, 40, 230]]], dtype=np.uint8),
+        (2592, 4608, 3),
+    )
+    request = FakeRequest(array)
+    state = install_picamera(request=request)
+    camera = Picamera2Camera(autofocus=autofocus)
+
+    camera.read()
+    camera.read()
+
+    assert state.instance.autofocus_cycle_count == 0
+    camera.close()
+
+
+def test_autofocus_cycle_failure_is_wrapped_as_camera_error(install_picamera):
+    state = install_picamera(autofocus_cycle_error=RuntimeError("af hardware fault"))
+    camera = Picamera2Camera(autofocus="auto")
+
+    with pytest.raises(CameraError, match="Autofocus cycle failed") as exc_info:
+        camera.read()
+
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert state.instance.capture_count == 0
     camera.close()
 
 

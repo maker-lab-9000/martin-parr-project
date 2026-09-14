@@ -467,6 +467,18 @@ def _remote_listen(value: str) -> tuple[str, int]:
     return host, port
 
 
+def _colour_gains(value: str) -> tuple[float, float]:
+    """Parse the ``R,B`` fixed colour-gains CLI value."""
+    parts = value.split(",")
+    if len(parts) != 2:
+        raise argparse.ArgumentTypeError("expected R,B")
+    try:
+        r, b = (float(part) for part in parts)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("colour gains must be numbers") from exc
+    return r, b
+
+
 def _picamera2_available() -> bool:
     """Probe only the optional runtime package, without opening a camera."""
     try:
@@ -484,6 +496,29 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--camera", choices=("v4l2", "picamera2"))
     parser.add_argument("--device", default=None, help="index, /dev/videoN or /dev/v4l/by-id/...")
     parser.add_argument("--tuning-file", help="Picamera2 tuning filename or absolute path")
+    parser.add_argument(
+        "--autofocus", choices=("continuous", "auto", "manual"), default=None,
+        help="Picamera2 autofocus mode (default: continuous)",
+    )
+    parser.add_argument(
+        "--af-range", choices=("normal", "macro", "full"), default=None,
+        help="Picamera2 autofocus range (default: normal)",
+    )
+    parser.add_argument(
+        "--ae-lock", action="store_true",
+        help="Picamera2: lock auto-exposure, for controlled shoots (default: auto)",
+    )
+    parser.add_argument(
+        "--awb-lock", action="store_true",
+        help="Picamera2: lock auto white balance, for controlled shoots (default: auto)",
+    )
+    parser.add_argument(
+        "--colour-gains", type=_colour_gains, default=None, metavar="R,B",
+        help="Picamera2: fixed colour gains R,B; implies AWB disabled (controlled shoots)",
+    )
+    parser.add_argument(
+        "--no-dng", action="store_true", help="disable the Picamera2 DNG sidecar output",
+    )
     parser.add_argument(
         "--artifacts", type=Path, default=None, help="artifact dir (default: bundled)"
     )
@@ -509,6 +544,21 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--device cannot be used with --camera picamera2")
     if args.camera == "v4l2" and args.tuning_file is not None:
         parser.error("--tuning-file cannot be used with --camera v4l2")
+    if args.camera == "v4l2" and args.autofocus is not None:
+        parser.error("--autofocus cannot be used with --camera v4l2")
+    if args.camera == "v4l2" and args.af_range is not None:
+        parser.error("--af-range cannot be used with --camera v4l2")
+    if args.camera == "v4l2" and args.ae_lock:
+        parser.error("--ae-lock cannot be used with --camera v4l2")
+    if args.camera == "v4l2" and args.awb_lock:
+        parser.error("--awb-lock cannot be used with --camera v4l2")
+    if args.camera == "v4l2" and args.colour_gains is not None:
+        parser.error("--colour-gains cannot be used with --camera v4l2")
+    if args.camera == "v4l2" and args.no_dng:
+        parser.error("--no-dng cannot be used with --camera v4l2")
+
+    autofocus = args.autofocus or "continuous"
+    af_range = args.af_range or "normal"
 
     remote_token = os.environ.get("PARR_REMOTE_TOKEN") if args.remote_listen else None
     if args.remote_listen and not remote_token:
@@ -536,7 +586,15 @@ def main(argv: list[str] | None = None) -> int:
                     "picamera2" if _picamera2_available() else "v4l2"
                 )
             if backend == "picamera2":
-                camera = Picamera2Camera(args.tuning_file or DEFAULT_TUNING_FILE)
+                camera = Picamera2Camera(
+                    args.tuning_file or DEFAULT_TUNING_FILE,
+                    save_dng=not args.no_dng,
+                    autofocus=autofocus,
+                    af_range=af_range,
+                    ae_lock=args.ae_lock,
+                    awb_lock=args.awb_lock,
+                    colour_gains=args.colour_gains,
+                )
             else:
                 if args.tuning_file is not None:
                     parser.error("--tuning-file cannot be used with the selected V4L2 backend")
@@ -550,6 +608,7 @@ def main(argv: list[str] | None = None) -> int:
         pipeline,
         args.out,
         seed_rng=np.random.default_rng(args.seed),
+        save_dng=not args.no_dng,
     )
     controller: CaptureController | None = None
     remote: RemoteCaptureServer | None = None

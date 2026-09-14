@@ -871,7 +871,7 @@ def test_explicit_v4l2_never_imports_picamera2(camera_cli, monkeypatch):
 def test_explicit_picamera2_receives_tuning_file(camera_cli, monkeypatch):
     opened = []
 
-    def open_picamera(tuning_file):
+    def open_picamera(tuning_file, **kwargs):
         opened.append((tuning_file, _CameraDouble()))
         return opened[-1][1]
 
@@ -924,7 +924,7 @@ def test_fake_bypasses_all_hardware_detection(camera_cli, monkeypatch):
     monkeypatch.setattr(
         camera_cli,
         "Picamera2Camera",
-        lambda tuning: (_ for _ in ()).throw(AssertionError("fake opened Picamera2")),
+        lambda tuning, **kwargs: (_ for _ in ()).throw(AssertionError("fake opened Picamera2")),
         raising=False,
     )
 
@@ -950,6 +950,12 @@ def test_device_without_camera_choice_selects_v4l2(camera_cli, monkeypatch):
     [
         (["--camera", "picamera2", "--device", "/dev/video9"], "--device"),
         (["--camera", "v4l2", "--tuning-file", "sensor.json"], "--tuning-file"),
+        (["--camera", "v4l2", "--autofocus", "continuous"], "--autofocus"),
+        (["--camera", "v4l2", "--af-range", "normal"], "--af-range"),
+        (["--camera", "v4l2", "--ae-lock"], "--ae-lock"),
+        (["--camera", "v4l2", "--awb-lock"], "--awb-lock"),
+        (["--camera", "v4l2", "--colour-gains", "1.0,1.0"], "--colour-gains"),
+        (["--camera", "v4l2", "--no-dng"], "--no-dng"),
     ],
 )
 def test_camera_specific_options_reject_conflicting_backend(args, message, capsys):
@@ -965,7 +971,7 @@ def test_default_prefers_picamera2_when_module_imports(camera_cli, monkeypatch):
     monkeypatch.setitem(sys.modules, "picamera2", SimpleNamespace())
     opened = []
 
-    def open_picamera(tuning_file):
+    def open_picamera(tuning_file, **kwargs):
         opened.append((tuning_file, _CameraDouble()))
         return opened[-1][1]
 
@@ -1007,6 +1013,96 @@ def test_default_falls_back_to_v4l2_when_picamera2_is_unavailable(
     assert import_attempts == 1
     assert opened[0][0] is None
     assert opened[0][1].closed
+
+
+def test_control_flags_reach_the_picamera2_backend(camera_cli, monkeypatch):
+    backend_kwargs = {}
+
+    def open_picamera(tuning_file, **kwargs):
+        backend_kwargs.update(kwargs)
+        return _CameraDouble()
+
+    monkeypatch.setattr(camera_cli, "Picamera2Camera", open_picamera, raising=False)
+
+    assert camera_cli.main([
+        "--camera", "picamera2", "--no-preview",
+        "--autofocus", "manual", "--af-range", "macro",
+        "--ae-lock", "--awb-lock", "--colour-gains", "1.8,2.1",
+    ]) == 0
+
+    assert backend_kwargs["autofocus"] == "manual"
+    assert backend_kwargs["af_range"] == "macro"
+    assert backend_kwargs["ae_lock"] is True
+    assert backend_kwargs["awb_lock"] is True
+    assert backend_kwargs["colour_gains"] == (1.8, 2.1)
+    assert backend_kwargs["save_dng"] is True
+
+
+def test_default_flags_leave_ae_and_awb_auto_with_continuous_af(camera_cli, monkeypatch):
+    backend_kwargs = {}
+
+    def open_picamera(tuning_file, **kwargs):
+        backend_kwargs.update(kwargs)
+        return _CameraDouble()
+
+    monkeypatch.setattr(camera_cli, "Picamera2Camera", open_picamera, raising=False)
+
+    assert camera_cli.main(["--camera", "picamera2", "--no-preview"]) == 0
+
+    assert backend_kwargs["autofocus"] == "continuous"
+    assert backend_kwargs["af_range"] == "normal"
+    assert backend_kwargs["ae_lock"] is False
+    assert backend_kwargs["awb_lock"] is False
+    assert backend_kwargs["colour_gains"] is None
+    assert backend_kwargs["save_dng"] is True
+
+
+def test_no_dng_flag_disables_dng_on_backend_and_session(camera_cli, monkeypatch):
+    backend_kwargs = {}
+    session_kwargs = {}
+
+    def open_picamera(tuning_file, **kwargs):
+        backend_kwargs.update(kwargs)
+        return _CameraDouble()
+
+    class RecordingSession:
+        def __init__(self, camera, pipeline, out, **kwargs):
+            session_kwargs.update(kwargs)
+            self.camera = camera
+
+        def capture(self):
+            raise AssertionError("capture should not be called in this test")
+
+    monkeypatch.setattr(camera_cli, "Picamera2Camera", open_picamera, raising=False)
+    monkeypatch.setattr(camera_cli, "CaptureSession", RecordingSession)
+
+    assert camera_cli.main(["--camera", "picamera2", "--no-preview", "--no-dng"]) == 0
+
+    assert backend_kwargs["save_dng"] is False
+    assert session_kwargs["save_dng"] is False
+
+
+@pytest.mark.parametrize("value", ["1.8", "1.8,2.1,3.0", "a,b", ""])
+def test_malformed_colour_gains_is_an_argparse_error(value, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--colour-gains", value])
+    assert exc_info.value.code == 2
+    assert "--colour-gains" in capsys.readouterr().err
+
+
+def test_colour_gains_parses_to_a_float_tuple(camera_cli, monkeypatch):
+    backend_kwargs = {}
+
+    def open_picamera(tuning_file, **kwargs):
+        backend_kwargs.update(kwargs)
+        return _CameraDouble()
+
+    monkeypatch.setattr(camera_cli, "Picamera2Camera", open_picamera, raising=False)
+
+    assert camera_cli.main(
+        ["--camera", "picamera2", "--no-preview", "--colour-gains", "1.8,2.1"]
+    ) == 0
+    assert backend_kwargs["colour_gains"] == (1.8, 2.1)
 
 
 def test_capture_writes_original_and_dng_and_records_metadata(tmp_path):

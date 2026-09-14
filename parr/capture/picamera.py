@@ -19,6 +19,8 @@ from .camera import CameraError, Frame, StreamInfo
 DEFAULT_TUNING_FILE = "imx708_wide.json"
 _NATIVE_SIZE = (4608, 2592)
 _MAIN_FORMAT = "RGB888"
+_AUTOFOCUS_MODES = ("continuous", "auto", "manual")
+_AF_RANGES = ("normal", "macro", "full")
 
 METADATA_KEYS = (
     "ExposureTime",
@@ -58,7 +60,23 @@ def serialisable_metadata(raw: dict) -> dict:
 class Picamera2Camera:
     """Acquire full-sensor RGB frames from an IMX708 through Picamera2."""
 
-    def __init__(self, tuning_file: str = DEFAULT_TUNING_FILE, save_dng: bool = True) -> None:
+    def __init__(
+        self,
+        tuning_file: str = DEFAULT_TUNING_FILE,
+        save_dng: bool = True,
+        autofocus: str = "continuous",
+        af_range: str = "normal",
+        ae_lock: bool = False,
+        awb_lock: bool = False,
+        colour_gains: tuple[float, float] | None = None,
+    ) -> None:
+        if autofocus not in _AUTOFOCUS_MODES:
+            raise CameraError(
+                f"Unknown autofocus mode {autofocus!r}; expected one of {_AUTOFOCUS_MODES}"
+            )
+        if af_range not in _AF_RANGES:
+            raise CameraError(f"Unknown af_range {af_range!r}; expected one of {_AF_RANGES}")
+
         try:
             from picamera2 import Picamera2
         except (ImportError, OSError) as exc:
@@ -81,6 +99,7 @@ class Picamera2Camera:
         self._camera: Any | None = camera
         self._started = False
         self._save_dng = save_dng
+        self._autofocus = autofocus
         start_attempted = False
         try:
             config = camera.create_still_configuration(
@@ -92,6 +111,7 @@ class Picamera2Camera:
             camera.configure(config)
             actual = camera.camera_configuration()
             self._stream_info = _stream_info(actual, tuning_file)
+            _apply_camera_controls(camera, autofocus, af_range, ae_lock, awb_lock, colour_gains)
             start_attempted = True
             camera.start()
             self._started = True
@@ -110,6 +130,12 @@ class Picamera2Camera:
         camera = self._camera
         if camera is None:
             raise CameraError("Cannot read from a closed Picamera2 camera")
+
+        if self._autofocus == "auto":
+            try:
+                camera.autofocus_cycle()
+            except Exception as exc:
+                raise CameraError(f"Autofocus cycle failed: {exc}") from exc
 
         try:
             request = camera.capture_request()
@@ -222,6 +248,43 @@ def _stream_info(actual: Any, tuning_file: str) -> StreamInfo:
         bit_depth=bit_depth,
         tuning_file=tuning_file,
     )
+
+
+def _apply_camera_controls(
+    camera: Any,
+    autofocus: str,
+    af_range: str,
+    ae_lock: bool,
+    awb_lock: bool,
+    colour_gains: tuple[float, float] | None,
+) -> None:
+    """Neutral ISP rendering plus autofocus, applied once after ``configure``.
+
+    Imports libcamera's control enums lazily so USB and fake-camera use never
+    require the Raspberry Pi camera stack. ``autofocus``/``af_range`` are
+    validated by the caller, so the dict lookups below cannot raise ``KeyError``.
+    """
+    from libcamera import controls as _lc
+
+    cam_controls = {"Sharpness": 1.0, "Contrast": 1.0, "Saturation": 1.0}
+    try:
+        cam_controls["NoiseReductionMode"] = _lc.draft.NoiseReductionModeEnum.HighQuality
+    except AttributeError:
+        pass  # older libcamera: leave NR at its default, recorded as unset
+    af_modes = {"continuous": _lc.AfModeEnum.Continuous,
+                "auto": _lc.AfModeEnum.Auto, "manual": _lc.AfModeEnum.Manual}
+    af_ranges = {"normal": _lc.AfRangeEnum.Normal,
+                 "macro": _lc.AfRangeEnum.Macro, "full": _lc.AfRangeEnum.Full}
+    cam_controls["AfMode"] = af_modes[autofocus]
+    cam_controls["AfRange"] = af_ranges[af_range]
+    if colour_gains is not None:
+        cam_controls["AwbEnable"] = False
+        cam_controls["ColourGains"] = tuple(colour_gains)
+    elif awb_lock:
+        cam_controls["AwbEnable"] = False
+    if ae_lock:
+        cam_controls["AeEnable"] = False
+    camera.set_controls(cam_controls)
 
 
 def _cleanup_camera(camera: Any, *, stop: bool) -> None:
