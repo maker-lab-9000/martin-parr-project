@@ -148,11 +148,12 @@ Tasks 1–4 on `plan/imx708-af-metadata-dng`.
   `ColourTemperature`, `Lux`, `LensPosition`, `AfState`, `FocusFoM`,
   `FrameDuration`, `SensorTimestamp`) and drops the rest.
 - **Phase 3 (original / DNG / graded output):** `CaptureSession.capture()` names
-  the Picamera2 original `_original.jpg`, writes a `<stem>.dng` sidecar from the
-  same request when `save_dng` is enabled, and records `camera_metadata` and
-  `dng` in `captures.jsonl`. `--no-dng` disables the sidecar on both the backend
-  and the session; with no DNG and no separate camera JPEG, the original then
-  falls back to `_ungraded.jpg`, matching the existing "neither JPEG nor DNG" rule.
+  the Picamera2 original `_original.jpg` always — a Picamera2 frame is the
+  camera's own full-quality rendering whether or not a DNG sidecar is also
+  saved — writes a `<stem>.dng` sidecar from the same request when `save_dng`
+  is enabled, and records `camera_metadata` and `dng` in `captures.jsonl`.
+  `--no-dng` disables the sidecar on both the backend and the session; it only
+  omits the `.dng` file and never changes the original's name.
 - **Task 4 (this entry):** added an end-to-end fake-backed test in
   `tests/test_picamera.py` that drives the real `Picamera2Camera` (via the
   injected fake `picamera2`/`libcamera` modules and a fake capture request)
@@ -161,10 +162,9 @@ Tasks 1–4 on `plan/imx708-af-metadata-dng`.
   record carries `frame_source == "picamera2"`, `camera_metadata`, `dng` and the
   sensor fields; and that `fitted_jpeg` on the graded file returns a
   240 × 135 thumbnail. A second test drives `Picamera2Camera(save_dng=False)`
-  (the `--no-dng` path) through the same session and confirms no `.dng` file,
-  no `dng` key, zero calls to the fake request's `save_dng`, and — as an
-  initially-surprising but correct consequence of the existing naming rule —
-  the original is saved as `_ungraded.jpg`, not `_original.jpg`. Full suite:
+  (the `--no-dng` path) through the same session and confirms the original is
+  still saved as `_original.jpg`, with no `.dng` file, no `dng` key, and zero
+  calls to the fake request's `save_dng`. Full suite:
   522 passed, 1 deselected (`-m 'not slow'`); Ruff clean. Documentation updated:
   `docs/picamera2-bringup.md`, `docs/setup.md`, `README.md`.
 - **Hardware acceptance still pending** (fake-backed tests are not hardware

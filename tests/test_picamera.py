@@ -657,6 +657,88 @@ def test_autofocus_auto_triggers_exactly_one_cycle_per_read(install_picamera):
     camera.close()
 
 
+def test_read_full_false_skips_autofocus_cycle_and_dng_but_keeps_metadata(install_picamera):
+    """The preview path (``full=False``) must stay cheap even in ``--autofocus
+    auto`` with DNG saving on: no autofocus cycle, no DNG bytes, but the request
+    is still captured, converted and released, and metadata is still populated.
+    """
+    array = np.broadcast_to(
+        np.array([[[10, 40, 230]]], dtype=np.uint8),
+        (2592, 4608, 3),
+    )
+    request = FakeRequest(array, metadata={"FrameDuration": 50_000})
+    state = install_picamera(request=request)
+    camera = Picamera2Camera(autofocus="auto")
+
+    frame = camera.read(full=False)
+
+    assert frame.dng is None
+    assert request.save_dng_calls == 0
+    assert state.instance.autofocus_cycle_count == 0
+    assert state.instance.capture_count == 1
+    assert request.release_count == 1
+    assert frame.metadata == {"FrameDuration": 50_000}
+    assert frame.rgb.shape == (2592, 4608, 3)
+    camera.close()
+
+
+def test_read_default_still_cycles_autofocus_and_extracts_dng(install_picamera):
+    """``read()`` with no arguments (the default ``full=True``) must behave
+    exactly as before: one autofocus cycle in ``--autofocus auto`` and a DNG
+    extracted for every frame.
+    """
+    array = np.broadcast_to(
+        np.array([[[10, 40, 230]]], dtype=np.uint8),
+        (2592, 4608, 3),
+    )
+    request = FakeRequest(array)
+    state = install_picamera(request=request)
+    camera = Picamera2Camera(autofocus="auto")
+
+    frame = camera.read()
+
+    assert frame.dng is not None
+    assert request.save_dng_calls == 1
+    assert state.instance.autofocus_cycle_count == 1
+    camera.close()
+
+
+def test_preview_frame_does_not_pay_the_full_capture_cost(install_picamera, tmp_path):
+    """Important 3: ``CaptureSession.preview_frame`` must call ``camera.read(full=False)``
+    so the live preview does not run a blocking autofocus cycle or DNG extraction
+    per frame.
+    """
+    array = np.broadcast_to(
+        np.array([[[10, 40, 230]]], dtype=np.uint8),
+        (2592, 4608, 3),
+    )
+    request = FakeRequest(array, metadata={"FrameDuration": 40_000})
+    state = install_picamera(request=request)
+    camera = Picamera2Camera(autofocus="auto")
+
+    artifact_dir = tmp_path / "artifact"
+    write_artifact(
+        artifact_dir,
+        LUT3D.identity(2),
+        NormalizeParams(white_balance=False),
+        GrainParams(enabled=False),
+    )
+    session = CaptureSession(
+        camera,
+        Pipeline(Artifacts.load(artifact_dir)),
+        tmp_path / "captures",
+        seed_rng=np.random.default_rng(0),
+    )
+    try:
+        frame = session.preview_frame()
+    finally:
+        camera.close()
+
+    assert frame.shape[-1] == 3
+    assert state.instance.autofocus_cycle_count == 0
+    assert request.save_dng_calls == 0
+
+
 @pytest.mark.parametrize("autofocus", ["continuous", "manual"])
 def test_autofocus_continuous_and_manual_never_cycle(install_picamera, autofocus):
     array = np.broadcast_to(

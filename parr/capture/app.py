@@ -166,7 +166,9 @@ class CaptureSession:
         return CaptureResult(original, parr, record)
 
     def preview_frame(self, graded: bool = True, size: tuple[int, int] = (640, 360)) -> np.ndarray:
-        small = _resize_to_fit(self.camera.read().rgb, size)
+        # full=False: the live preview must not pay Picamera2's per-frame autofocus
+        # cycle or DNG extraction cost; capture() below keeps the full=True default.
+        small = _resize_to_fit(self.camera.read(full=False).rgb, size)
         if graded:
             small, _ = self.pipeline.process(small, grain=False)
         return small
@@ -480,6 +482,8 @@ def _colour_gains(value: str) -> tuple[float, float]:
         r, b = (float(part) for part in parts)
     except ValueError as exc:
         raise argparse.ArgumentTypeError("colour gains must be numbers") from exc
+    if r <= 0 or b <= 0:
+        raise argparse.ArgumentTypeError("colour gains must be positive numbers")
     return r, b
 
 
@@ -495,7 +499,8 @@ def _picamera2_available() -> bool:
 def _reject_picamera2_only_flags(
     parser: argparse.ArgumentParser, args: argparse.Namespace, *, reason: str
 ) -> None:
-    """Refuse Picamera2-only options once V4L2 has been chosen, however it was chosen.
+    """Refuse Picamera2-only options whenever no real Picamera2 will be opened,
+    whether that is V4L2 (however it was chosen) or ``--fake``.
 
     ``--device`` (which itself selects V4L2) and ``--no-dng`` (wired independently
     into ``CaptureSession`` and meaningful on any backend) are deliberately excluded.
@@ -531,11 +536,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--ae-lock", action="store_true",
-        help="Picamera2: lock auto-exposure, for controlled shoots (default: auto)",
+        help=(
+            "Picamera2: disable auto-exposure at whatever value it holds right "
+            "before capture starts (not a converged/settled value); for controlled "
+            "shoots (default: auto)"
+        ),
     )
     parser.add_argument(
         "--awb-lock", action="store_true",
-        help="Picamera2: lock auto white balance, for controlled shoots (default: auto)",
+        help=(
+            "Picamera2: disable auto white balance at whatever value it holds right "
+            "before capture starts (not a converged/settled value); use --colour-gains "
+            "instead to set a known white balance (default: auto)"
+        ),
     )
     parser.add_argument(
         "--colour-gains", type=_colour_gains, default=None, metavar="R,B",
@@ -591,6 +604,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         if args.fake:
+            _reject_picamera2_only_flags(parser, args, reason="cannot be used with --fake")
             camera: Camera = FakeCamera()
         else:
             backend = args.camera

@@ -126,12 +126,16 @@ class Picamera2Camera:
     def stream_info(self) -> StreamInfo:
         return self._stream_info
 
-    def read(self) -> Frame:
+    def read(self, *, full: bool = True) -> Frame:
+        """Acquire one frame. ``full=False`` (preview) skips the autofocus cycle
+        and DNG extraction, which otherwise make each read too slow for a live
+        preview; the request is still captured, converted and released, and
+        metadata is still read, so ``preview_frame`` keeps working."""
         camera = self._camera
         if camera is None:
             raise CameraError("Cannot read from a closed Picamera2 camera")
 
-        if self._autofocus == "auto":
+        if full and self._autofocus == "auto":
             try:
                 camera.autofocus_cycle()
             except Exception as exc:
@@ -158,7 +162,11 @@ class Picamera2Camera:
                 metadata = serialisable_metadata(request.get_metadata())
                 self._update_fps({"FrameDuration": metadata.get("FrameDuration", 0)})
                 dng = None
-                if self._save_dng:
+                if full and self._save_dng:
+                    # The ".dng" suffix is load-bearing: PiDNG (used by save_dng)
+                    # appends ".dng" to a path that lacks it, which would write
+                    # the payload to a different file than this one and leave
+                    # this handle's read empty.
                     with tempfile.NamedTemporaryFile(suffix=".dng", delete=True) as tmp:
                         request.save_dng(tmp.name)
                         tmp.seek(0)

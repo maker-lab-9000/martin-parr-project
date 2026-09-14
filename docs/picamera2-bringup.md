@@ -62,7 +62,7 @@ Use a terminal, press SPACE to capture, and Q to quit. Take a frame containing
 red, green and blue objects plus a neutral patch; repeat several captures to
 check that requests are returned and the camera does not stall. Confirm:
 
-- `_ungraded.jpg` and `_parr.jpg` both have 4608 × 2592 pixels.
+- `_original.jpg` (plus `.dng`) and `_parr.jpg` both have 4608 × 2592 pixels.
 - Red and blue are not swapped. Picamera2 calls the BGR byte layout `RGB888`;
   the backend must convert it to the pipeline's RGB convention.
 - `captures.jsonl` records the actual raw sensor mode, bit depth and tuning
@@ -73,10 +73,12 @@ check that requests are returned and the camera does not stall. Confirm:
 - When the usual authenticated remote service is tested, the Stick receives
   its existing thumbnail. Do not expose an unauthenticated test listener.
 
-Phase 1 deliberately produces `_ungraded.jpg`, not an original JPEG/DNG pair.
-Autofocus control, per-shot exposure/AWB metadata and retained request saves
-belong to Phases 2–3. Do not label these Phase 1 files as the production training
-corpus before the capture pipeline and source/runtime input boundary are fixed.
+Phase 1 originally produced `_ungraded.jpg`, not an original JPEG/DNG pair,
+before autofocus control, per-shot exposure/AWB metadata and retained request
+saves landed in Phases 2–3 below; this same command now produces the Phase 2/3
+output described in Section 4 (`_original.jpg` + `.dng` + `_parr.jpg`). Do not
+label these files as the production training corpus before the capture
+pipeline and source/runtime input boundary are fixed.
 
 ## 4. Phase 2/3 capture test: metadata, autofocus, original + DNG
 
@@ -97,9 +99,9 @@ shoot needs otherwise), and every capture writes three files instead of one:
   a DNG sidecar is also saved.
 - `<stem>.dng`: a raw sidecar saved from the same capture request, enabled by
   default. Pass `--no-dng` to skip it for long sessions; it costs storage
-  (roughly 28 MB per shot at 4608 × 2592 10-bit raw, versus a few MB for the
-  two JPEGs). `--no-dng` only omits this sidecar; it does not change the
-  original's name.
+  (about 18 MB DNG at 4608 × 2592 10-bit raw, roughly 28 MB per shot in total
+  once the two JPEGs are added). `--no-dng` only omits this sidecar; it does
+  not change the original's name.
 - `_parr.jpg`: the graded output, as before.
 
 `captures.jsonl` gains two keys when the frame carries them: `camera_metadata`
@@ -108,8 +110,10 @@ example `ExposureTime`, `AnalogueGain`, `Lux`, `LensPosition`, `AfState`) and
 `dng` (the sidecar's filename, only present when one was written).
 
 For a controlled reference-matching shoot, AE and AWB can be locked instead of
-left auto: `--ae-lock` freezes exposure, `--awb-lock` freezes white balance,
-and `--colour-gains R,B` fixes explicit gains (which also disables AWB).
+left auto: `--ae-lock` and `--awb-lock` disable the algorithm at whatever value
+it holds right before `start()` — the initial, pre-convergence value, not a
+settled one — and `--colour-gains R,B` fixes explicit, known gains (which also
+disables AWB) rather than relying on whatever AWB happened to land on.
 `--autofocus {continuous,auto,manual}` and `--af-range {normal,macro,full}`
 control the lens; the default is continuous AF at normal range.
 
@@ -123,6 +127,9 @@ Confirm on real hardware:
 - `ExposureTime`, `AnalogueGain` and `Lux` in `camera_metadata` are plausible
   for the scene, and `--no-dng` reliably removes the `.dng` file while the
   original is still saved as `_original.jpg`.
+- With `--ae-lock`, confirm the locked frame's exposure matches an unlocked
+  frame of the same scene before relying on it — the lock freezes whatever
+  value AE held before capture started, which is not guaranteed to be settled.
 
 ## 5. Record acceptance and collect the pilot later
 

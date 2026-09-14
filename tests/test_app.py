@@ -1,3 +1,4 @@
+import argparse
 import builtins
 import io
 import json
@@ -13,7 +14,13 @@ import pytest
 from PIL import Image
 
 from parr.artifacts import Artifacts, write_artifact
-from parr.capture.app import CaptureSession, main, run_headless_loop, run_preview_loop
+from parr.capture.app import (
+    CaptureSession,
+    _colour_gains,
+    main,
+    run_headless_loop,
+    run_preview_loop,
+)
 from parr.capture.camera import CameraError, FakeCamera, Frame, StreamInfo, synthetic_frame
 from parr.grain import GrainParams
 from parr.imageio import load_rgb
@@ -931,6 +938,19 @@ def test_fake_bypasses_all_hardware_detection(camera_cli, monkeypatch):
     assert camera_cli.main(["--fake", "--no-preview"]) == 0
 
 
+def test_fake_rejects_picamera2_only_flags(camera_cli, capsys):
+    """``--fake`` selects no real camera, so Picamera2-only flags select nothing
+    and would otherwise be silently ignored; they must error instead, same as
+    on the V4L2 backend (Minor 6).
+    """
+    with pytest.raises(SystemExit) as exc_info:
+        camera_cli.main(["--fake", "--no-preview", "--colour-gains", "1.8,2.1"])
+    assert exc_info.value.code == 2
+    error = capsys.readouterr().err
+    assert "--colour-gains" in error
+    assert "--fake" in error
+
+
 def test_device_without_camera_choice_selects_v4l2(camera_cli, monkeypatch):
     opened = []
 
@@ -1131,12 +1151,23 @@ def test_no_dng_flag_disables_dng_on_backend_and_session(camera_cli, monkeypatch
     assert session_kwargs["save_dng"] is False
 
 
-@pytest.mark.parametrize("value", ["1.8", "1.8,2.1,3.0", "a,b", ""])
+@pytest.mark.parametrize("value", ["1.8", "1.8,2.1,3.0", "a,b", "", "0,0", "-1,2"])
 def test_malformed_colour_gains_is_an_argparse_error(value, capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["--colour-gains", value])
     assert exc_info.value.code == 2
     assert "--colour-gains" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", ["0,0", "-1,2", "1.8,0", "0,1.8", "-0.5,-0.5"])
+def test_colour_gains_type_function_rejects_non_positive_values(value):
+    """Minor 5, isolated from CLI backend-selection: ``_colour_gains`` itself
+    must reject non-positive gains, independent of which backend a run would
+    select (a syntactically valid ``0,0``/negative pair must not silently
+    parse to a gains tuple that would be rejected only by accident elsewhere).
+    """
+    with pytest.raises(argparse.ArgumentTypeError, match="positive"):
+        _colour_gains(value)
 
 
 def test_colour_gains_parses_to_a_float_tuple(camera_cli, monkeypatch):
