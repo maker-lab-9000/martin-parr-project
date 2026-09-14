@@ -1007,3 +1007,79 @@ def test_default_falls_back_to_v4l2_when_picamera2_is_unavailable(
     assert import_attempts == 1
     assert opened[0][0] is None
     assert opened[0][1].closed
+
+
+def test_capture_writes_original_and_dng_and_records_metadata(tmp_path):
+    import numpy as np
+
+    from parr.artifacts import Artifacts
+    from parr.capture.app import CaptureSession
+    from parr.capture.camera import Frame, StreamInfo
+    from parr.pipeline import Pipeline
+
+    class MetaCamera:
+        stream_info = StreamInfo(4608, 2592, 14.35, "RGB888", False,
+                                 sensor_mode="4608x2592 SBGGR10_CSI2P", bit_depth=10,
+                                 tuning_file="imx708_wide.json")
+        def read(self):
+            rgb = np.zeros((8, 8, 3), dtype=np.uint8)
+            metadata = {"ExposureTime": 9995, "AnalogueGain": 2.0, "Lux": 120.0}
+            return Frame(rgb=rgb, jpeg=None, source="picamera2",
+                         metadata=metadata,
+                         dng=b"II*\x00fake-dng-bytes")
+        def close(self): ...
+
+    sess = CaptureSession(MetaCamera(), Pipeline(Artifacts.default()), tmp_path,
+                          seed_rng=np.random.default_rng(0))
+    result = sess.capture()
+    day = result.parr.parent
+    assert result.original.name.endswith("_original.jpg")
+    dng = day / (result.original.name.replace("_original.jpg", ".dng"))
+    assert dng.read_bytes() == b"II*\x00fake-dng-bytes"
+    expected_metadata = {"ExposureTime": 9995, "AnalogueGain": 2.0, "Lux": 120.0}
+    assert result.record["camera_metadata"] == expected_metadata
+    assert result.record["dng"] == dng.name
+
+
+def test_capture_skips_dng_when_disabled(tmp_path):
+    import numpy as np
+
+    from parr.artifacts import Artifacts
+    from parr.capture.app import CaptureSession
+    from parr.capture.camera import Frame, StreamInfo
+    from parr.pipeline import Pipeline
+
+    class C:
+        stream_info = StreamInfo(8, 8, 0.0, "RGB888", False)
+        def read(self):
+            return Frame(np.zeros((8, 8, 3), np.uint8), None, "picamera2", dng=b"raw")
+        def close(self): ...
+
+    sess = CaptureSession(C(), Pipeline(Artifacts.default()), tmp_path,
+                          seed_rng=np.random.default_rng(0), save_dng=False)
+    result = sess.capture()
+    assert not list(result.parr.parent.glob("*.dng"))
+    assert "dng" not in result.record
+    assert result.original.name.endswith("_original.jpg")
+
+
+def test_v4l2_style_frame_without_metadata_is_unchanged(tmp_path):
+    import numpy as np
+
+    from parr.artifacts import Artifacts
+    from parr.capture.app import CaptureSession
+    from parr.capture.camera import Frame, StreamInfo
+    from parr.pipeline import Pipeline
+
+    class Usb:
+        stream_info = StreamInfo(1920, 1080, 30.0, "MJPG", True)
+        def read(self):
+            return Frame(np.zeros((8, 8, 3), np.uint8), b"\xff\xd8jpg\xff\xd9",
+                         "raw-mjpeg")
+        def close(self): ...
+
+    result = CaptureSession(Usb(), Pipeline(Artifacts.default()), tmp_path,
+                            seed_rng=np.random.default_rng(0)).capture()
+    assert result.original.name.endswith("_original.jpg")   # jpeg present -> original
+    assert "camera_metadata" not in result.record
+    assert "dng" not in result.record

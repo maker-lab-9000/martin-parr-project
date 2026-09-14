@@ -89,6 +89,8 @@ class Frame:
     rgb: np.ndarray
     jpeg: bytes | None
     source: str  # "raw-mjpeg", "decoded", or "picamera2"
+    metadata: dict | None = None  # per-shot camera metadata (picamera2)
+    dng: bytes | None = None      # in-memory DNG for this frame (picamera2)
 
 
 class Camera(Protocol):

@@ -92,6 +92,7 @@ class CaptureSession:
         now: Callable[[], datetime] | None = None,
         seed_rng: np.random.Generator | None = None,
         package_version: str = __version__,
+        save_dng: bool = True,
     ) -> None:
         self.camera = camera
         self.pipeline = pipeline
@@ -99,6 +100,7 @@ class CaptureSession:
         self._now = now or datetime.now
         self._seed_rng = seed_rng or np.random.default_rng()
         self._package_version = package_version
+        self._save_dng = save_dng
 
     def _allocate(self, suffix: str) -> tuple[Path, str, datetime]:
         t = self._now()
@@ -120,13 +122,19 @@ class CaptureSession:
         graded, info = self.pipeline.process(frame.rgb, rng=np.random.default_rng(seed))
         pipeline_ms = (time.perf_counter() - t0) * 1000.0
 
-        suffix = "original" if frame.jpeg is not None else "ungraded"
+        has_original = frame.jpeg is not None or frame.dng is not None
+        suffix = "original" if has_original else "ungraded"
         day_dir, stem, t = self._allocate(suffix)
         original = day_dir / f"{stem}_{suffix}.jpg"
         if frame.jpeg is not None:
             original.write_bytes(frame.jpeg)
         else:
             save_jpeg(frame.rgb, original)
+        dng_name = None
+        if frame.dng is not None and self._save_dng:
+            dng_path = day_dir / f"{stem}.dng"
+            dng_path.write_bytes(frame.dng)
+            dng_name = dng_path.name
         parr = save_jpeg(graded, day_dir / f"{stem}_parr.jpg")
         shutter_to_saved_ms = (time.perf_counter() - shutter) * 1000.0
 
@@ -142,6 +150,8 @@ class CaptureSession:
             **self.camera.stream_info.to_dict(),
             "pipeline_ms": round(pipeline_ms, 1),
             "shutter_to_saved_ms": round(shutter_to_saved_ms, 1),
+            **({"camera_metadata": frame.metadata} if frame.metadata else {}),
+            **({"dng": dng_name} if dng_name else {}),
         }
         with (day_dir / "captures.jsonl").open("a") as fh:
             fh.write(json.dumps(record) + "\n")
