@@ -168,10 +168,11 @@ An installed Picamera2 changes the default backend, so a Pi still on the USB
 camera should pass `--camera v4l2` explicitly until it is migrated.
 
 On Picamera2, a capture saves three files instead of two: `_original.jpg` (the
-ISP's own rendering, no separate camera JPEG exists), a `<stem>.dng` raw
+ISP's own rendering — a Picamera2 frame is always a full-quality original,
+named `_original.jpg` whether or not a DNG is also saved), a `<stem>.dng` raw
 sidecar from the same request (on by default, roughly 28 MB per shot; skip it
-with `--no-dng` for long sessions — with no DNG and no camera JPEG, the
-original then falls back to `_ungraded.jpg`), and the usual `_parr.jpg`.
+with `--no-dng` for long sessions, which omits only the `.dng` sidecar and
+never renames the original), and the usual `_parr.jpg`.
 `captures.jsonl` adds `camera_metadata` (a filtered, JSON-safe subset such as
 `ExposureTime`, `AnalogueGain`, `Lux`, `LensPosition`, `AfState`) and `dng`
 (the sidecar filename) when present. Autofocus defaults to continuous AF at

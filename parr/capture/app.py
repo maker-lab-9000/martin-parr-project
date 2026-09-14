@@ -29,11 +29,15 @@ Output layout
 ``OUT/YYYY-MM-DD/HHMMSS_original.jpg`` holds the original for the shot.
 For the USB camera (V4L2) it is the camera's own JPEG bytes, written verbatim.
 For Picamera2, which has no separate camera JPEG, it is a single JPEG encode of
-the ISP's RGB frame. ``HHMMSS_parr.jpg`` is the graded version.
-``_ungraded.jpg`` is used only when there is neither a camera JPEG nor a DNG.
-When the backend supplies a raw frame and DNG saving is enabled, a
-``<stem>.dng`` sidecar is written alongside the original. One JSON line per
-capture lands in ``captures.jsonl``.
+the ISP's RGB frame; that frame is always the camera's own full-quality
+rendering, so it is named ``_original.jpg`` whether or not a DNG sidecar is
+also saved. ``HHMMSS_parr.jpg`` is the graded version. ``_ungraded.jpg`` is
+used only for the V4L2 fallback, when there is no camera JPEG to save
+verbatim (raw mode unsupported, or a captured buffer failed validation). When
+the backend supplies a raw frame and DNG saving is enabled, a ``<stem>.dng``
+sidecar is written alongside the original; ``--no-dng`` only omits that
+sidecar and never changes the original's name. One JSON line per capture
+lands in ``captures.jsonl``.
 
 That line is an audit record, not a status message. It carries the grain
 seed and the LUT hash, which together let anyone regenerate the graded file
@@ -126,7 +130,7 @@ class CaptureSession:
         graded, info = self.pipeline.process(frame.rgb, rng=np.random.default_rng(seed))
         pipeline_ms = (time.perf_counter() - t0) * 1000.0
 
-        has_original = frame.jpeg is not None or frame.dng is not None
+        has_original = frame.jpeg is not None or frame.source == "picamera2"
         suffix = "original" if has_original else "ungraded"
         day_dir, stem, t = self._allocate(suffix)
         original = day_dir / f"{stem}_{suffix}.jpg"

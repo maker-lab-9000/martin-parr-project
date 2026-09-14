@@ -813,9 +813,10 @@ def test_native_capture_session_omits_dng_when_backend_disables_it(
     install_picamera, tmp_path,
 ):
     """A ``--no-dng`` run: Picamera2Camera(save_dng=False) never asks the request
-    to extract a DNG, so the frame has neither a camera JPEG nor a DNG, and the
-    original is named ``_ungraded.jpg`` (not ``_original.jpg``); see the
-    "_ungraded.jpg" rule in the module docstring in parr/capture/app.py.
+    to extract a DNG, but the frame is still the camera's own ISP rendering, so
+    the original stays named ``_original.jpg``; only the DNG sidecar is omitted.
+    See the "Output layout" section of the module docstring in
+    parr/capture/app.py.
     """
     bgr = np.broadcast_to(
         np.array([[[25, 110, 220]]], dtype=np.uint8),
@@ -844,11 +845,11 @@ def test_native_capture_session_omits_dng_when_backend_disables_it(
         camera.close()
 
     assert request.save_dng_calls == 0
-    assert result.original.name.endswith("_ungraded.jpg")
+    assert result.original.name.endswith("_original.jpg")
 
     day_dir = result.original.parent
     assert not list(day_dir.glob("*.dng"))
-    assert [p.name for p in day_dir.glob("*_ungraded.jpg")] == [result.original.name]
+    assert [p.name for p in day_dir.glob("*_original.jpg")] == [result.original.name]
     assert [p.name for p in day_dir.glob("*_parr.jpg")] == [result.parr.name]
 
     record_path, = (tmp_path / "captures").rglob("captures.jsonl")

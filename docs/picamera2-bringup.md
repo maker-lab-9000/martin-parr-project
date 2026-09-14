@@ -92,14 +92,14 @@ shoot needs otherwise), and every capture writes three files instead of one:
   --no-preview --out ~/Pictures/parr-imx708-phase23
 ```
 
-- `_original.jpg`: the ISP's own 8-bit rendering, as before.
+- `_original.jpg`: the ISP's own 8-bit rendering, always saved under this name
+  — a Picamera2 frame is the camera's own full-quality capture whether or not
+  a DNG sidecar is also saved.
 - `<stem>.dng`: a raw sidecar saved from the same capture request, enabled by
   default. Pass `--no-dng` to skip it for long sessions; it costs storage
   (roughly 28 MB per shot at 4608 × 2592 10-bit raw, versus a few MB for the
-  two JPEGs). With `--no-dng`, `Frame.dng` is never populated, so — since
-  Picamera2 has no separate camera JPEG either — the original falls back to
-  `_ungraded.jpg` rather than `_original.jpg` (the same "neither JPEG nor DNG"
-  rule the module docstring in `parr/capture/app.py` describes).
+  two JPEGs). `--no-dng` only omits this sidecar; it does not change the
+  original's name.
 - `_parr.jpg`: the graded output, as before.
 
 `captures.jsonl` gains two keys when the frame carries them: `camera_metadata`
@@ -121,8 +121,8 @@ Confirm on real hardware:
   `camera_metadata`, and `AfState` reflects the autofocus state machine
   (searching vs. focused).
 - `ExposureTime`, `AnalogueGain` and `Lux` in `camera_metadata` are plausible
-  for the scene, and `--no-dng` reliably removes the `.dng` file without
-  otherwise changing behaviour.
+  for the scene, and `--no-dng` reliably removes the `.dng` file while the
+  original is still saved as `_original.jpg`.
 
 ## 5. Record acceptance and collect the pilot later
 

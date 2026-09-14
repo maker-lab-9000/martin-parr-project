@@ -172,7 +172,8 @@ Picamera2 changes the default backend.
 On Picamera2, each capture saves three files: `_original.jpg` (the ISP's own
 rendering), `<stem>.dng` (a raw sidecar from the same capture request, on by
 default; `--no-dng` disables it and saves storage — about 28 MB per shot
-otherwise), and `_parr.jpg` (the graded output). `captures.jsonl` gains
+otherwise, and only omits the `.dng`; the original still stays `_original.jpg`),
+and `_parr.jpg` (the graded output). `captures.jsonl` gains
 `camera_metadata` (a filtered subset of the request's metadata, such as
 `ExposureTime`, `AnalogueGain`, `Lux`, `LensPosition`) and `dng` (the sidecar's
 filename) when present. Autofocus defaults to continuous
