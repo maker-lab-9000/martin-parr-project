@@ -65,6 +65,7 @@ from ..imageio import load_rgb, save_jpeg
 from ..pipeline import Pipeline
 from .camera import Camera, CameraError, FakeCamera, V4L2Camera
 from .controller import CaptureController, JobSnapshot
+from .picamera import DEFAULT_TUNING_FILE, Picamera2Camera
 from .remote import RemoteCaptureServer
 
 cv2 = require_cv2()
@@ -451,12 +452,23 @@ def _remote_listen(value: str) -> tuple[str, int]:
     return host, port
 
 
+def _picamera2_available() -> bool:
+    """Probe only the optional runtime package, without opening a camera."""
+    try:
+        __import__("picamera2")
+    except (ImportError, OSError):
+        return False
+    return True
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="parr-capture",
-        description="Capture Parr-graded photos from the U20CAM.",
+        description="Capture Parr-graded photos from a supported camera.",
     )
+    parser.add_argument("--camera", choices=("v4l2", "picamera2"))
     parser.add_argument("--device", default=None, help="index, /dev/videoN or /dev/v4l/by-id/...")
+    parser.add_argument("--tuning-file", help="Picamera2 tuning filename or absolute path")
     parser.add_argument(
         "--artifacts", type=Path, default=None, help="artifact dir (default: bundled)"
     )
@@ -474,6 +486,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    if args.camera == "picamera2" and args.device is not None:
+        parser.error("--device cannot be used with --camera picamera2")
+    if args.camera == "v4l2" and args.tuning_file is not None:
+        parser.error("--tuning-file cannot be used with --camera v4l2")
+
     remote_token = os.environ.get("PARR_REMOTE_TOKEN") if args.remote_listen else None
     if args.remote_listen and not remote_token:
         print("error: --remote-listen requires PARR_REMOTE_TOKEN", file=sys.stderr)
@@ -485,7 +502,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     try:
-        camera: Camera = FakeCamera() if args.fake else V4L2Camera(args.device)
+        if args.fake:
+            camera: Camera = FakeCamera()
+        else:
+            backend = args.camera
+            if backend is None:
+                backend = "v4l2" if args.device is not None else (
+                    "picamera2" if _picamera2_available() else "v4l2"
+                )
+            if backend == "picamera2":
+                camera = Picamera2Camera(args.tuning_file or DEFAULT_TUNING_FILE)
+            else:
+                if args.tuning_file is not None:
+                    parser.error("--tuning-file cannot be used with the selected V4L2 backend")
+                camera = V4L2Camera(args.device)
     except CameraError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

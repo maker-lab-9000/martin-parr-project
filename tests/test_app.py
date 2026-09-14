@@ -1,5 +1,7 @@
+import builtins
 import io
 import json
+import sys
 import threading
 import time
 from datetime import datetime
@@ -777,3 +779,202 @@ def test_main_reports_bad_artifacts(tmp_path, capsys):
     )
     assert code == 2
     assert "params.json" in capsys.readouterr().err
+
+
+class _CameraDouble:
+    stream_info = StreamInfo(64, 48, 30.0, "TEST", False)
+
+    def __init__(self):
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.fixture
+def camera_cli(monkeypatch):
+    """Run ``main`` through its real terminal loop without camera hardware."""
+    from parr.capture import app
+
+    monkeypatch.setattr(app.Artifacts, "resolve", lambda _: object())
+    monkeypatch.setattr(app, "Pipeline", lambda _: object())
+    monkeypatch.setattr(app, "has_display", lambda: False)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
+    terminal = SimpleNamespace(
+        __enter__=lambda self: self,
+        __exit__=lambda self, *exc: None,
+        read=lambda: "q",
+    )
+
+    class Terminal:
+        def __enter__(self):
+            return terminal
+
+        def __exit__(self, *exc):
+            return None
+
+    monkeypatch.setattr(app, "TerminalKeys", Terminal)
+    return app
+
+
+def test_explicit_v4l2_never_imports_picamera2(camera_cli, monkeypatch):
+    real_import = builtins.__import__
+    opened = []
+
+    def no_picamera_import(name, *args, **kwargs):
+        if name == "picamera2":
+            raise AssertionError("explicit V4L2 must not probe Picamera2")
+        return real_import(name, *args, **kwargs)
+
+    def open_v4l2(device):
+        opened.append((device, _CameraDouble()))
+        return opened[-1][1]
+
+    monkeypatch.setattr(builtins, "__import__", no_picamera_import)
+    monkeypatch.setattr(camera_cli, "V4L2Camera", open_v4l2)
+
+    assert camera_cli.main(["--camera", "v4l2", "--no-preview"]) == 0
+    assert opened[0][0] is None
+    assert opened[0][1].closed
+
+
+def test_explicit_picamera2_receives_tuning_file(camera_cli, monkeypatch):
+    opened = []
+
+    def open_picamera(tuning_file):
+        opened.append((tuning_file, _CameraDouble()))
+        return opened[-1][1]
+
+    monkeypatch.setattr(camera_cli, "Picamera2Camera", open_picamera, raising=False)
+    monkeypatch.setattr(
+        camera_cli,
+        "V4L2Camera",
+        lambda device: (_ for _ in ()).throw(AssertionError("wrong backend")),
+    )
+
+    assert camera_cli.main(
+        ["--camera", "picamera2", "--tuning-file", "delivered.json", "--no-preview"]
+    ) == 0
+    assert opened[0][0] == "delivered.json"
+    assert opened[0][1].closed
+
+
+def test_explicit_picamera2_reports_optional_library_load_failure(
+    camera_cli, monkeypatch, capsys,
+):
+    real_import = builtins.__import__
+
+    def broken_picamera_import(name, *args, **kwargs):
+        if name == "picamera2":
+            raise OSError("libcamera.so could not be loaded")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", broken_picamera_import)
+
+    assert camera_cli.main(["--camera", "picamera2", "--no-preview"]) == 2
+    error = capsys.readouterr().err
+    assert "Picamera2" in error
+    assert "install" in error
+
+
+def test_fake_bypasses_all_hardware_detection(camera_cli, monkeypatch):
+    real_import = builtins.__import__
+
+    def no_picamera_import(name, *args, **kwargs):
+        if name == "picamera2":
+            raise AssertionError("fake mode must not probe Picamera2")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_picamera_import)
+    monkeypatch.setattr(
+        camera_cli,
+        "V4L2Camera",
+        lambda device: (_ for _ in ()).throw(AssertionError("fake opened V4L2")),
+    )
+    monkeypatch.setattr(
+        camera_cli,
+        "Picamera2Camera",
+        lambda tuning: (_ for _ in ()).throw(AssertionError("fake opened Picamera2")),
+        raising=False,
+    )
+
+    assert camera_cli.main(["--fake", "--no-preview"]) == 0
+
+
+def test_device_without_camera_choice_selects_v4l2(camera_cli, monkeypatch):
+    opened = []
+
+    def open_v4l2(device):
+        opened.append((device, _CameraDouble()))
+        return opened[-1][1]
+
+    monkeypatch.setattr(camera_cli, "V4L2Camera", open_v4l2)
+
+    assert camera_cli.main(["--device", "/dev/video9", "--no-preview"]) == 0
+    assert opened[0][0] == "/dev/video9"
+    assert opened[0][1].closed
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (["--camera", "picamera2", "--device", "/dev/video9"], "--device"),
+        (["--camera", "v4l2", "--tuning-file", "sensor.json"], "--tuning-file"),
+    ],
+)
+def test_camera_specific_options_reject_conflicting_backend(args, message, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(args)
+    assert exc_info.value.code == 2
+    error = capsys.readouterr().err
+    assert message in error
+    assert "cannot be used" in error
+
+
+def test_default_prefers_picamera2_when_module_imports(camera_cli, monkeypatch):
+    monkeypatch.setitem(sys.modules, "picamera2", SimpleNamespace())
+    opened = []
+
+    def open_picamera(tuning_file):
+        opened.append((tuning_file, _CameraDouble()))
+        return opened[-1][1]
+
+    monkeypatch.setattr(camera_cli, "Picamera2Camera", open_picamera, raising=False)
+    monkeypatch.setattr(
+        camera_cli,
+        "V4L2Camera",
+        lambda device: (_ for _ in ()).throw(AssertionError("wrong backend")),
+    )
+
+    assert camera_cli.main(["--no-preview"]) == 0
+    assert opened[0][0] == "imx708_wide.json"
+    assert opened[0][1].closed
+
+
+def test_default_falls_back_to_v4l2_when_picamera2_is_unavailable(
+    camera_cli, monkeypatch,
+):
+    real_import = builtins.__import__
+    opened = []
+    import_attempts = 0
+
+    def missing_picamera(name, *args, **kwargs):
+        nonlocal import_attempts
+        if name == "picamera2":
+            import_attempts += 1
+            raise ModuleNotFoundError("No module named 'picamera2'", name="picamera2")
+        return real_import(name, *args, **kwargs)
+
+    def open_v4l2(device):
+        opened.append((device, _CameraDouble()))
+        return opened[-1][1]
+
+    monkeypatch.delitem(sys.modules, "picamera2", raising=False)
+    monkeypatch.setattr(builtins, "__import__", missing_picamera)
+    monkeypatch.setattr(camera_cli, "V4L2Camera", open_v4l2)
+
+    assert camera_cli.main(["--no-preview"]) == 0
+    assert import_attempts == 1
+    assert opened[0][0] is None
+    assert opened[0][1].closed

@@ -161,7 +161,13 @@ python3 -m venv --system-site-packages .venv
 
 `--system-site-packages` is deliberate: it lets the venv use the apt OpenCV,
 which is built with GTK. The pip wheel would work headless but not for the
-two-screen mode.
+two-screen mode. On a Pi with a native camera (Camera Module 3 / IMX708) it also
+exposes the apt `python3-picamera2` and libcamera, which must never be installed
+from pip; select that backend with `--camera picamera2 --tuning-file
+imx708_wide.json`, and follow [the Picamera2 bring-up checklist](picamera2-bringup.md)
+for first-time hardware acceptance. A Pi still on the USB camera should pass
+`--camera v4l2` explicitly once this code is installed, because an installed
+Picamera2 changes the default backend.
 
 ### 4.2 Choose the look
 

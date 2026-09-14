@@ -1,10 +1,17 @@
 # Raspberry Pi 4 + Camera Module 3 Wide (IMX708) Roadmap
 
-> **Status:** design-level roadmap, written 2026-09-11 before the hardware is on
-> the bench. Each phase below becomes its own task-by-task implementation plan
-> (the `superpowers:writing-plans` format, with tests and commits) when it is
-> about to start. Nothing here is executable yet; it fixes the order, the
-> decisions and the acceptance criteria so the later plans argue from one spec.
+> **Status (reviewed 2026-09-13):** design-level roadmap, originally written
+> before hardware bring-up. Phase 9's baked-LUT path is implemented in
+> `d349fec` and `d44c08d`; its optional runtime path remains unimplemented.
+> The other phases remain planned, and hardware acceptance is not yet recorded.
+> Each remaining phase becomes its own task-by-task implementation plan
+> (the `superpowers:writing-plans` format, with tests and commits) before coding.
+> Track execution separately in [roadmap progress](2026-09-13-rpi4-imx708-progress.md).
+
+**Hardware update, 2026-09-14:** the user reports delivery of the IMX708
+12-megapixel autofocus camera. The exact lens variant and connection to the
+Pi 4 still need confirmation; the Wide-specific tuning below remains a
+bring-up assumption. [Phase 1 implementation plan](2026-09-14-picamera2-acquisition.md).
 
 **Goal:** move the camera from the Innomaker USB module on a Pi 3B to a
 Raspberry Pi 4 with the Camera Module 3 Wide, capture at the sensor's native
@@ -36,13 +43,96 @@ for each move:
 | 5 | Retrain the LUT on IMX708 frames | **move after 6 and after the flash decision** | The LUT is fitted on normalised input. Changing normalisation later invalidates it; adding a flash later changes the source distribution. Retrain once, not three times |
 | 6 | Gentler, configurable normalisation | **move before retraining** | See above; also cheap, it is already parameterised in `params.json` |
 | 7 | Resolution-aware grain | same, any time after 4 | Independent of the LUT |
-| 8 | Scene statistics | same | Needed as input for 9 and 10, and valuable in `captures.jsonl` on its own |
-| 9 | Highlight-protected LUT blending | same; prefer baking it into the LUT first | The September 7 experiments already showed highlight protection helps, as a baked LUT control with zero runtime cost |
+| 8 | Scene statistics | independent of the first retrain | Needed for adaptive runtime controls and 10; not required by baked highlight protection |
+| 9 | Highlight-protected LUT blending | baked path complete; use during 5 | Both CLIs accept `--highlights`; choosing its IMX708 value needs development photos, not new runtime code |
 | 10 | Tiny scene classifier, only if statistics are not enough | same | Correct instinct: a few thresholds on the statistics will likely do |
 | 11 | Physical flash, eventually | **move to a cheap experiment right after 4** | The measurements in `todo.md` section 1 say it is the largest quality lever there is, and it decides how the source corpus for step 5 should look |
 
-Recommended sequence: **1, 2, 3, 4, flash experiment, 6, 5, 7, 8, 9, 10, flash
-for real.**
+Remaining sequence: **1, 2, 3, 4, flash experiment and capture-policy decision,
+6, 5 (including highlight selection), 7, 8, optional 9 runtime blend, optional
+10.** Synthetic benchmarking and Phase 6 implementation can start before the
+hardware is ready; their acceptance still needs real captures. Phase 7 can run
+after 4 independently of retraining. Build the final flash before collecting
+the production corpus if flash is part of the intended capture policy; otherwise
+ship an ambient-light fit and treat a later flash as a new training cycle.
+
+## Dependencies after highlight protection
+
+The training path is `normalise source photos -> fit LUT -> protect highlights
+-> final trainer projection`; runtime normalises each frame and applies one
+finished LUT. See the [implementation record](2026-09-12-highlight-protected-lut-progress.md)
+and [26-capture regression comparison](../../experiments/2026-09-12-highlight-protected-lut.md).
+That comparison used the previous camera's reviewed set, not IMX708 images.
+It supports keeping the control available, not promoting `0.6` to a new-camera
+default. Both CLIs still default to `0.0`.
+
+| Work | Required dependency / effect of the completed control |
+| --- | --- |
+| 1–3: acquisition, controls, originals | No dependency on highlight protection; establish reproducible source pixels and metadata first. |
+| 4: benchmark | Baked protection adds no runtime pass. Decide the actual ISP stream and resizing path before final validation. |
+| F: lighting experiment | Compare flash/ambient inputs with the same grading settings, initially highlights off, so LUT changes do not confound the lighting decision. |
+| 6: normalisation | Preserve existing `--highlights` flags and provenance while adding normalisation controls. The selected source parameters must drive training, artifact serialization and runtime consistently. |
+| 5: retrain | Fit under frozen normalisation; choose highlight strength on development scenes and evaluate the final projected artifact. A value change needs a rebuilt/re-evaluated artifact, not new source photographs. |
+| 7: grain | Post-LUT effect; not a prerequisite for fitting the colour LUT. Validate the final grain setting for delivery. |
+| 8 / 9 runtime / 10 | Statistics are a dependency for adaptive control, not for the existing baked operation or the first retrain. Avoid accidentally applying the baked correction a second time at runtime. |
+
+**Training-tool gap to plan in Phase 5.** `parr-train` exposes `--highlights`,
+but its automatic split is by image, not scene. The explicit scene-partition
+runner in `parr/experiments/train.py` already passes `FitConfig` to the shared
+fitter and records it; its CLI currently exposes only `--neutral-cap`.
+Before the IMX708 production run, provide a reproducible scene-grouped route
+that accepts the chosen highlight value and frozen normalisation. Either extend
+that runner or add explicit scene partitions to the production trainer; do not
+claim scene-held-out validation from an ordinary random image split.
+
+## When new-camera source photos are needed
+
+**No photo corpus is needed to start implementation.** Use fake requests and
+synthetic frames for acquisition, metadata, file-lifetime and compatibility
+tests. Real camera access is needed for hardware acceptance; a source-photo
+handoff becomes useful once Phases 1–3 produce stable, traceable originals.
+
+| Gate | Photos needed | What they enable |
+| --- | --- | --- |
+| Bring-up, during 1–3 | A few real shots, including the Phase 2 three-distance focus test | Verify RGB order, exposure/AWB metadata, original/DNG pairing and replay. These are diagnostics, not a training corpus. |
+| Pilot, after 1–3 and before finalising F/6 | Planning target: 20–30 usable originals across 8–10 varied scenes; add the ten same-framing flash/ambient pairs if evaluating flash | Choose capture/lighting policy, inspect clipping and focus, compare normalisation and benchmark real frames. This is the first useful photo handoff. |
+| Production source collection, after capture/lighting policy is stable | At least 100 usable originals across at least 25 development scenes, **plus** 3–5 separate whole scenes reserved for the final test | Build training and scene-held-out validation partitions. Originals can be collected while Phase 6 is being finished; freeze its parameters before fitting. |
+| Final acceptance, after selecting normalisation, fit and highlight value | Open the reserved final scenes once the candidate is fixed | Blind A/B against the starter, using the final runtime input path. Do not use these scenes to choose highlight strength or normalisation. |
+
+The development-set count excludes the untouched final scenes. Include indoor
+and outdoor light, mixed light, bright coloured objects, skin, neutrals and
+colour-chart frames; several near-identical shots do not count as new scenes.
+If both flash and ambient operation will ship, cover both and validate them
+separately rather than training solely on flash and assuming ambient generalises.
+The existing trainer's 30-source minimum is a software guard, not this roadmap's
+production-data target. References remain a separate corpus of at least 200
+coherent images and can be prepared now.
+
+**Photo handoff.** Preserve capture/session directories or use unique IDs so
+repeated `HHMMSS` filenames cannot overwrite each other. Supply `_original.jpg`
+files, the matching `captures.jsonl`, a scene-ID and lighting-mode manifest, and
+DNGs where enabled. Record the actual sensor/ISP mode, tuning-file identity
+(preferably content hash), capture controls and software versions. Keep graded
+`_parr.jpg` files out of the source corpus. DNGs are useful archives; the current
+trainer consumes rendered images, so raw development is not a prerequisite.
+
+**Freeze and refit rules.**
+
+- Changing normalisation: reuse the same suitable originals, rebuild pixel
+  pools, refit, and reselect highlight strength. Do not feed previously
+  normalised or graded exports back as source originals.
+- Changing only highlight strength: reuse source photos and partitions. Start
+  each candidate from the same unprotected fit (or rerun the deterministic fit),
+  then protect once and project; do not repeatedly protect an already protected
+  artifact. Re-evaluate all final-artifact gates.
+- Changing sensor, ISP tuning, capture controls or lighting policy: collect
+  representative new frames and refit, unless equivalence is demonstrated on
+  held-out data. DNGs do not by themselves reproduce a changed live ISP path.
+- Changing only post-LUT grain: no colour-LUT refit is required. Changing ISP
+  mode, crop or pre-LUT resizing needs source/runtime parity checks; the 512-px
+  training sample size alone does not prove those paths equivalent.
+- If a final-test scene influences a later setting change, treat it as
+  development data and collect a fresh untouched final set before promotion.
 
 ## Phase 1: Picamera2 with native 4608 × 2592 capture
 
@@ -100,7 +190,7 @@ above; a locked shoot produces identical `ColourGains` across frames.
 its raw array plus metadata) and give `CaptureSession.capture()` a third file:
 `HHMMSS_original.jpg` (encoded by the ISP path from the same request via
 `request.save("main", path)`, so it is the camera's own rendering),
-`HHMMSS.dng` (via `request.save_dng(path)`, 12-bit Bayer with the metadata
+`HHMMSS.dng` (via `request.save_dng(path)`, sensor-native Bayer with the metadata
 needed to develop it later), and `HHMMSS_parr.jpg` as now. Record the DNG
 name and size. The `_ungraded.jpg` fallback disappears for this camera since
 the original is always available.
@@ -109,13 +199,21 @@ the original is always available.
 28 MB. A 64 GB card holds about 2,000 shots; add a `--no-dng` flag for long
 sessions and a note in the setup guide on pulling photos.
 
-**Why DNG at all.** It is the only artefact that lets you re-develop a shot
-after the colour science changes: a new LUT, a new normalisation, or a future
-"develop from raw" path that skips the ISP's 8-bit output entirely.
+**Why DNG at all.** It enables a future "develop from raw" path that skips
+the ISP's 8-bit rendering. The ungraded original JPEG is already sufficient
+to apply a new LUT or normalisation; neither requires a DNG developer.
+
+**Source/runtime parity.** Resolve the input boundary before collecting the
+production corpus. If training and replay consume the saved JPEG, the live
+grade must consume the decode of those same JPEG bytes to promise exact replay.
+Grading the pre-JPEG request array and later decoding a lossy JPEG does not
+provide identical pixels. The Phase 3 implementation plan must choose and test
+that boundary and retain the request until all request-dependent saves finish.
 
 **Acceptance.** Three files per shot, the DNG opens in darktable or
 RawTherapee with correct colours, and `parr-process` on the original
-reproduces the graded file bit-for-bit given the recorded grain seed.
+reproduces the graded file bit-for-bit given the recorded grain seed, artifact,
+processing settings and matching encoder/software versions.
 
 ## Phase 4: benchmark the pipeline at 12 MP
 
@@ -158,6 +256,11 @@ decides what the training corpus in Phase 5 must look like.
 flash-on frames should show a mean Oklab chroma several times higher and a
 clipped-highlight fraction that stays under a few percent.
 
+Record the decision before production source collection: ambient-only, flash,
+or both. If a temporary light will be replaced, finalise the real light first
+or budget a second collection/refit; a prototype does not establish the final
+source distribution merely because both lights are called flash.
+
 ## Phase 6: gentler, configurable normalisation
 
 **Design.** The knobs already exist in `NormalizeParams` and are stored in
@@ -178,24 +281,40 @@ noted haze-like lifted shadows from an earlier levels choice.
 regression set with `strength` 1.0 bit-identically to today; `strength` 0.5
 shows measurably smaller gain excursions in `captures.jsonl` on a mixed shoot.
 
+Keep normalisation strength distinct from the existing LUT `--strength` and
+`--highlights` controls in both APIs and CLI naming. Use the IMX708 pilot set to
+choose parameters, then freeze them for the first production fit. Stored
+originals permit this tuning without reshooting; the old camera regression set
+checks backwards compatibility, not new-camera quality.
+
 ## Phase 5: retrain the LUT on IMX708 frames
 
 Follow `docs/training.md` end to end, with these specifics:
 
-- Source corpus: at least 100 frames from this camera, 25 or more scenes, shot
-  the way the camera will be used (auto exposure and white balance unless the
-  flash is fitted, in which case flash on and gains locked), plus colour-chart
-  and saturated-object frames for cube coverage. Use the `_original.jpg`
-  files. Reserve three to five whole scenes as the untouched final test.
-- Normalisation fixed first (Phase 6), then fit. The Phase 4 decision on
-  processing resolution does not affect training, which samples at 512 px.
+- Source corpus: at least 100 development frames from this camera across 25
+  or more scenes, plus three to five separate untouched final-test scenes.
+  Follow the collection gates above and the intended exposure, white-balance
+  and lighting policy. Include colour-chart and saturated-object frames for
+  cube coverage. Use `_original.jpg` files, with scene-grouped partitions.
+- Normalisation fixed first (Phase 6), then fit. Training samples at 512 px,
+  but validate the actual Phase 4 ISP/resizing path; a binned stream is not
+  automatically equivalent to resizing the full-resolution original.
+- Highlight protection is already implemented. Start with `--highlights 0`
+  as the control, compare a small predeclared set of strengths on development
+  scenes, and evaluate each final projected artifact. Record the selected
+  value in `training.fit.highlights`; do not inherit `0.6` from the old-camera
+  experiment without IMX708 evidence. Resolve the scene-partition CLI gap
+  described above before this run.
 - References: the coherent flash-lit set, 200 or more, per the training guide.
 - Consider the hand-graded paired route from `todo.md` section 1 for a first
   strong result: 30 to 50 of your own IMX708 frames graded by hand, fitted
   directly with `fit_lut`, no transport.
 
 **Acceptance.** Exit code 0, held-out improvement well above the noise floor,
-and a blind A/B on the final test scenes against the current starter.
+scene-separated training and validation, and a blind A/B on the untouched final
+test scenes against the current starter. Report highlight-region clipping and
+chroma, shaded-skin colour changes, and the final artifact's monotonicity and
+neutrality alongside the trainer gates.
 
 ## Phase 7: resolution-aware grain
 
@@ -230,14 +349,15 @@ plots them for a day's shoot; one adaptive rule implemented behind a flag.
 
 ## Phase 9: highlight-protected LUT blending
 
-**Two ways, in this order.**
+**Baked path complete; adaptive runtime path optional.**
 
-1. **Bake it into the LUT.** `parr/experiments/candidates.py` already
-   implements a `highlights` control that reduces the tone lift in the top
-   of the range while keeping colour; the September 7 report measured it as
-   the most promising single change. Promote that control into `parr-preset`
-   and into `parr-train` as a post-fit shaping step. Zero runtime cost, and it
-   ships inside the `.cube`.
+1. **Bake it into the LUT — implemented.** `parr/highlight.py` reduces positive
+   Oklab lightness lift using the 0.55–0.90 smoothstep window. Both `parr-preset`
+   and `parr-train` accept `--highlights` in [0, 1] and record it in provenance;
+   the trainer reimposes monotonicity after protection. Zero leaves the LUT
+   unchanged. Oklab chroma is preserved before conversion; sRGB clipping and
+   the trainer's projections can change the stored colour. The finished LUT
+   ships inside the `.cube`, with no extra runtime processing.
 2. **Runtime blend, only if per-scene control is wanted.** A per-pixel weight
    `w(L)` with a soft knee above a lightness threshold blends LUT output back
    toward the normalised input in highlights. One extra luminance pass; cheap,
@@ -246,6 +366,12 @@ plots them for a day's shoot; one adaptive rule implemented behind a flag.
 **Acceptance.** On the frozen regression set, mean chroma in the
 coloured-highlight mask rises while channel-boundary occupancy falls, as in
 the September 7 measurement, and skin in shaded midtones does not warm.
+
+The [September 12 comparison](../../experiments/2026-09-12-highlight-protected-lut.md)
+met those aggregate directions on the old-camera set: boundary occupancy
+42.77% → 0.218%, chroma up only about 0.017%, with no aggregate shaded-skin
+warming. IMX708 value selection remains part of Phase 5. No runtime blend or
+new default has been shipped.
 
 ## Phase 10: tiny scene classifier, only if needed
 
@@ -262,6 +388,10 @@ Once the experiment proves the gain: a proper LED flash module with its own
 driver and capacitor, or a small hot-shoe flash triggered by GPIO, a 3D-printed
 mount, a `--flash` mode in the service, and the retrained LUT from Phase 5
 shot with it. The Stick could gain a flash on/off toggle on its second button.
+
+If this changes the lighting used for Phase 5's corpus, it precedes the final
+flash corpus and fit, or triggers a new fit. It is not a dependency for an
+explicitly ambient-only first release.
 
 ## Cross-cutting notes
 

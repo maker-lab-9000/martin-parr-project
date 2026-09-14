@@ -142,9 +142,29 @@ uses terminal controls without a window; `--fake` uses synthetic camera frames.
 Captures go to `~/Pictures/parr/YYYY-MM-DD/`: the camera JPEG is saved verbatim
 as `*_original.jpg` when available, otherwise `*_ungraded.jpg`, alongside
 `*_parr.jpg` and `captures.jsonl`. These commands and outputs are separate from
-the Kodachrome project. Capture currently requests a 1920 × 1080 MJPEG stream at
-30 fps, inherited from that project; display resolution does not change capture
-resolution. Use `--device` to select the camera.
+the Kodachrome project. The default USB path requests a 1920 × 1080 MJPEG stream
+at 30 fps; display resolution does not change capture resolution. Use `--device`
+to select a USB camera.
+
+### Camera backends
+
+`--camera` chooses the backend: `v4l2` for the USB camera, or `picamera2` for a
+Raspberry Pi camera such as the Camera Module 3 (IMX708) at its native
+4608 × 2592. With neither flag, a `--device` implies V4L2, and otherwise
+Picamera2 is used when its package imports, falling back to V4L2. Picamera2 and
+libcamera come from Raspberry Pi OS apt packages, never pip, so the venv is made
+with `--system-site-packages`. Select the tuning file for the exact module with
+`--tuning-file` (for example `imx708_wide.json`):
+
+```bash
+.venv/bin/parr-capture --camera picamera2 --tuning-file imx708_wide.json --no-preview
+```
+
+First-time hardware bring-up, including `rpicam-hello --list-cameras`, a
+red/green/blue patch check, and verifying the saved 4608 × 2592 dimensions and
+metadata, is in [the Picamera2 bring-up checklist](docs/picamera2-bringup.md).
+An installed Picamera2 changes the default backend, so a Pi still on the USB
+camera should pass `--camera v4l2` explicitly until it is migrated.
 
 The preset increases midtone color and contrast with a smooth tone curve,
 compresses out-of-gamut chroma, and adds subtle grain (`0.004`). Rebuild it with:
