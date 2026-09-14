@@ -388,3 +388,26 @@ def test_stream_info_to_dict():
         "fourcc": "MJPG",
         "raw_mjpeg": True,
     }
+
+
+def test_stream_info_to_dict_includes_available_sensor_details():
+    info = StreamInfo(
+        width=4608,
+        height=2592,
+        fps=14.25,
+        fourcc="RGB888",
+        raw_mjpeg=False,
+        sensor_mode="4608x2592 SBGGR10_CSI2P",
+        bit_depth=10,
+        tuning_file="imx708_wide.json",
+    )
+    assert info.to_dict() == {
+        "width": 4608,
+        "height": 2592,
+        "fps": 14.25,
+        "fourcc": "RGB888",
+        "raw_mjpeg": False,
+        "sensor_mode": "4608x2592 SBGGR10_CSI2P",
+        "bit_depth": 10,
+        "tuning_file": "imx708_wide.json",
+    }
