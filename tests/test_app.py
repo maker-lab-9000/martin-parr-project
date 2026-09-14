@@ -955,7 +955,6 @@ def test_device_without_camera_choice_selects_v4l2(camera_cli, monkeypatch):
         (["--camera", "v4l2", "--ae-lock"], "--ae-lock"),
         (["--camera", "v4l2", "--awb-lock"], "--awb-lock"),
         (["--camera", "v4l2", "--colour-gains", "1.0,1.0"], "--colour-gains"),
-        (["--camera", "v4l2", "--no-dng"], "--no-dng"),
     ],
 )
 def test_camera_specific_options_reject_conflicting_backend(args, message, capsys):
@@ -965,6 +964,56 @@ def test_camera_specific_options_reject_conflicting_backend(args, message, capsy
     error = capsys.readouterr().err
     assert message in error
     assert "cannot be used" in error
+
+
+def test_no_dng_is_accepted_with_explicit_v4l2(camera_cli, monkeypatch):
+    """``--no-dng`` is wired independently into ``CaptureSession`` and is not
+    Picamera2-only, unlike ``--autofocus``/``--af-range``/the locks/``--colour-gains``.
+    """
+    monkeypatch.setattr(camera_cli, "V4L2Camera", lambda device: _CameraDouble())
+
+    assert camera_cli.main(["--camera", "v4l2", "--no-preview", "--no-dng"]) == 0
+
+
+@pytest.mark.parametrize(
+    "flag_args",
+    [
+        ["--ae-lock"],
+        ["--awb-lock"],
+        ["--colour-gains", "1.8,2.1"],
+        ["--autofocus", "auto"],
+        ["--af-range", "macro"],
+        ["--tuning-file", "sensor.json"],
+    ],
+)
+def test_implicit_v4l2_via_device_rejects_picamera2_only_flags(camera_cli, flag_args):
+    """No ``--camera`` given, but ``--device`` forces V4L2 implicitly.
+
+    The guard must still catch Picamera2-only flags here, not just when
+    ``--camera v4l2`` is spelled out explicitly.
+    """
+    with pytest.raises(SystemExit) as exc_info:
+        camera_cli.main(["--device", "/dev/video9", "--no-preview", *flag_args])
+    assert exc_info.value.code == 2
+
+
+def test_implicit_v4l2_via_missing_picamera2_rejects_picamera2_only_flags(
+    camera_cli, monkeypatch,
+):
+    """No ``--camera``/``--device`` given; Picamera2 import failure forces V4L2."""
+    real_import = builtins.__import__
+
+    def missing_picamera(name, *args, **kwargs):
+        if name == "picamera2":
+            raise ModuleNotFoundError("No module named 'picamera2'", name="picamera2")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.delitem(sys.modules, "picamera2", raising=False)
+    monkeypatch.setattr(builtins, "__import__", missing_picamera)
+
+    with pytest.raises(SystemExit) as exc_info:
+        camera_cli.main(["--no-preview", "--ae-lock"])
+    assert exc_info.value.code == 2
 
 
 def test_default_prefers_picamera2_when_module_imports(camera_cli, monkeypatch):

@@ -488,6 +488,27 @@ def _picamera2_available() -> bool:
     return True
 
 
+def _reject_picamera2_only_flags(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, *, reason: str
+) -> None:
+    """Refuse Picamera2-only options once V4L2 has been chosen, however it was chosen.
+
+    ``--device`` (which itself selects V4L2) and ``--no-dng`` (wired independently
+    into ``CaptureSession`` and meaningful on any backend) are deliberately excluded.
+    """
+    picamera_only = [
+        ("--tuning-file", args.tuning_file is not None),
+        ("--autofocus", args.autofocus is not None),
+        ("--af-range", args.af_range is not None),
+        ("--ae-lock", args.ae_lock),
+        ("--awb-lock", args.awb_lock),
+        ("--colour-gains", args.colour_gains is not None),
+    ]
+    offenders = [name for name, given in picamera_only if given]
+    if offenders:
+        parser.error(f"{', '.join(offenders)} {reason}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="parr-capture",
@@ -542,20 +563,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.camera == "picamera2" and args.device is not None:
         parser.error("--device cannot be used with --camera picamera2")
-    if args.camera == "v4l2" and args.tuning_file is not None:
-        parser.error("--tuning-file cannot be used with --camera v4l2")
-    if args.camera == "v4l2" and args.autofocus is not None:
-        parser.error("--autofocus cannot be used with --camera v4l2")
-    if args.camera == "v4l2" and args.af_range is not None:
-        parser.error("--af-range cannot be used with --camera v4l2")
-    if args.camera == "v4l2" and args.ae_lock:
-        parser.error("--ae-lock cannot be used with --camera v4l2")
-    if args.camera == "v4l2" and args.awb_lock:
-        parser.error("--awb-lock cannot be used with --camera v4l2")
-    if args.camera == "v4l2" and args.colour_gains is not None:
-        parser.error("--colour-gains cannot be used with --camera v4l2")
-    if args.camera == "v4l2" and args.no_dng:
-        parser.error("--no-dng cannot be used with --camera v4l2")
+    if args.camera == "v4l2":
+        _reject_picamera2_only_flags(parser, args, reason="cannot be used with --camera v4l2")
 
     autofocus = args.autofocus or "continuous"
     af_range = args.af_range or "normal"
@@ -596,8 +605,9 @@ def main(argv: list[str] | None = None) -> int:
                     colour_gains=args.colour_gains,
                 )
             else:
-                if args.tuning_file is not None:
-                    parser.error("--tuning-file cannot be used with the selected V4L2 backend")
+                _reject_picamera2_only_flags(
+                    parser, args, reason="cannot be used with the selected V4L2 backend"
+                )
                 camera = V4L2Camera(args.device)
     except CameraError as exc:
         print(f"error: {exc}", file=sys.stderr)
