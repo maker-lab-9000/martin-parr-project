@@ -89,13 +89,15 @@ class Frame:
     rgb: np.ndarray
     jpeg: bytes | None
     source: str  # "raw-mjpeg", "decoded", or "picamera2"
+    metadata: dict | None = None  # per-shot camera metadata (picamera2)
+    dng: bytes | None = None      # in-memory DNG for this frame (picamera2)
 
 
 class Camera(Protocol):
     @property
     def stream_info(self) -> StreamInfo: ...
 
-    def read(self) -> Frame: ...
+    def read(self, *, full: bool = True) -> Frame: ...
 
     def close(self) -> None: ...
 
@@ -161,7 +163,9 @@ class FakeCamera:
     def stream_info(self) -> StreamInfo:
         return self._info
 
-    def read(self) -> Frame:
+    def read(self, *, full: bool = True) -> Frame:
+        # `full` is Picamera2-only (skips its autofocus cycle and DNG extraction);
+        # this path is already cheap, so the flag has nothing to skip.
         idx = self._i % len(self._frames)
         self._i += 1
         jpeg = self._jpegs[idx % len(self._jpegs)] if self._jpegs else None
@@ -336,7 +340,8 @@ class V4L2Camera:
         self.stream_info.raw_mjpeg = False
         return True
 
-    def read(self) -> Frame:
+    def read(self, *, full: bool = True) -> Frame:
+        # `full` is Picamera2-only; this path is already cheap and ignores it.
         for _ in range(3):
             self._drain()
             ok, data = self.cap.read()

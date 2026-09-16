@@ -1,3 +1,4 @@
+import argparse
 import builtins
 import io
 import json
@@ -13,7 +14,13 @@ import pytest
 from PIL import Image
 
 from parr.artifacts import Artifacts, write_artifact
-from parr.capture.app import CaptureSession, main, run_headless_loop, run_preview_loop
+from parr.capture.app import (
+    CaptureSession,
+    _colour_gains,
+    main,
+    run_headless_loop,
+    run_preview_loop,
+)
 from parr.capture.camera import CameraError, FakeCamera, Frame, StreamInfo, synthetic_frame
 from parr.grain import GrainParams
 from parr.imageio import load_rgb
@@ -871,7 +878,7 @@ def test_explicit_v4l2_never_imports_picamera2(camera_cli, monkeypatch):
 def test_explicit_picamera2_receives_tuning_file(camera_cli, monkeypatch):
     opened = []
 
-    def open_picamera(tuning_file):
+    def open_picamera(tuning_file, **kwargs):
         opened.append((tuning_file, _CameraDouble()))
         return opened[-1][1]
 
@@ -924,11 +931,24 @@ def test_fake_bypasses_all_hardware_detection(camera_cli, monkeypatch):
     monkeypatch.setattr(
         camera_cli,
         "Picamera2Camera",
-        lambda tuning: (_ for _ in ()).throw(AssertionError("fake opened Picamera2")),
+        lambda tuning, **kwargs: (_ for _ in ()).throw(AssertionError("fake opened Picamera2")),
         raising=False,
     )
 
     assert camera_cli.main(["--fake", "--no-preview"]) == 0
+
+
+def test_fake_rejects_picamera2_only_flags(camera_cli, capsys):
+    """``--fake`` selects no real camera, so Picamera2-only flags select nothing
+    and would otherwise be silently ignored; they must error instead, same as
+    on the V4L2 backend (Minor 6).
+    """
+    with pytest.raises(SystemExit) as exc_info:
+        camera_cli.main(["--fake", "--no-preview", "--colour-gains", "1.8,2.1"])
+    assert exc_info.value.code == 2
+    error = capsys.readouterr().err
+    assert "--colour-gains" in error
+    assert "--fake" in error
 
 
 def test_device_without_camera_choice_selects_v4l2(camera_cli, monkeypatch):
@@ -950,6 +970,11 @@ def test_device_without_camera_choice_selects_v4l2(camera_cli, monkeypatch):
     [
         (["--camera", "picamera2", "--device", "/dev/video9"], "--device"),
         (["--camera", "v4l2", "--tuning-file", "sensor.json"], "--tuning-file"),
+        (["--camera", "v4l2", "--autofocus", "continuous"], "--autofocus"),
+        (["--camera", "v4l2", "--af-range", "normal"], "--af-range"),
+        (["--camera", "v4l2", "--ae-lock"], "--ae-lock"),
+        (["--camera", "v4l2", "--awb-lock"], "--awb-lock"),
+        (["--camera", "v4l2", "--colour-gains", "1.0,1.0"], "--colour-gains"),
     ],
 )
 def test_camera_specific_options_reject_conflicting_backend(args, message, capsys):
@@ -961,11 +986,61 @@ def test_camera_specific_options_reject_conflicting_backend(args, message, capsy
     assert "cannot be used" in error
 
 
+def test_no_dng_is_accepted_with_explicit_v4l2(camera_cli, monkeypatch):
+    """``--no-dng`` is wired independently into ``CaptureSession`` and is not
+    Picamera2-only, unlike ``--autofocus``/``--af-range``/the locks/``--colour-gains``.
+    """
+    monkeypatch.setattr(camera_cli, "V4L2Camera", lambda device: _CameraDouble())
+
+    assert camera_cli.main(["--camera", "v4l2", "--no-preview", "--no-dng"]) == 0
+
+
+@pytest.mark.parametrize(
+    "flag_args",
+    [
+        ["--ae-lock"],
+        ["--awb-lock"],
+        ["--colour-gains", "1.8,2.1"],
+        ["--autofocus", "auto"],
+        ["--af-range", "macro"],
+        ["--tuning-file", "sensor.json"],
+    ],
+)
+def test_implicit_v4l2_via_device_rejects_picamera2_only_flags(camera_cli, flag_args):
+    """No ``--camera`` given, but ``--device`` forces V4L2 implicitly.
+
+    The guard must still catch Picamera2-only flags here, not just when
+    ``--camera v4l2`` is spelled out explicitly.
+    """
+    with pytest.raises(SystemExit) as exc_info:
+        camera_cli.main(["--device", "/dev/video9", "--no-preview", *flag_args])
+    assert exc_info.value.code == 2
+
+
+def test_implicit_v4l2_via_missing_picamera2_rejects_picamera2_only_flags(
+    camera_cli, monkeypatch,
+):
+    """No ``--camera``/``--device`` given; Picamera2 import failure forces V4L2."""
+    real_import = builtins.__import__
+
+    def missing_picamera(name, *args, **kwargs):
+        if name == "picamera2":
+            raise ModuleNotFoundError("No module named 'picamera2'", name="picamera2")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.delitem(sys.modules, "picamera2", raising=False)
+    monkeypatch.setattr(builtins, "__import__", missing_picamera)
+
+    with pytest.raises(SystemExit) as exc_info:
+        camera_cli.main(["--no-preview", "--ae-lock"])
+    assert exc_info.value.code == 2
+
+
 def test_default_prefers_picamera2_when_module_imports(camera_cli, monkeypatch):
     monkeypatch.setitem(sys.modules, "picamera2", SimpleNamespace())
     opened = []
 
-    def open_picamera(tuning_file):
+    def open_picamera(tuning_file, **kwargs):
         opened.append((tuning_file, _CameraDouble()))
         return opened[-1][1]
 
@@ -1007,3 +1082,180 @@ def test_default_falls_back_to_v4l2_when_picamera2_is_unavailable(
     assert import_attempts == 1
     assert opened[0][0] is None
     assert opened[0][1].closed
+
+
+def test_control_flags_reach_the_picamera2_backend(camera_cli, monkeypatch):
+    backend_kwargs = {}
+
+    def open_picamera(tuning_file, **kwargs):
+        backend_kwargs.update(kwargs)
+        return _CameraDouble()
+
+    monkeypatch.setattr(camera_cli, "Picamera2Camera", open_picamera, raising=False)
+
+    assert camera_cli.main([
+        "--camera", "picamera2", "--no-preview",
+        "--autofocus", "manual", "--af-range", "macro",
+        "--ae-lock", "--awb-lock", "--colour-gains", "1.8,2.1",
+    ]) == 0
+
+    assert backend_kwargs["autofocus"] == "manual"
+    assert backend_kwargs["af_range"] == "macro"
+    assert backend_kwargs["ae_lock"] is True
+    assert backend_kwargs["awb_lock"] is True
+    assert backend_kwargs["colour_gains"] == (1.8, 2.1)
+    assert backend_kwargs["save_dng"] is True
+
+
+def test_default_flags_leave_ae_and_awb_auto_with_continuous_af(camera_cli, monkeypatch):
+    backend_kwargs = {}
+
+    def open_picamera(tuning_file, **kwargs):
+        backend_kwargs.update(kwargs)
+        return _CameraDouble()
+
+    monkeypatch.setattr(camera_cli, "Picamera2Camera", open_picamera, raising=False)
+
+    assert camera_cli.main(["--camera", "picamera2", "--no-preview"]) == 0
+
+    assert backend_kwargs["autofocus"] == "continuous"
+    assert backend_kwargs["af_range"] == "normal"
+    assert backend_kwargs["ae_lock"] is False
+    assert backend_kwargs["awb_lock"] is False
+    assert backend_kwargs["colour_gains"] is None
+    assert backend_kwargs["save_dng"] is True
+
+
+def test_no_dng_flag_disables_dng_on_backend_and_session(camera_cli, monkeypatch):
+    backend_kwargs = {}
+    session_kwargs = {}
+
+    def open_picamera(tuning_file, **kwargs):
+        backend_kwargs.update(kwargs)
+        return _CameraDouble()
+
+    class RecordingSession:
+        def __init__(self, camera, pipeline, out, **kwargs):
+            session_kwargs.update(kwargs)
+            self.camera = camera
+
+        def capture(self):
+            raise AssertionError("capture should not be called in this test")
+
+    monkeypatch.setattr(camera_cli, "Picamera2Camera", open_picamera, raising=False)
+    monkeypatch.setattr(camera_cli, "CaptureSession", RecordingSession)
+
+    assert camera_cli.main(["--camera", "picamera2", "--no-preview", "--no-dng"]) == 0
+
+    assert backend_kwargs["save_dng"] is False
+    assert session_kwargs["save_dng"] is False
+
+
+@pytest.mark.parametrize("value", ["1.8", "1.8,2.1,3.0", "a,b", "", "0,0", "-1,2"])
+def test_malformed_colour_gains_is_an_argparse_error(value, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--colour-gains", value])
+    assert exc_info.value.code == 2
+    assert "--colour-gains" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", ["0,0", "-1,2", "1.8,0", "0,1.8", "-0.5,-0.5"])
+def test_colour_gains_type_function_rejects_non_positive_values(value):
+    """Minor 5, isolated from CLI backend-selection: ``_colour_gains`` itself
+    must reject non-positive gains, independent of which backend a run would
+    select (a syntactically valid ``0,0``/negative pair must not silently
+    parse to a gains tuple that would be rejected only by accident elsewhere).
+    """
+    with pytest.raises(argparse.ArgumentTypeError, match="positive"):
+        _colour_gains(value)
+
+
+def test_colour_gains_parses_to_a_float_tuple(camera_cli, monkeypatch):
+    backend_kwargs = {}
+
+    def open_picamera(tuning_file, **kwargs):
+        backend_kwargs.update(kwargs)
+        return _CameraDouble()
+
+    monkeypatch.setattr(camera_cli, "Picamera2Camera", open_picamera, raising=False)
+
+    assert camera_cli.main(
+        ["--camera", "picamera2", "--no-preview", "--colour-gains", "1.8,2.1"]
+    ) == 0
+    assert backend_kwargs["colour_gains"] == (1.8, 2.1)
+
+
+def test_capture_writes_original_and_dng_and_records_metadata(tmp_path):
+    import numpy as np
+
+    from parr.artifacts import Artifacts
+    from parr.capture.app import CaptureSession
+    from parr.capture.camera import Frame, StreamInfo
+    from parr.pipeline import Pipeline
+
+    class MetaCamera:
+        stream_info = StreamInfo(4608, 2592, 14.35, "RGB888", False,
+                                 sensor_mode="4608x2592 SBGGR10_CSI2P", bit_depth=10,
+                                 tuning_file="imx708_wide.json")
+        def read(self):
+            rgb = np.zeros((8, 8, 3), dtype=np.uint8)
+            metadata = {"ExposureTime": 9995, "AnalogueGain": 2.0, "Lux": 120.0}
+            return Frame(rgb=rgb, jpeg=None, source="picamera2",
+                         metadata=metadata,
+                         dng=b"II*\x00fake-dng-bytes")
+        def close(self): ...
+
+    sess = CaptureSession(MetaCamera(), Pipeline(Artifacts.default()), tmp_path,
+                          seed_rng=np.random.default_rng(0))
+    result = sess.capture()
+    day = result.parr.parent
+    assert result.original.name.endswith("_original.jpg")
+    dng = day / (result.original.name.replace("_original.jpg", ".dng"))
+    assert dng.read_bytes() == b"II*\x00fake-dng-bytes"
+    expected_metadata = {"ExposureTime": 9995, "AnalogueGain": 2.0, "Lux": 120.0}
+    assert result.record["camera_metadata"] == expected_metadata
+    assert result.record["dng"] == dng.name
+
+
+def test_capture_skips_dng_when_disabled(tmp_path):
+    import numpy as np
+
+    from parr.artifacts import Artifacts
+    from parr.capture.app import CaptureSession
+    from parr.capture.camera import Frame, StreamInfo
+    from parr.pipeline import Pipeline
+
+    class C:
+        stream_info = StreamInfo(8, 8, 0.0, "RGB888", False)
+        def read(self):
+            return Frame(np.zeros((8, 8, 3), np.uint8), None, "picamera2", dng=b"raw")
+        def close(self): ...
+
+    sess = CaptureSession(C(), Pipeline(Artifacts.default()), tmp_path,
+                          seed_rng=np.random.default_rng(0), save_dng=False)
+    result = sess.capture()
+    assert not list(result.parr.parent.glob("*.dng"))
+    assert "dng" not in result.record
+    assert result.original.name.endswith("_original.jpg")
+
+
+def test_v4l2_style_frame_without_metadata_is_unchanged(tmp_path):
+    import numpy as np
+
+    from parr.artifacts import Artifacts
+    from parr.capture.app import CaptureSession
+    from parr.capture.camera import Frame, StreamInfo
+    from parr.pipeline import Pipeline
+
+    class Usb:
+        stream_info = StreamInfo(1920, 1080, 30.0, "MJPG", True)
+        def read(self):
+            return Frame(np.zeros((8, 8, 3), np.uint8), b"\xff\xd8jpg\xff\xd9",
+                         "raw-mjpeg")
+        def close(self): ...
+
+    result = CaptureSession(Usb(), Pipeline(Artifacts.default()), tmp_path,
+                            seed_rng=np.random.default_rng(0)).capture()
+    assert result.original.name.endswith("_original.jpg")   # jpeg present -> original
+    assert "camera_metadata" not in result.record
+    assert "dng" not in result.record

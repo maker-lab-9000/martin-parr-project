@@ -9,6 +9,7 @@ so USB and fake-camera use do not require Raspberry Pi camera packages.
 from __future__ import annotations
 
 import math
+import tempfile
 from typing import Any
 
 import numpy as np
@@ -18,12 +19,64 @@ from .camera import CameraError, Frame, StreamInfo
 DEFAULT_TUNING_FILE = "imx708_wide.json"
 _NATIVE_SIZE = (4608, 2592)
 _MAIN_FORMAT = "RGB888"
+_AUTOFOCUS_MODES = ("continuous", "auto", "manual")
+_AF_RANGES = ("normal", "macro", "full")
+
+METADATA_KEYS = (
+    "ExposureTime",
+    "AnalogueGain",
+    "DigitalGain",
+    "ColourGains",
+    "ColourTemperature",
+    "Lux",
+    "LensPosition",
+    "AfState",
+    "FocusFoM",
+    "FrameDuration",
+    "SensorTimestamp",
+)
+
+
+def serialisable_metadata(raw: dict) -> dict:
+    out: dict = {}
+    for key in METADATA_KEYS:
+        if key not in raw:
+            continue
+        value = raw[key]
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            out[key] = value
+        elif isinstance(value, (tuple, list)) and all(isinstance(v, (int, float)) for v in value):
+            out[key] = [float(v) for v in value]
+        else:
+            try:
+                out[key] = int(value)  # libcamera enums (e.g. AfState) are int-like
+            except (TypeError, ValueError):
+                pass
+    return out
 
 
 class Picamera2Camera:
     """Acquire full-sensor RGB frames from an IMX708 through Picamera2."""
 
-    def __init__(self, tuning_file: str = DEFAULT_TUNING_FILE) -> None:
+    def __init__(
+        self,
+        tuning_file: str = DEFAULT_TUNING_FILE,
+        save_dng: bool = True,
+        autofocus: str = "continuous",
+        af_range: str = "normal",
+        ae_lock: bool = False,
+        awb_lock: bool = False,
+        colour_gains: tuple[float, float] | None = None,
+    ) -> None:
+        if autofocus not in _AUTOFOCUS_MODES:
+            raise CameraError(
+                f"Unknown autofocus mode {autofocus!r}; expected one of {_AUTOFOCUS_MODES}"
+            )
+        if af_range not in _AF_RANGES:
+            raise CameraError(f"Unknown af_range {af_range!r}; expected one of {_AF_RANGES}")
+
         try:
             from picamera2 import Picamera2
         except (ImportError, OSError) as exc:
@@ -45,6 +98,8 @@ class Picamera2Camera:
 
         self._camera: Any | None = camera
         self._started = False
+        self._save_dng = save_dng
+        self._autofocus = autofocus
         start_attempted = False
         try:
             config = camera.create_still_configuration(
@@ -56,6 +111,7 @@ class Picamera2Camera:
             camera.configure(config)
             actual = camera.camera_configuration()
             self._stream_info = _stream_info(actual, tuning_file)
+            _apply_camera_controls(camera, autofocus, af_range, ae_lock, awb_lock, colour_gains)
             start_attempted = True
             camera.start()
             self._started = True
@@ -70,10 +126,20 @@ class Picamera2Camera:
     def stream_info(self) -> StreamInfo:
         return self._stream_info
 
-    def read(self) -> Frame:
+    def read(self, *, full: bool = True) -> Frame:
+        """Acquire one frame. ``full=False`` (preview) skips the autofocus cycle
+        and DNG extraction, which otherwise make each read too slow for a live
+        preview; the request is still captured, converted and released, and
+        metadata is still read, so ``preview_frame`` keeps working."""
         camera = self._camera
         if camera is None:
             raise CameraError("Cannot read from a closed Picamera2 camera")
+
+        if full and self._autofocus == "auto":
+            try:
+                camera.autofocus_cycle()
+            except Exception as exc:
+                raise CameraError(f"Autofocus cycle failed: {exc}") from exc
 
         try:
             request = camera.capture_request()
@@ -93,9 +159,19 @@ class Picamera2Camera:
                         f"uint8 with shape {expected_shape}, got {bgr.dtype} {bgr.shape}"
                     )
                 rgb = np.array(bgr[..., ::-1], dtype=np.uint8, order="C", copy=True)
-                metadata = request.get_metadata()
-                self._update_fps(metadata)
-                return Frame(rgb=rgb, jpeg=None, source="picamera2")
+                metadata = serialisable_metadata(request.get_metadata())
+                self._update_fps({"FrameDuration": metadata.get("FrameDuration", 0)})
+                dng = None
+                if full and self._save_dng:
+                    # The ".dng" suffix is load-bearing: PiDNG (used by save_dng)
+                    # appends ".dng" to a path that lacks it, which would write
+                    # the payload to a different file than this one and leave
+                    # this handle's read empty.
+                    with tempfile.NamedTemporaryFile(suffix=".dng", delete=True) as tmp:
+                        request.save_dng(tmp.name)
+                        tmp.seek(0)
+                        dng = tmp.read()
+                return Frame(rgb=rgb, jpeg=None, source="picamera2", metadata=metadata, dng=dng)
             except CameraError:
                 processing_failed = True
                 raise
@@ -180,6 +256,43 @@ def _stream_info(actual: Any, tuning_file: str) -> StreamInfo:
         bit_depth=bit_depth,
         tuning_file=tuning_file,
     )
+
+
+def _apply_camera_controls(
+    camera: Any,
+    autofocus: str,
+    af_range: str,
+    ae_lock: bool,
+    awb_lock: bool,
+    colour_gains: tuple[float, float] | None,
+) -> None:
+    """Neutral ISP rendering plus autofocus, applied once after ``configure``.
+
+    Imports libcamera's control enums lazily so USB and fake-camera use never
+    require the Raspberry Pi camera stack. ``autofocus``/``af_range`` are
+    validated by the caller, so the dict lookups below cannot raise ``KeyError``.
+    """
+    from libcamera import controls as _lc
+
+    cam_controls = {"Sharpness": 1.0, "Contrast": 1.0, "Saturation": 1.0}
+    try:
+        cam_controls["NoiseReductionMode"] = _lc.draft.NoiseReductionModeEnum.HighQuality
+    except AttributeError:
+        pass  # older libcamera: leave NR at its default, recorded as unset
+    af_modes = {"continuous": _lc.AfModeEnum.Continuous,
+                "auto": _lc.AfModeEnum.Auto, "manual": _lc.AfModeEnum.Manual}
+    af_ranges = {"normal": _lc.AfRangeEnum.Normal,
+                 "macro": _lc.AfRangeEnum.Macro, "full": _lc.AfRangeEnum.Full}
+    cam_controls["AfMode"] = af_modes[autofocus]
+    cam_controls["AfRange"] = af_ranges[af_range]
+    if colour_gains is not None:
+        cam_controls["AwbEnable"] = False
+        cam_controls["ColourGains"] = tuple(colour_gains)
+    elif awb_lock:
+        cam_controls["AwbEnable"] = False
+    if ae_lock:
+        cam_controls["AeEnable"] = False
+    camera.set_controls(cam_controls)
 
 
 def _cleanup_camera(camera: Any, *, stop: bool) -> None:

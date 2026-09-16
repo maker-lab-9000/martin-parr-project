@@ -26,18 +26,26 @@ so the saved original and the graded image always come from one acquisition.
 
 Output layout
 -------------
-``OUT/YYYY-MM-DD/HHMMSS_original.jpg`` holds the camera's own JPEG bytes,
-written verbatim. When the camera could not supply them the file is named
-``_ungraded.jpg`` instead, so the name never overstates the contents.
-``HHMMSS_parr.jpg`` is the graded version, and one JSON line per
-capture lands in ``captures.jsonl``.
+``OUT/YYYY-MM-DD/HHMMSS_original.jpg`` holds the original for the shot.
+For the USB camera (V4L2) it is the camera's own JPEG bytes, written verbatim.
+For Picamera2, which has no separate camera JPEG, it is a single JPEG encode of
+the ISP's RGB frame; that frame is always the camera's own full-quality
+rendering, so it is named ``_original.jpg`` whether or not a DNG sidecar is
+also saved. ``HHMMSS_parr.jpg`` is the graded version. ``_ungraded.jpg`` is
+used only for the V4L2 fallback, when there is no camera JPEG to save
+verbatim (raw mode unsupported, or a captured buffer failed validation). When
+the backend supplies a raw frame and DNG saving is enabled, a ``<stem>.dng``
+sidecar is written alongside the original; ``--no-dng`` only omits that
+sidecar and never changes the original's name. One JSON line per capture
+lands in ``captures.jsonl``.
 
 That line is an audit record, not a status message. It carries the grain
 seed and the LUT hash, which together let anyone regenerate the graded file
 from the original; the negotiated stream format, so a camera that quietly
-dropped to a different mode is visible; and two timings, because the
-pipeline cost and the time from shutter to durable file are different
-numbers and only the second is what the user waits for.
+dropped to a different mode is visible; two timings, because the pipeline cost
+and the time from shutter to durable file are different numbers and only the
+second is what the user waits for; ``camera_metadata`` (per-shot camera metadata)
+when present; and ``dng`` (the sidecar filename) when a DNG was written.
 """
 
 from __future__ import annotations
@@ -92,6 +100,7 @@ class CaptureSession:
         now: Callable[[], datetime] | None = None,
         seed_rng: np.random.Generator | None = None,
         package_version: str = __version__,
+        save_dng: bool = True,
     ) -> None:
         self.camera = camera
         self.pipeline = pipeline
@@ -99,6 +108,7 @@ class CaptureSession:
         self._now = now or datetime.now
         self._seed_rng = seed_rng or np.random.default_rng()
         self._package_version = package_version
+        self._save_dng = save_dng
 
     def _allocate(self, suffix: str) -> tuple[Path, str, datetime]:
         t = self._now()
@@ -120,13 +130,19 @@ class CaptureSession:
         graded, info = self.pipeline.process(frame.rgb, rng=np.random.default_rng(seed))
         pipeline_ms = (time.perf_counter() - t0) * 1000.0
 
-        suffix = "original" if frame.jpeg is not None else "ungraded"
+        has_original = frame.jpeg is not None or frame.source == "picamera2"
+        suffix = "original" if has_original else "ungraded"
         day_dir, stem, t = self._allocate(suffix)
         original = day_dir / f"{stem}_{suffix}.jpg"
         if frame.jpeg is not None:
             original.write_bytes(frame.jpeg)
         else:
             save_jpeg(frame.rgb, original)
+        dng_name = None
+        if frame.dng is not None and self._save_dng:
+            dng_path = day_dir / f"{stem}.dng"
+            dng_path.write_bytes(frame.dng)
+            dng_name = dng_path.name
         parr = save_jpeg(graded, day_dir / f"{stem}_parr.jpg")
         shutter_to_saved_ms = (time.perf_counter() - shutter) * 1000.0
 
@@ -142,13 +158,17 @@ class CaptureSession:
             **self.camera.stream_info.to_dict(),
             "pipeline_ms": round(pipeline_ms, 1),
             "shutter_to_saved_ms": round(shutter_to_saved_ms, 1),
+            **({"camera_metadata": frame.metadata} if frame.metadata else {}),
+            **({"dng": dng_name} if dng_name else {}),
         }
         with (day_dir / "captures.jsonl").open("a") as fh:
             fh.write(json.dumps(record) + "\n")
         return CaptureResult(original, parr, record)
 
     def preview_frame(self, graded: bool = True, size: tuple[int, int] = (640, 360)) -> np.ndarray:
-        small = _resize_to_fit(self.camera.read().rgb, size)
+        # full=False: the live preview must not pay Picamera2's per-frame autofocus
+        # cycle or DNG extraction cost; capture() below keeps the full=True default.
+        small = _resize_to_fit(self.camera.read(full=False).rgb, size)
         if graded:
             small, _ = self.pipeline.process(small, grain=False)
         return small
@@ -453,6 +473,20 @@ def _remote_listen(value: str) -> tuple[str, int]:
     return host, port
 
 
+def _colour_gains(value: str) -> tuple[float, float]:
+    """Parse the ``R,B`` fixed colour-gains CLI value."""
+    parts = value.split(",")
+    if len(parts) != 2:
+        raise argparse.ArgumentTypeError("expected R,B")
+    try:
+        r, b = (float(part) for part in parts)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("colour gains must be numbers") from exc
+    if r <= 0 or b <= 0:
+        raise argparse.ArgumentTypeError("colour gains must be positive numbers")
+    return r, b
+
+
 def _picamera2_available() -> bool:
     """Probe only the optional runtime package, without opening a camera."""
     try:
@@ -460,6 +494,28 @@ def _picamera2_available() -> bool:
     except (ImportError, OSError):
         return False
     return True
+
+
+def _reject_picamera2_only_flags(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, *, reason: str
+) -> None:
+    """Refuse Picamera2-only options whenever no real Picamera2 will be opened,
+    whether that is V4L2 (however it was chosen) or ``--fake``.
+
+    ``--device`` (which itself selects V4L2) and ``--no-dng`` (wired independently
+    into ``CaptureSession`` and meaningful on any backend) are deliberately excluded.
+    """
+    picamera_only = [
+        ("--tuning-file", args.tuning_file is not None),
+        ("--autofocus", args.autofocus is not None),
+        ("--af-range", args.af_range is not None),
+        ("--ae-lock", args.ae_lock),
+        ("--awb-lock", args.awb_lock),
+        ("--colour-gains", args.colour_gains is not None),
+    ]
+    offenders = [name for name, given in picamera_only if given]
+    if offenders:
+        parser.error(f"{', '.join(offenders)} {reason}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -470,6 +526,37 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--camera", choices=("v4l2", "picamera2"))
     parser.add_argument("--device", default=None, help="index, /dev/videoN or /dev/v4l/by-id/...")
     parser.add_argument("--tuning-file", help="Picamera2 tuning filename or absolute path")
+    parser.add_argument(
+        "--autofocus", choices=("continuous", "auto", "manual"), default=None,
+        help="Picamera2 autofocus mode (default: continuous)",
+    )
+    parser.add_argument(
+        "--af-range", choices=("normal", "macro", "full"), default=None,
+        help="Picamera2 autofocus range (default: normal)",
+    )
+    parser.add_argument(
+        "--ae-lock", action="store_true",
+        help=(
+            "Picamera2: disable auto-exposure at whatever value it holds right "
+            "before capture starts (not a converged/settled value); for controlled "
+            "shoots (default: auto)"
+        ),
+    )
+    parser.add_argument(
+        "--awb-lock", action="store_true",
+        help=(
+            "Picamera2: disable auto white balance at whatever value it holds right "
+            "before capture starts (not a converged/settled value); use --colour-gains "
+            "instead to set a known white balance (default: auto)"
+        ),
+    )
+    parser.add_argument(
+        "--colour-gains", type=_colour_gains, default=None, metavar="R,B",
+        help="Picamera2: fixed colour gains R,B; implies AWB disabled (controlled shoots)",
+    )
+    parser.add_argument(
+        "--no-dng", action="store_true", help="disable the Picamera2 DNG sidecar output",
+    )
     parser.add_argument(
         "--artifacts", type=Path, default=None, help="artifact dir (default: bundled)"
     )
@@ -493,8 +580,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.camera == "picamera2" and args.device is not None:
         parser.error("--device cannot be used with --camera picamera2")
-    if args.camera == "v4l2" and args.tuning_file is not None:
-        parser.error("--tuning-file cannot be used with --camera v4l2")
+    if args.camera == "v4l2":
+        _reject_picamera2_only_flags(parser, args, reason="cannot be used with --camera v4l2")
+
+    autofocus = args.autofocus or "continuous"
+    af_range = args.af_range or "normal"
 
     remote_token = os.environ.get("PARR_REMOTE_TOKEN") if args.remote_listen else None
     if args.remote_listen and not remote_token:
@@ -514,6 +604,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         if args.fake:
+            _reject_picamera2_only_flags(parser, args, reason="cannot be used with --fake")
             camera: Camera = FakeCamera()
         else:
             backend = args.camera
@@ -522,10 +613,19 @@ def main(argv: list[str] | None = None) -> int:
                     "picamera2" if _picamera2_available() else "v4l2"
                 )
             if backend == "picamera2":
-                camera = Picamera2Camera(args.tuning_file or DEFAULT_TUNING_FILE)
+                camera = Picamera2Camera(
+                    args.tuning_file or DEFAULT_TUNING_FILE,
+                    save_dng=not args.no_dng,
+                    autofocus=autofocus,
+                    af_range=af_range,
+                    ae_lock=args.ae_lock,
+                    awb_lock=args.awb_lock,
+                    colour_gains=args.colour_gains,
+                )
             else:
-                if args.tuning_file is not None:
-                    parser.error("--tuning-file cannot be used with the selected V4L2 backend")
+                _reject_picamera2_only_flags(
+                    parser, args, reason="cannot be used with the selected V4L2 backend"
+                )
                 camera = V4L2Camera(args.device)
     except CameraError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -536,6 +636,7 @@ def main(argv: list[str] | None = None) -> int:
         pipeline,
         args.out,
         seed_rng=np.random.default_rng(args.seed),
+        save_dng=not args.no_dng,
     )
     controller: CaptureController | None = None
     remote: RemoteCaptureServer | None = None
