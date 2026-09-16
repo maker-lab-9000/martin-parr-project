@@ -287,6 +287,16 @@ offline captures the right date, and a verification checklist. With `--ups
 x728`, the service publishes `pi_battery` and the Stick shows it bottom-left
 as `Pi 77%`, `Pi 77%+` on external power, and `Pi --%` when unknown.
 
+### 4.8 Nextcloud photo sync (optional)
+
+To keep an off-device archive of every capture, push `~/Pictures/parr` to a
+Nextcloud folder over WebDAV. It runs from the Pi only when the wired LAN is
+up, copies (never deletes) so an SD-card cleanup cannot erase the archive, and
+keeps the Nextcloud password out of every command line. Fill the `NEXTCLOUD_*`
+keys in `.env`, `sudo apt install rclone`, and enable the timer. Full steps,
+including the app-password setup and how to test with a dry run, are in
+[docs/nextcloud-sync.md](nextcloud-sync.md).
+
 ## 5. StickS3
 
 Last, because it has nothing to show until the Pi is up, and because its

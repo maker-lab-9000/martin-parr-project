@@ -1,0 +1,13 @@
+[Unit]
+Description=Periodic Martin Parr photo sync to Nextcloud
+
+[Timer]
+# A few minutes after boot, then every 15 minutes. Each run is a no-op unless
+# the Pi is on the wired LAN, so a frequent schedule is cheap.
+OnBootSec=3min
+OnUnitActiveSec=15min
+# Catch up on a run missed while the Pi was off the wired LAN or powered down.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
