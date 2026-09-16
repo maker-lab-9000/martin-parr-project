@@ -30,6 +30,16 @@ parr-process /path/to/ungraded-photos /path/to/results \
 
 Without `--artifacts`, commands continue to use the untrained starter preset.
 
+## Sample results
+
+Photos captured on the Raspberry Pi with the Camera Module 3 Wide (IMX708),
+the ungraded original on the left and the graded `_parr.jpg` on the right.
+
+| Original | Martin Parr look |
+| --- | --- |
+| <img src="docs/images/imx708-street-original.jpg" alt="Golden-hour street scene, ungraded" height="220"> | <img src="docs/images/imx708-street-graded.jpg" alt="Same street scene with the Martin Parr grade" height="220"> |
+| <img src="docs/images/imx708-interior-original.jpg" alt="Sunlit interior with plants, ungraded" height="220"> | <img src="docs/images/imx708-interior-graded.jpg" alt="Same interior with the Martin Parr grade" height="220"> |
+
 ## Hardware
 - Raspberry Pi 3B, 1GB RAM
 - M5Stack StickS3 (display, trigger)
