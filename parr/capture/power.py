@@ -12,6 +12,7 @@ smbus2 and gpiozero for the real thing.
 
 from __future__ import annotations
 
+import argparse
 import sys
 import threading
 import time
@@ -187,3 +188,39 @@ def build_ups(name: str, *, open_bus=None, open_pin=None) -> PowerMonitor | None
             "service user in the gpio group?"
         ) from exc
     return PowerMonitor(X728Ups(bus, pld_is_high=pld_is_high))
+
+
+def format_status(status: PowerStatus) -> str:
+    """One human line, matching what the Stick shows."""
+    source = "external power" if status.external_power else "battery"
+    return f"Battery: {status.percent}%  {status.voltage_mv / 1000:.2f} V  on {source}"
+
+
+def main(argv: list[str] | None = None, *, build=build_ups) -> int:
+    parser = argparse.ArgumentParser(description="Print the Pi UPS battery level.")
+    parser.add_argument(
+        "--ups", choices=UPS_CHOICES, default="x728", help="UPS type (default: x728)"
+    )
+    args = parser.parse_args(argv)
+    try:
+        monitor = build(args.ups)
+    except PowerError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if monitor is None:
+        print("error: no UPS configured (--ups none)", file=sys.stderr)
+        return 2
+    try:
+        monitor.poll_once()
+        status = monitor.snapshot()
+    finally:
+        monitor.close()
+    if status is None:
+        print(f"error: could not read the UPS: {monitor.last_error}", file=sys.stderr)
+        return 1
+    print(format_status(status))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
