@@ -196,6 +196,9 @@ this script can be retired in favour of one owner of the shutdown decision.
   `captures.jsonl` is appended one line per completed capture.
 - **Two readers of one gauge** are fine: the low-battery script and the capture
   service both do single-word I2C reads through the kernel's bus lock.
+- **Read the level anytime** with `parr-battery`, which does one gauge read and
+  prints e.g. `Battery: 64%  3.85 V  on battery` — the same maths the Stick
+  shows. `parr-battery --ups none` is a no-op for a Pi without the shield.
 - **Pin 6 and the gauge are read by user `george`**, who is in `gpio` and
   `i2c`. Pins 5, 12 and 26 are root-only through Geekworm's service; the
   capture service never touches them.

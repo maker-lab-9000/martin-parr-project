@@ -42,6 +42,7 @@ python3.12 -m venv .venv
 .venv/bin/parr-preset --out artifacts/starter-v1                 # regenerate the untrained starter
 .venv/bin/parr-process IN_DIR OUT_DIR [--artifacts DIR]          # batch regrade
 .venv/bin/parr-capture --fake --no-preview                       # capture loop w/o hardware
+.venv/bin/parr-battery                                           # print the X728 battery level (Pi only)
 .venv/bin/parr-train --source data/source --target data/references --out artifacts/parr-v1
 .venv/bin/parr-fetch --category 'Category:...'                   # Wikimedia Commons corpus fetch
 

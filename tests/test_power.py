@@ -9,6 +9,8 @@ from parr.capture.power import (
     X728Ups,
     build_ups,
     decode_word,
+    format_status,
+    main,
 )
 
 
@@ -239,3 +241,55 @@ def test_build_ups_x728_explains_missing_gpiozero_for_the_pin():
 def test_build_ups_rejects_unknown_names():
     with pytest.raises(PowerError, match="x728"):
         build_ups("apc")
+
+
+# --- parr-battery CLI -----------------------------------------------------
+
+
+def _battery_build(words=None, pld_high=False):
+    """A build_ups replacement that wires the CLI to a FakeBus, no hardware."""
+    gauge = words or {0x02: 0x00C8, 0x04: 0x8057}  # 4.00 V, 87 %
+
+    def build(name):
+        return PowerMonitor(X728Ups(FakeBus(gauge), pld_is_high=lambda: pld_high))
+
+    return build
+
+
+def test_format_status_reads_as_a_human_line_on_battery():
+    status = PowerStatus(percent=64, voltage_mv=3850, external_power=False)
+    assert format_status(status) == "Battery: 64%  3.85 V  on battery"
+
+
+def test_format_status_names_external_power():
+    line = format_status(PowerStatus(percent=87, voltage_mv=4000, external_power=True))
+    assert "87%" in line
+    assert "on external power" in line
+
+
+def test_main_prints_the_battery_line(capsys):
+    rc = main([], build=_battery_build(pld_high=True))
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "87%" in out
+    assert "4.00 V" in out
+    assert "on battery" in out
+
+
+def test_main_reports_no_ups_configured(capsys):
+    rc = main(["--ups", "none"], build=build_ups)
+    assert rc == 2
+    assert "no UPS" in capsys.readouterr().err
+
+
+def test_main_reports_a_read_failure_without_crashing(capsys):
+    class BrokenBus:
+        def read_word_data(self, address, register):
+            raise OSError(121, "Remote I/O error")
+
+    def build(name):
+        return PowerMonitor(X728Ups(BrokenBus(), pld_is_high=lambda: False))
+
+    rc = main([], build=build)
+    assert rc == 1
+    assert "could not read" in capsys.readouterr().err.lower()
