@@ -2,7 +2,7 @@ import builtins
 
 import pytest
 
-from parr._cv2 import require_cv2
+from pifilm._cv2 import require_cv2
 
 
 def test_require_cv2_returns_the_module():

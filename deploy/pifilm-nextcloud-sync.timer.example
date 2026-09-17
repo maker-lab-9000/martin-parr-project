@@ -1,5 +1,5 @@
 [Unit]
-Description=Periodic Martin Parr photo sync to Nextcloud
+Description=Periodic pi-film-reversal photo sync to Nextcloud
 
 [Timer]
 # A few minutes after boot, then every 15 minutes. Each run is a no-op unless

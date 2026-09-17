@@ -1,4 +1,4 @@
-"""``parr-train``: fit the Parr LUT from two folders of images.
+"""``pifilm-train``: fit the Parr LUT from two folders of images.
 
 The sequence (spec section 6):
 
@@ -145,7 +145,7 @@ def fit(
 
 
 def _corpus_licences(corpus_dir: Path) -> dict | None:
-    """What parr-fetch recorded about the licences of this corpus, if anything."""
+    """What pifilm-fetch recorded about the licences of this corpus, if anything."""
     manifest = Path(corpus_dir) / "manifest.json"
     if not manifest.is_file():
         return None
@@ -279,7 +279,7 @@ def train(
 
     # publish() creates out_dir's parent, but mkdtemp needs it to exist first.
     out_dir.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=".parr-staging-", dir=out_dir.parent))
+    staging = Path(tempfile.mkdtemp(prefix=".pifilm-staging-", dir=out_dir.parent))
     try:
         write_artifact(staging, result.lut, source_normalize, grain or GrainParams(), training)
         say("writing report")
@@ -295,7 +295,7 @@ def train(
 
 def build_parser() -> argparse.ArgumentParser:
     """Split out so the defaults can be asserted against FitConfig directly."""
-    parser = argparse.ArgumentParser(prog="parr-train", description="Fit the Parr LUT.")
+    parser = argparse.ArgumentParser(prog="pifilm-train", description="Fit the Parr LUT.")
     parser.add_argument("--source", type=Path, required=True, help="folder of camera photos")
     parser.add_argument("--target", type=Path, default=Path("data/references"))
     parser.add_argument("--out", type=Path, default=Path("artifacts"))
@@ -369,7 +369,7 @@ def main(argv: list[str] | None = None) -> int:
             proxy_source=args.proxy_source, allow_small=args.allow_small,
             target_levels=args.target_levels, target_median=args.target_median,
             source_levels=args.source_levels,
-            command=" ".join(["parr-train", *(argv or sys.argv[1:])]), progress=print,
+            command=" ".join(["pifilm-train", *(argv or sys.argv[1:])]), progress=print,
         )
     except CorpusTooSmall as exc:
         print(f"error: {exc}", file=sys.stderr)

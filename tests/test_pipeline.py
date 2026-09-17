@@ -1,11 +1,11 @@
 import numpy as np
 import pytest
 
-from parr.artifacts import Artifacts, write_artifact
-from parr.grain import GrainParams
-from parr.lut import LUT3D, sha1_hex
-from parr.normalize import NormalizeParams
-from parr.pipeline import Pipeline
+from pifilm.artifacts import Artifacts, write_artifact
+from pifilm.grain import GrainParams
+from pifilm.lut import LUT3D, sha1_hex
+from pifilm.normalize import NormalizeParams
+from pifilm.pipeline import Pipeline
 
 
 @pytest.fixture

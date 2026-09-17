@@ -4,7 +4,7 @@ import threading
 from dataclasses import dataclass
 from unittest.mock import Mock
 
-from parr.capture.camera import CameraError
+from pifilm.capture.camera import CameraError
 
 
 @dataclass
@@ -37,7 +37,7 @@ def wait_for(controller, request_id: str, state: str):
 
 def test_controller_captures_once_for_an_accepted_request():
     """Removing the single worker's capture call would leave the job unfinished."""
-    from parr.capture.controller import CaptureController
+    from pifilm.capture.controller import CaptureController
 
     session = BlockingSession()
     controller = CaptureController(session)
@@ -58,7 +58,7 @@ def test_controller_captures_once_for_an_accepted_request():
 
 def test_controller_allows_only_one_active_job_and_returns_busy_for_another_id():
     """Dropping the active-job guard would start a second camera capture."""
-    from parr.capture.controller import CaptureController
+    from pifilm.capture.controller import CaptureController
 
     session = BlockingSession()
     controller = CaptureController(session)
@@ -78,7 +78,7 @@ def test_controller_allows_only_one_active_job_and_returns_busy_for_another_id()
 
 def test_controller_duplicate_id_returns_the_original_job_without_recapturing():
     """Treating a duplicate as new would make retries expose the camera twice."""
-    from parr.capture.controller import CaptureController
+    from pifilm.capture.controller import CaptureController
 
     session = BlockingSession()
     controller = CaptureController(session)
@@ -97,7 +97,7 @@ def test_controller_duplicate_id_returns_the_original_job_without_recapturing():
 
 def test_camera_error_finishes_job_and_allows_a_later_request():
     """Keeping a failed job active would make the camera permanently busy."""
-    from parr.capture.controller import CaptureController
+    from pifilm.capture.controller import CaptureController
 
     class FlakySession:
         def __init__(self) -> None:
@@ -126,7 +126,7 @@ def test_snapshots_are_immutable_values():
     """Mutating a returned status must not change the controller's published state."""
     from dataclasses import FrozenInstanceError
 
-    from parr.capture.controller import CaptureController
+    from pifilm.capture.controller import CaptureController
 
     session = BlockingSession()
     controller = CaptureController(session)

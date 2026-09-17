@@ -1,5 +1,5 @@
-import parr
+import pifilm
 
 
 def test_version():
-    assert parr.__version__ == "0.1.0"
+    assert pifilm.__version__ == "0.1.0"

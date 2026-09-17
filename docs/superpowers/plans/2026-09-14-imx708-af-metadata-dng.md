@@ -18,7 +18,7 @@
 - `Frame` gains `metadata: dict | None = None` and `dng: bytes | None = None`, both defaulting to `None`, so V4L2/Fake frames are unaffected and existing `Frame(...)` positional calls keep working.
 - Recorded metadata is JSON-serialisable: numbers, or short lists of numbers. Filter to a fixed key set; drop anything absent or non-serialisable rather than raising.
 - The Pi original is the ISP's own 8-bit RGB rendering, saved once as `_original.jpg`; there is no separate camera JPEG. `_ungraded.jpg` is only used when no original and no DNG exist (never for this backend).
-- `--no-dng` skips the DNG (storage), still saving `_original.jpg` and `_parr.jpg`.
+- `--no-dng` skips the DNG (storage), still saving `_original.jpg` and `_graded.jpg`.
 - Preserve the five-field `StreamInfo.to_dict()` for absent optional fields, and the existing `captures.jsonl` keys; new keys are additive.
 - Ruff clean (`E, F, I, B, UP`, line length 100). Firmware untouched. Branch cut from `main` at the PR #12 merge.
 
@@ -35,7 +35,7 @@ These Picamera2 0.3.37 / libcamera 0.7.2 facts must be checked on the Pi (`192.1
 
 ## Task 1: Frame metadata/DNG fields and session output
 
-**Files:** modify `parr/capture/camera.py` (`Frame`), `parr/capture/app.py` (`CaptureSession.capture`), `tests/test_app.py`.
+**Files:** modify `pifilm/capture/camera.py` (`Frame`), `pifilm/capture/app.py` (`CaptureSession.capture`), `tests/test_app.py`.
 
 **Interfaces:**
 - Produces: `Frame(rgb, jpeg, source, metadata: dict | None = None, dng: bytes | None = None)`. `CaptureSession.capture()` writes `_original.jpg` when `frame.jpeg` or `frame.dng` is present, writes `<stem>.dng` when `frame.dng` is present and `save_dng` is enabled, and records `camera_metadata` and `dng` in the JSONL. `CaptureSession(..., save_dng: bool = True)`.
@@ -45,10 +45,10 @@ These Picamera2 0.3.37 / libcamera 0.7.2 facts must be checked on the Pi (`192.1
 ```python
 def test_capture_writes_original_and_dng_and_records_metadata(tmp_path):
     import numpy as np
-    from parr.capture.app import CaptureSession
-    from parr.capture.camera import Frame, StreamInfo
-    from parr.artifacts import Artifacts
-    from parr.pipeline import Pipeline
+    from pifilm.capture.app import CaptureSession
+    from pifilm.capture.camera import Frame, StreamInfo
+    from pifilm.artifacts import Artifacts
+    from pifilm.pipeline import Pipeline
 
     class MetaCamera:
         stream_info = StreamInfo(4608, 2592, 14.35, "RGB888", False,
@@ -64,7 +64,7 @@ def test_capture_writes_original_and_dng_and_records_metadata(tmp_path):
     sess = CaptureSession(MetaCamera(), Pipeline(Artifacts.default()), tmp_path,
                           seed_rng=np.random.default_rng(0))
     result = sess.capture()
-    day = result.parr.parent
+    day = result.pifilm.parent
     assert result.original.name.endswith("_original.jpg")
     dng = day / (result.original.name.replace("_original.jpg", ".dng"))
     assert dng.read_bytes() == b"II*\x00fake-dng-bytes"
@@ -74,10 +74,10 @@ def test_capture_writes_original_and_dng_and_records_metadata(tmp_path):
 
 def test_capture_skips_dng_when_disabled(tmp_path):
     import numpy as np
-    from parr.capture.app import CaptureSession
-    from parr.capture.camera import Frame, StreamInfo
-    from parr.artifacts import Artifacts
-    from parr.pipeline import Pipeline
+    from pifilm.capture.app import CaptureSession
+    from pifilm.capture.camera import Frame, StreamInfo
+    from pifilm.artifacts import Artifacts
+    from pifilm.pipeline import Pipeline
 
     class C:
         stream_info = StreamInfo(8, 8, 0.0, "RGB888", False)
@@ -88,17 +88,17 @@ def test_capture_skips_dng_when_disabled(tmp_path):
     sess = CaptureSession(C(), Pipeline(Artifacts.default()), tmp_path,
                           seed_rng=np.random.default_rng(0), save_dng=False)
     result = sess.capture()
-    assert not list(result.parr.parent.glob("*.dng"))
+    assert not list(result.pifilm.parent.glob("*.dng"))
     assert "dng" not in result.record
     assert result.original.name.endswith("_original.jpg")
 
 
 def test_v4l2_style_frame_without_metadata_is_unchanged(tmp_path):
     import numpy as np
-    from parr.capture.app import CaptureSession
-    from parr.capture.camera import Frame, StreamInfo
-    from parr.artifacts import Artifacts
-    from parr.pipeline import Pipeline
+    from pifilm.capture.app import CaptureSession
+    from pifilm.capture.camera import Frame, StreamInfo
+    from pifilm.artifacts import Artifacts
+    from pifilm.pipeline import Pipeline
 
     class Usb:
         stream_info = StreamInfo(1920, 1080, 30.0, "MJPG", True)
@@ -120,7 +120,7 @@ Expected: FAIL — `Frame` has no `metadata`/`dng`; `capture()` writes `_ungrade
 
 - [ ] **Step 3: Implement**
 
-In `parr/capture/camera.py`, extend `Frame`:
+In `pifilm/capture/camera.py`, extend `Frame`:
 
 ```python
 @dataclass
@@ -148,7 +148,7 @@ In `CaptureSession.__init__`, add `save_dng: bool = True` and store `self._save_
             dng_path = day_dir / f"{stem}.dng"
             dng_path.write_bytes(frame.dng)
             dng_name = dng_path.name
-        parr = save_jpeg(graded, day_dir / f"{stem}_parr.jpg")
+        pifilm = save_jpeg(graded, day_dir / f"{stem}_graded.jpg")
 ```
 
 and in the `record` dict, after `"frame_source": frame.source,` add:
@@ -160,13 +160,13 @@ and in the `record` dict, after `"frame_source": frame.source,` add:
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `.venv/bin/pytest -q tests/test_app.py && .venv/bin/ruff check parr tests`
+Run: `.venv/bin/pytest -q tests/test_app.py && .venv/bin/ruff check pifilm tests`
 Expected: pass; ruff clean.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add parr/capture/camera.py parr/capture/app.py tests/test_app.py
+git add pifilm/capture/camera.py pifilm/capture/app.py tests/test_app.py
 git commit -m "Carry per-shot metadata and DNG on Frame; save original and DNG"
 ```
 
@@ -174,7 +174,7 @@ git commit -m "Carry per-shot metadata and DNG on Frame; save original and DNG"
 
 ## Task 2: Backend fills metadata and DNG from the request
 
-**Files:** modify `parr/capture/picamera.py`, `tests/test_picamera.py`.
+**Files:** modify `pifilm/capture/picamera.py`, `tests/test_picamera.py`.
 
 **Interfaces:**
 - Consumes: `Frame.metadata`, `Frame.dng` (Task 1).
@@ -260,13 +260,13 @@ Keep the existing `finally: request.release()` and its error precedence. During 
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `.venv/bin/python -m pytest tests/test_picamera.py tests/test_camera.py -q && .venv/bin/ruff check parr tests`
+Run: `.venv/bin/python -m pytest tests/test_picamera.py tests/test_camera.py -q && .venv/bin/ruff check pifilm tests`
 Expected: pass; ruff clean.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add parr/capture/picamera.py tests/test_picamera.py
+git add pifilm/capture/picamera.py tests/test_picamera.py
 git commit -m "Extract per-shot metadata and DNG bytes from the Picamera2 request"
 ```
 
@@ -274,7 +274,7 @@ git commit -m "Extract per-shot metadata and DNG bytes from the Picamera2 reques
 
 ## Task 3: Neutral ISP rendering, autofocus, and controlled-shoot controls
 
-**Files:** modify `parr/capture/picamera.py`, `parr/capture/app.py`, `tests/test_picamera.py`, `tests/test_app.py`.
+**Files:** modify `pifilm/capture/picamera.py`, `pifilm/capture/app.py`, `tests/test_picamera.py`, `tests/test_app.py`.
 
 **Interfaces:**
 - Produces: `Picamera2Camera(tuning_file=..., save_dng=True, autofocus="continuous", af_range="normal", ae_lock=False, awb_lock=False, colour_gains: tuple[float, float] | None = None)`. CLI: `--autofocus {continuous,auto,manual}` (default continuous), `--af-range {normal,macro,full}` (default normal), `--ae-lock`, `--awb-lock`, `--colour-gains R,B` — all Picamera2-only, argparse errors if combined with `--camera v4l2` — plus `--no-dng`, which toggles the session/backend DNG output independently of backend choice and is deliberately *accepted* on `--camera v4l2` too.
@@ -332,7 +332,7 @@ Expected: full suite passes; ruff clean.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add parr/capture/picamera.py parr/capture/app.py tests/test_picamera.py tests/test_app.py
+git add pifilm/capture/picamera.py pifilm/capture/app.py tests/test_picamera.py tests/test_app.py
 git commit -m "Add neutral ISP rendering, autofocus and controlled-shoot controls"
 ```
 
@@ -342,12 +342,12 @@ git commit -m "Add neutral ISP rendering, autofocus and controlled-shoot control
 
 **Files:** modify `tests/test_picamera.py`, `docs/picamera2-bringup.md`, `docs/setup.md`, `README.md`, `docs/superpowers/plans/2026-09-13-rpi4-imx708-progress.md`.
 
-- [ ] **Step 1: Write a failing fake-backed `CaptureSession` test** in `tests/test_picamera.py` that drives the real `Picamera2Camera` with the injected fake module and a tiny artifact: capture once and assert the day folder holds `*_original.jpg`, `*.dng` and `*_parr.jpg`, all present; `captures.jsonl`'s last record has `frame_source == "picamera2"`, a `camera_metadata` object, a `dng` filename, and the sensor fields; and a 240 × 135 thumbnail comes back through `fitted_jpeg` on the graded file. Add a second case with `save_dng=False` asserting no `.dng` and no `dng` key.
+- [ ] **Step 1: Write a failing fake-backed `CaptureSession` test** in `tests/test_picamera.py` that drives the real `Picamera2Camera` with the injected fake module and a tiny artifact: capture once and assert the day folder holds `*_original.jpg`, `*.dng` and `*_graded.jpg`, all present; `captures.jsonl`'s last record has `frame_source == "picamera2"`, a `camera_metadata` object, a `dng` filename, and the sensor fields; and a 240 × 135 thumbnail comes back through `fitted_jpeg` on the graded file. Add a second case with `save_dng=False` asserting no `.dng` and no `dng` key.
 
 - [ ] **Step 2: Run to verify it fails**, then rely on Tasks 1–3 already implementing the behaviour; if the test passes immediately because the pieces exist, tighten it until it exercises a path not already asserted (the end-to-end folder contents), per TDD honesty.
 
 - [ ] **Step 3: Documentation.**
-  - `docs/picamera2-bringup.md`: add a Phase 2/3 section — the capture now writes `_original.jpg` + `.dng` + `_parr.jpg`; `captures.jsonl` carries `camera_metadata` and `dng`; verify the DNG opens in darktable/RawTherapee with correct colour; note `--no-dng` for long sessions and the storage figure (about 28 MB per shot); note AE/AWB stay auto (no flash), with `--ae-lock`/`--awb-lock`/`--colour-gains` for controlled reference-matching shoots; confirm autofocus moves `LensPosition` and records `AfState`.
+  - `docs/picamera2-bringup.md`: add a Phase 2/3 section — the capture now writes `_original.jpg` + `.dng` + `_graded.jpg`; `captures.jsonl` carries `camera_metadata` and `dng`; verify the DNG opens in darktable/RawTherapee with correct colour; note `--no-dng` for long sessions and the storage figure (about 28 MB per shot); note AE/AWB stay auto (no flash), with `--ae-lock`/`--awb-lock`/`--colour-gains` for controlled reference-matching shoots; confirm autofocus moves `LensPosition` and records `AfState`.
   - `docs/setup.md` and `README.md`: extend the camera-backend text with the new flags and the three output files.
   - `docs/superpowers/plans/2026-09-13-rpi4-imx708-progress.md`: mark Phases 2 and 3 implemented (tests) and list the hardware acceptance still pending (DNG opens correctly; autofocus and metadata verified on the sensor; the API-verification checklist above).
 
@@ -365,11 +365,11 @@ git commit -m "Integration test and docs for IMX708 metadata and original/DNG ou
 Deploy the branch to the Pi, stop the service, and capture a few frames with real objects at different distances:
 
 ```sh
-.venv/bin/parr-capture --camera picamera2 --tuning-file imx708_wide.json --no-preview \
-  --out ~/Pictures/parr-imx708-phase23
+.venv/bin/pifilm-capture --camera picamera2 --tuning-file imx708_wide.json --no-preview \
+  --out ~/Pictures/pifilm-imx708-phase23
 ```
 
-Confirm: `_original.jpg`, `.dng` and `_parr.jpg` per shot at 4608 × 2592; the DNG opens in darktable/RawTherapee with correct colour; `captures.jsonl` records `camera_metadata` with a plausible `ExposureTime`, `AnalogueGain`, `Lux` and a `LensPosition` that changes with distance; and repeated captures do not stall. Then restore the service (its unit already selects the Picamera2 backend). Record results in the progress document; passing fake-backed tests are not hardware acceptance.
+Confirm: `_original.jpg`, `.dng` and `_graded.jpg` per shot at 4608 × 2592; the DNG opens in darktable/RawTherapee with correct colour; `captures.jsonl` records `camera_metadata` with a plausible `ExposureTime`, `AnalogueGain`, `Lux` and a `LensPosition` that changes with distance; and repeated captures do not stall. Then restore the service (its unit already selects the Picamera2 backend). Record results in the progress document; passing fake-backed tests are not hardware acceptance.
 
 After this lands, the pilot corpus can begin: 20–30 originals across 8–10 scenes with capture logs and scene IDs, per the roadmap, then the production corpus once normalisation (Phase 6) is chosen.
 

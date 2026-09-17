@@ -1,10 +1,10 @@
 import numpy as np
 import pytest
 
-from parr.color import srgb_to_oklab
-from parr.imageio import save_jpeg
-from parr.normalize import NormalizeParams
-from parr.train.dataset import (
+from pifilm.color import srgb_to_oklab
+from pifilm.imageio import save_jpeg
+from pifilm.normalize import NormalizeParams
+from pifilm.train.dataset import (
     CorpusTooSmall,
     PixelPool,
     SampleConfig,

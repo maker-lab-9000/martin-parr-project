@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from parr.experiments.regression import sha256
+from pifilm.experiments.regression import sha256
 
 
 def make_partition(tmp_path):
@@ -17,7 +17,7 @@ def make_partition(tmp_path):
 
 
 def test_partition_enforces_groups_hashes_and_explicit_roles(tmp_path):
-    from parr.experiments.partitions import load_partition
+    from pifilm.experiments.partitions import load_partition
     manifest, records = make_partition(tmp_path)
     train, val = load_partition(manifest, tmp_path)
     assert [p.name for p in train] == ['a.jpg']
@@ -30,7 +30,7 @@ def test_partition_enforces_groups_hashes_and_explicit_roles(tmp_path):
 
 @pytest.mark.parametrize('mutation', ['checksum', 'escape', 'role', 'excluded', 'duplicate'])
 def test_partition_rejects_unsafe_inputs(tmp_path, mutation):
-    from parr.experiments.partitions import load_partition
+    from pifilm.experiments.partitions import load_partition
     manifest, records = make_partition(tmp_path)
     excluded = []
     if mutation == 'checksum':

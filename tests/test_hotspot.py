@@ -2,7 +2,7 @@
 
 The Stick joins the Pi's own access point, so WIFI_SSID and WIFI_PASSWORD in
 .env are the AP credentials, and the AP address is whatever host the firmware
-was told to call in PARR_REMOTE_URL. One file drives both sides.
+was told to call in PIFILM_REMOTE_URL. One file drives both sides.
 """
 
 import stat
@@ -12,9 +12,9 @@ import pytest
 from scripts.pi_hotspot import apply_keyfile, hotspot_keyfile, redact_psk
 
 ENV = {
-    "WIFI_SSID": "parr-cam",
+    "WIFI_SSID": "pifilm-cam",
     "WIFI_PASSWORD": "correct-horse-battery",
-    "PARR_REMOTE_URL": "http://10.42.0.1:8765",
+    "PIFILM_REMOTE_URL": "http://10.42.0.1:8765",
 }
 
 
@@ -34,11 +34,11 @@ def _section(text: str, name: str) -> dict[str, str]:
 def test_keyfile_is_an_ap_on_wlan0_with_wpa2_psk_and_shared_ipv4_from_remote_url():
     text = hotspot_keyfile(ENV)
 
-    assert _section(text, "connection")["id"] == "parr-ap"
+    assert _section(text, "connection")["id"] == "pifilm-ap"
     assert _section(text, "connection")["interface-name"] == "wlan0"
     assert _section(text, "connection")["autoconnect"] == "true"
     assert _section(text, "wifi")["mode"] == "ap"
-    assert _section(text, "wifi")["ssid"] == "parr-cam"
+    assert _section(text, "wifi")["ssid"] == "pifilm-cam"
     assert _section(text, "wifi")["band"] == "bg"
     assert _section(text, "wifi-security")["key-mgmt"] == "wpa-psk"
     assert _section(text, "wifi-security")["proto"] == "rsn"
@@ -88,8 +88,8 @@ def test_rejects_an_ssid_longer_than_32_bytes():
 )
 def test_rejects_a_remote_url_whose_host_is_not_a_plain_ipv4_address(url):
     # The firmware has no mDNS and the hotspot must own exactly this address.
-    with pytest.raises(ValueError, match="PARR_REMOTE_URL"):
-        hotspot_keyfile({**ENV, "PARR_REMOTE_URL": url})
+    with pytest.raises(ValueError, match="PIFILM_REMOTE_URL"):
+        hotspot_keyfile({**ENV, "PIFILM_REMOTE_URL": url})
 
 
 def test_redacted_keyfile_keeps_everything_except_the_psk():
@@ -99,7 +99,7 @@ def test_redacted_keyfile_keeps_everything_except_the_psk():
 
     assert "correct-horse-battery" not in shown
     assert _section(shown, "wifi-security")["psk"] == "<redacted>"
-    assert _section(shown, "wifi")["ssid"] == "parr-cam"
+    assert _section(shown, "wifi")["ssid"] == "pifilm-cam"
 
 
 def test_apply_writes_a_root_only_keyfile_then_reloads_and_activates(tmp_path):
@@ -108,12 +108,12 @@ def test_apply_writes_a_root_only_keyfile_then_reloads_and_activates(tmp_path):
     def run(command, **_kwargs):
         calls.append(command)
 
-    target = tmp_path / "parr-ap.nmconnection"
+    target = tmp_path / "pifilm-ap.nmconnection"
     apply_keyfile("keyfile-body\n", target, run=run)
 
     assert target.read_text() == "keyfile-body\n"
     assert stat.S_IMODE(target.stat().st_mode) == 0o600
     assert calls == [
         ["nmcli", "connection", "reload"],
-        ["nmcli", "connection", "up", "parr-ap"],
+        ["nmcli", "connection", "up", "pifilm-ap"],
     ]

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from parr.grain import GrainParams, add_grain
+from pifilm.grain import GrainParams, add_grain
 
 
 def test_disabled_is_identity():

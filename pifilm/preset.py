@@ -61,7 +61,7 @@ def write_starter(out: str | Path, highlights: float = 0.0) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, prog="parr-preset")
+    parser = argparse.ArgumentParser(description=__doc__, prog="pifilm-preset")
     parser.add_argument("--out", type=Path, default=Path("artifacts/starter"))
     parser.add_argument(
         "--highlights", type=float, default=0.0,

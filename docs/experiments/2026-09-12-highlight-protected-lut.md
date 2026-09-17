@@ -12,7 +12,7 @@ captures. Its manifest and image hashes passed `verify_snapshot`. This is a
 reviewed regression set, not a blind final test. The older experiment note
 referenced in the plan is absent from this branch.
 
-The comparison uses `parr.experiments.evaluate.evaluate_candidates` with an
+The comparison uses `pifilm.experiments.evaluate.evaluate_candidates` with an
 explicit mapping of candidate names to artifact paths. The equivalent CLI
 expects the **parent** of the candidate artifact directories as `--artifacts`;
 the plan's example passes a single artifact directory instead.
@@ -86,11 +86,11 @@ not a newly trained corpus.
 Use new output directories if these already exist:
 
 ```sh
-.venv/bin/parr-preset \
+.venv/bin/pifilm-preset \
   --out data/refinement-2026-09-12-highlight-protection/artifacts/current-unprotected
-.venv/bin/parr-preset --highlights 0.6 \
+.venv/bin/pifilm-preset --highlights 0.6 \
   --out data/refinement-2026-09-12-highlight-protection/artifacts/highlights-06
-.venv/bin/python -m parr.experiments.evaluate \
+.venv/bin/python -m pifilm.experiments.evaluate \
   --snapshot data/refinement-2026-09-07/regression \
   --artifacts data/refinement-2026-09-12-highlight-protection/artifacts \
   --out data/refinement-2026-09-12-highlight-protection/comparison

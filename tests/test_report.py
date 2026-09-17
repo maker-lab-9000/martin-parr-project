@@ -3,12 +3,12 @@ import json
 import numpy as np
 from PIL import Image
 
-from parr.imageio import save_jpeg
-from parr.lut import LUT3D
-from parr.normalize import NormalizeParams
-from parr.train.dataset import CorpusSplit, PixelPool, SampleConfig
-from parr.train.evaluate import check_gates
-from parr.train.report import (
+from pifilm.imageio import save_jpeg
+from pifilm.lut import LUT3D
+from pifilm.normalize import NormalizeParams
+from pifilm.train.dataset import CorpusSplit, PixelPool, SampleConfig
+from pifilm.train.evaluate import check_gates
+from pifilm.train.report import (
     render_contact_sheet,
     render_diagnostics,
     render_ramps,

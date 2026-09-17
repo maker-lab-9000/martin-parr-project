@@ -18,7 +18,7 @@ _MISSING = (
     "OpenCV (cv2) is required but not installed.\n"
     "  On Raspberry Pi OS:  sudo apt install python3-opencv\n"
     "                       (then create the venv with --system-site-packages)\n"
-    "  Anywhere else:       pip install 'martin-parr-project[opencv]'\n"
+    "  Anywhere else:       pip install 'pi-film-reversal[opencv]'\n"
     "                       (already included by the [train] and [dev] extras)"
 )
 

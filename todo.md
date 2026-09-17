@@ -7,7 +7,7 @@ checkboxes grouped by theme and ordered by expected payoff within each group.
 Updated 2026-09-08. Section 5 (Pi hotspot, Ethernet administration) is done
 and verified on the device; the Stick captures over the hotspot and displays the
 graded thumbnail, proven by hash. The deployed look is the bundled starter
-(`parr/data`) by decision. Firmware now writes a serial debug log. Remaining
+(`pifilm/data`) by decision. Firmware now writes a serial debug log. Remaining
 work is sections 1, 3 (partly) and 4.
 
 ---
@@ -54,8 +54,8 @@ work is sections 1, 3 (partly) and 4.
 - [ ] Reserve whole scenes for validation before looking at any result, and keep
       a second set of whole scenes as an untouched final test. Never select a
       candidate on the final test.
-- [ ] Port scene-grouped partitions from `parr.experiments.partitions` into
-      `parr-train` (a `--partition manifest.json` flag) so the production
+- [ ] Port scene-grouped partitions from `pifilm.experiments.partitions` into
+      `pifilm-train` (a `--partition manifest.json` flag) so the production
       trainer stops doing random per-image splits.
 - [ ] Configure the camera for training frames exactly as it is configured at
       capture, and record the control values in `captures.jsonl` (spec 7.5
@@ -93,7 +93,7 @@ and the neutral-tint drift enter. Real pairs remove both problems.
 - [ ] Hand-graded pairs (cheapest, no rights issue, camera-calibrated): take
       30 to 50 of your own camera captures, grade them in darktable, RawTherapee
       or Lightroom with the references open beside you, export as sRGB JPEG.
-      Add `parr-train --paired SRC_DIR TGT_DIR` that matches filenames, samples
+      Add `pifilm-train --paired SRC_DIR TGT_DIR` that matches filenames, samples
       pixels at identical coordinates, and calls `fit_lut` directly, skipping
       `hue_weights` and IDT. This is how commercial film-emulation LUTs are
       built.
@@ -126,17 +126,17 @@ and the neutral-tint drift enter. Real pairs remove both problems.
       with a soft knee that leaves interior nodes off the boundary.
 - [ ] Record provenance properly: `code_revision` is `unknown` in the trained
       artifacts because training ran from the sibling Kodachrome venv. Run
-      `parr-train` from this repo's venv so the git hash lands in
+      `pifilm-train` from this repo's venv so the git hash lands in
       `params.json`.
 
 ### Priority 5: evaluation protocol and sweeps
 
 - [ ] Script a hyperparameter sweep over `lambda_smooth` {0.01, 0.03, 0.1},
       `lambda_identity` {1, 3, 10}, `strength` {0.6, 0.8, 1.0, 1.2},
-      `iterations` {40, 80} using `parr.experiments.train`, selecting on the
+      `iterations` {40, 80} using `pifilm.experiments.train`, selecting on the
       scene-grouped dev set only.
 - [ ] Blind A/B contact sheets: randomize candidate order per page and hide
-      labels until after scoring. `parr.experiments.evaluate` already produces
+      labels until after scoring. `pifilm.experiments.evaluate` already produces
       the sheets; add the shuffle and an answer key file.
 - [ ] Add a ColorChecker ΔE table (per patch, before and after) to the report.
 - [ ] Keep every rejected artifact and its report. The refinement doc's
@@ -144,9 +144,9 @@ and the neutral-tint drift enter. Real pairs remove both problems.
 
 ---
 
-## 2. Should `parr.cube` and `params.json` be committed?
+## 2. Should `pifilm.cube` and `params.json` be committed?
 
-Decision 2026-09-08: the Pi deploys the bundled starter (`parr/data`), which is
+Decision 2026-09-08: the Pi deploys the bundled starter (`pifilm/data`), which is
 already in the package, so nothing needs committing for the current setup. The
 question below stays open for the day a trained model is promoted.
 
@@ -155,7 +155,7 @@ consider shipping the look as package data instead of un-ignoring a path.
 
 Facts checked:
 
-- `parr.cube` is 970 KB of text, `params.json` is 4 KB. Fine for git, but the
+- `pifilm.cube` is 970 KB of text, `params.json` is 4 KB. Fine for git, but the
   cube is effectively binary for diffing. Commit it rarely, or use Git LFS if
   you expect to iterate through many versions.
 - `report/` contains contact sheets built from the reference photographs. Those
@@ -180,13 +180,13 @@ scratch repo to track exactly the two files and nothing else under `artifacts/`:
 /artifacts/*
 !/artifacts/personal-collection-01-v1/
 /artifacts/personal-collection-01-v1/*
-!/artifacts/personal-collection-01-v1/parr.cube
+!/artifacts/personal-collection-01-v1/pifilm.cube
 !/artifacts/personal-collection-01-v1/params.json
 ```
 
 Cleaner alternative:
 
-- [ ] Add the trained look as package data at `parr/data/looks/personal-01/`
+- [ ] Add the trained look as package data at `pifilm/data/looks/personal-01/`
       and extend `Artifacts.resolve` with a `--look NAME` option (or make it the
       default once it is proven on the camera). Then the Pi gets the model via
       `pip install -e .` and `PI_ARTIFACT_DIR`, the systemd unit and the deploy
@@ -209,20 +209,20 @@ Cleaner alternative:
       names will lie. Solved by the DS1307 RTC on the Geekworm X728 UPS
       shield (section 4); see `docs/x728-ups.md` for the overlay. (Done
       2026-09-10.)
-- [ ] Protect the SD card against power loss: put `~/Pictures/parr` on its own
+- [ ] Protect the SD card against power loss: put `~/Pictures/pifilm` on its own
       partition or a USB stick, and consider `overlayroot` for a read-only root
       filesystem. A battery pull mid-write is the most likely way this project
       corrupts its card.
 
 ### systemd unit hardening
 
-- [ ] Move hard-coded values out of `ExecStart`. Put `PARR_LISTEN`,
-      `PARR_ARTIFACTS` and `PARR_OUT` in `/etc/parr-capture.env` alongside the
-      token and reference them as `${PARR_LISTEN}` in the unit.
+- [ ] Move hard-coded values out of `ExecStart`. Put `PIFILM_LISTEN`,
+      `PIFILM_ARTIFACTS` and `PIFILM_OUT` in `/etc/pifilm-capture.env` alongside the
+      token and reference them as `${PIFILM_LISTEN}` in the unit.
 - [x] Bind to `0.0.0.0:8765` (or add `net.ipv4.ip_nonlocal_bind=1`). Binding to
       a specific address races the hotspot bringing that address up at boot and
       fails with "cannot assign requested address" until systemd restarts it.
-      (Done in `deploy/parr-capture.service.example`, 2026-09-08.)
+      (Done in `deploy/pifilm-capture.service.example`, 2026-09-08.)
 - [x] Add `StartLimitIntervalSec=0` under `[Unit]`. The camera can take several
       seconds to enumerate; without the limit reset, systemd gives up after five
       fast failures. (Done; `Restart=on-failure` kept so a clean `Q` exit in
@@ -232,7 +232,7 @@ Cleaner alternative:
       makes the service start when the camera appears and stop when it is
       unplugged.
 - [x] Keep `deploy_remote.build_capture_command` in sync: it now reads
-      `PARR_LISTEN` from the env file (default `0.0.0.0:8765`) instead of
+      `PIFILM_LISTEN` from the env file (default `0.0.0.0:8765`) instead of
       deriving the bind address from `PI_HOST`. (Done 2026-09-08.)
 
 ### Install and deploy
@@ -247,7 +247,7 @@ Cleaner alternative:
 - [x] Set `[tool.pytest.ini_options] pythonpath = ["."]` so bare `pytest`
       collects `tests/test_config.py` and `tests/test_deployment.py`.
       (Done 2026-09-08.)
-- [ ] Add the narrow sudoers rule for `systemctl start/stop parr-capture.service`
+- [ ] Add the narrow sudoers rule for `systemctl start/stop pifilm-capture.service`
       so `deploy_remote.py --restart` works. The Pi user has no passwordless
       sudo; it only looked that way while an interactive credential was cached.
       Commands are in `docs/sticks3-remote.md`.
@@ -259,7 +259,7 @@ Cleaner alternative:
 
 ### Getting photos off the camera
 
-- [ ] When wired: `rsync -av george@parr.local:Pictures/parr/ ~/Pictures/parr-pi/`.
+- [ ] When wired: `rsync -av george@parr.local:Pictures/pifilm/ ~/Pictures/pifilm-pi/`.
       Add it as the `pull-photos` make target.
 - [ ] Later: a `GET /v1/captures?since=<id>` listing plus a full-resolution
       download endpoint, so a phone on the Pi's hotspot can pull photos without
@@ -274,7 +274,7 @@ Cleaner alternative:
       that runs `systemctl poweroff` through a narrow sudoers rule, and bind it
       to a long press on the Stick's secondary button.
 - [x] Include Pi battery level in `/v1/status` and show it on the Stick.
-      `parr-capture --ups x728` reads the X728 fuel gauge and publishes
+      `pifilm-capture --ups x728` reads the X728 fuel gauge and publishes
       `pi_battery` (`percent`, `voltage_mv`, `external_power`); the Stick
       shows it in a bottom-left badge. (Done 2026-09-10.)
 - [ ] Flash: drive a high-power LED module (or a small ring light) from a GPIO
@@ -384,7 +384,7 @@ needed; the live procedure is `docs/sticks3-remote.md`.
 that is up, so the Pi keeps internet access when you wire it to a router.
 
 - [x] Point the firmware and the service at the AP address. `.env` carries
-      `PARR_REMOTE_URL=http://10.42.0.1:8765` and `PARR_LISTEN=0.0.0.0:8765`;
+      `PIFILM_REMOTE_URL=http://10.42.0.1:8765` and `PIFILM_LISTEN=0.0.0.0:8765`;
       `PI_HOST=parr.local` is the SSH address. Stick rebuilt and flashed.
 - [x] Set `--remote-listen 0.0.0.0:8765` in the unit. (Done 2026-09-08.)
 - [x] Repo side: `scripts/pi_hotspot.py` writes the hotspot as a root-only
@@ -403,7 +403,7 @@ that is up, so the Pi keeps internet access when you wire it to a router.
 The Pi 3B port is auto-MDI-X, so a normal patch cable straight into a laptop
 works.
 
-- [x] Set a memorable hostname (`sudo raspi-config nonint do_hostname parr`);
+- [x] Set a memorable hostname (`sudo raspi-config nonint do_hostname pifilm`);
       avahi is installed by default on Raspberry Pi OS, and macOS resolves
       `parr.local` natively. Verified.
 - [x] Make the wired profile keep a link-local address alongside DHCP, so a

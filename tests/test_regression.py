@@ -4,17 +4,17 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from parr import preset
+from pifilm import preset
 
 
 def inputs(tmp_path):
     source, graded = tmp_path / 'source', tmp_path / 'v3'
     source.mkdir()
     graded.mkdir()
-    for name in ['120000_ungraded.jpg', '120000_parr.jpg']:
+    for name in ['120000_ungraded.jpg', '120000_graded.jpg']:
         Image.fromarray(np.full((8, 10, 3), 100, dtype=np.uint8)).save(source / name)
     Image.fromarray(np.full((8, 10, 3), 120, dtype=np.uint8)).save(
-        graded / '120000_ungraded_parr.jpg')
+        graded / '120000_ungraded_graded.jpg')
     record = {'original': '120000_ungraded.jpg', 'grain_seed': 17,
               'lut_sha1': 'test-baseline'}
     (source / 'captures.jsonl').write_text(json.dumps(record) + '\n')
@@ -23,7 +23,7 @@ def inputs(tmp_path):
 
 
 def test_freeze_copies_triplets_and_detects_later_corruption(tmp_path):
-    from parr.experiments.regression import freeze_regression, verify_snapshot
+    from pifilm.experiments.regression import freeze_regression, verify_snapshot
     source, graded, baseline = inputs(tmp_path)
     before = (source / '120000_ungraded.jpg').read_bytes()
     out = tmp_path / 'snapshot'
@@ -39,20 +39,20 @@ def test_freeze_copies_triplets_and_detects_later_corruption(tmp_path):
 
 
 def test_freeze_refuses_missing_triplet_and_existing_output(tmp_path):
-    from parr.experiments.regression import freeze_regression
+    from pifilm.experiments.regression import freeze_regression
     source, graded, baseline = inputs(tmp_path)
     out = tmp_path / 'snapshot'
     out.mkdir()
     with pytest.raises(FileExistsError):
         freeze_regression(source, graded, out, baseline)
-    (source / '120000_parr.jpg').unlink()
+    (source / '120000_graded.jpg').unlink()
     with pytest.raises(FileNotFoundError):
         freeze_regression(source, graded, tmp_path / 'new', baseline)
     assert not (tmp_path / 'new').exists()
 
 
 def test_freeze_requires_unique_capture_metadata(tmp_path):
-    from parr.experiments.regression import freeze_regression
+    from pifilm.experiments.regression import freeze_regression
     source, graded, baseline = inputs(tmp_path)
     log = source / 'captures.jsonl'
     log.write_text(log.read_text() * 2)

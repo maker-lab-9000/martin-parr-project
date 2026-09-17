@@ -2,7 +2,7 @@
 
 This is the only test that proves the shipped artifact really travels with
 the package: everything else imports from the source tree, where
-`parr/data/` happens to be on disk anyway.
+`pifilm/data/` happens to be on disk anyway.
 """
 
 import subprocess
@@ -12,7 +12,7 @@ import venv
 import numpy as np
 import pytest
 
-from parr.imageio import save_jpeg
+from pifilm.imageio import save_jpeg
 
 pytestmark = pytest.mark.slow
 
@@ -43,8 +43,8 @@ def test_wheel_installs_and_runs_from_another_directory(tmp_path, repo_root):
         work / "in" / "a.jpg",
     )
     run = subprocess.run(
-        [str(env_dir / "bin" / "parr-process"), "in", "out"],
+        [str(env_dir / "bin" / "pifilm-process"), "in", "out"],
         cwd=work, capture_output=True, text=True,
     )
     assert run.returncode == 0, run.stderr[-3000:]
-    assert (work / "out" / "a_parr.jpg").exists(), "the bundled artifact was not found"
+    assert (work / "out" / "a_graded.jpg").exists(), "the bundled artifact was not found"

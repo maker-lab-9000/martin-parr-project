@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from parr import color
+from pifilm import color
 
 
 def test_srgb_linear_roundtrip():

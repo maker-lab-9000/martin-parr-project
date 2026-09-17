@@ -6,16 +6,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from parr.artifacts import (
+from pifilm.artifacts import (
     PARAMS_VERSION,
     Artifacts,
     ArtifactsError,
     publish,
     write_artifact,
 )
-from parr.grain import GrainParams
-from parr.lut import LUT3D, sha1_hex, write_cube
-from parr.normalize import NormalizeParams
+from pifilm.grain import GrainParams
+from pifilm.lut import LUT3D, sha1_hex, write_cube
+from pifilm.normalize import NormalizeParams
 
 
 @pytest.fixture
@@ -137,7 +137,7 @@ def test_publish_moves_only_after_validation(staged, tmp_path):
     dest = tmp_path / "live"
     published = publish(staged, dest)
     assert published == dest
-    assert (dest / "parr.cube").exists() and (dest / "params.json").exists()
+    assert (dest / "pifilm.cube").exists() and (dest / "params.json").exists()
     assert Artifacts.load(dest).lut.size == 9
     assert not staged.exists()
 
@@ -149,8 +149,8 @@ def test_publish_refuses_an_invalid_staging_dir_and_leaves_dest_untouched(tmp_pa
 
     bad = tmp_path / "bad"
     bad.mkdir()
-    write_cube(LUT3D.identity(9), bad / "parr.cube")
-    (bad / "params.json").write_text(json.dumps({"version": 2, "lut_file": "parr.cube",
+    write_cube(LUT3D.identity(9), bad / "pifilm.cube")
+    (bad / "params.json").write_text(json.dumps({"version": 2, "lut_file": "pifilm.cube",
                                                  "lut_sha1": "0" * 40}))
     with pytest.raises(ArtifactsError):
         publish(bad, dest)
@@ -178,7 +178,7 @@ def test_a_missing_lut_sha1_is_refused(tmp_path):
     data = json.loads(params.read_text())
     del data["lut_sha1"]
     params.write_text(json.dumps(data))
-    write_cube(LUT3D(np.clip(LUT3D.identity(9).table**1.7, 0, 1)), tmp_path / "parr.cube")
+    write_cube(LUT3D(np.clip(LUT3D.identity(9).table**1.7, 0, 1)), tmp_path / "pifilm.cube")
 
     # Same hazard as above: this test's name contains "lut_sha1", so it appears
     # in tmp_path. Match the sentence, not the token.
@@ -261,6 +261,6 @@ def test_publish_accepts_a_non_identity_artifact(tmp_path):
 
 
 def test_committed_default_is_loadable(repo_root):
-    art = Artifacts.load(repo_root / "parr" / "data")
+    art = Artifacts.load(repo_root / "pifilm" / "data")
     assert art.lut.size in (2, 9, 33)
     assert np.isfinite(art.lut.table).all()

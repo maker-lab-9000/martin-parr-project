@@ -40,7 +40,7 @@ def freeze_regression(source_dir, graded_dir, out_dir, baseline_dir) -> dict:
     source, graded, out, baseline = map(Path, (source_dir, graded_dir, out_dir, baseline_dir))
     if out.exists():
         raise FileExistsError(out)
-    photos = sorted(graded.glob('*_ungraded_parr.jpg'))
+    photos = sorted(graded.glob('*_ungraded_graded.jpg'))
     if not photos:
         raise ValueError('no comparison triplets')
     records = {}
@@ -70,11 +70,11 @@ def freeze_regression(source_dir, graded_dir, out_dir, baseline_dir) -> dict:
             return {'path': relative, 'sha256': digest}
 
         for photo in photos:
-            stem = photo.name.removesuffix('_ungraded_parr.jpg')
+            stem = photo.name.removesuffix('_ungraded_graded.jpg')
             original = f'{stem}_ungraded.jpg'
             if original not in records or 'grain_seed' not in records[original]:
                 raise ValueError(f'missing capture metadata/grain seed: {original}')
-            sources = {'ungraded': source / original, 'starter': source / f'{stem}_parr.jpg',
+            sources = {'ungraded': source / original, 'starter': source / f'{stem}_graded.jpg',
                        'v3': photo}
             files = {role: copy(path, f'images/{stem}_{role}.jpg')
                      for role, path in sources.items()}
@@ -86,7 +86,7 @@ def freeze_regression(source_dir, graded_dir, out_dir, baseline_dir) -> dict:
                 raise ValueError(f'comparison dimensions differ: {stem}')
             manifest['captures'].append({'id': stem, 'size': list(dimensions[0]),
                                          'capture': records[original], 'files': files})
-        for name in ['parr.cube', 'params.json']:
+        for name in ['pifilm.cube', 'params.json']:
             manifest['baseline'][name] = copy(baseline / name, f'baseline/{name}')
         manifest['capture_log'] = copy(source / 'captures.jsonl', 'captures.jsonl')
         (staging / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
@@ -102,7 +102,7 @@ def main():
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--graded', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
-    parser.add_argument('--baseline', type=Path, default=Path('parr/data'))
+    parser.add_argument('--baseline', type=Path, default=Path('pifilm/data'))
     args = parser.parse_args()
     freeze_regression(args.source, args.graded, args.out, args.baseline)
     print(json.dumps(verify_snapshot(args.out)))

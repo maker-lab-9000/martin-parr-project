@@ -1,4 +1,4 @@
-"""The Nextcloud sync script pushes ~/Pictures/parr to one Nextcloud folder.
+"""The Nextcloud sync script pushes ~/Pictures/pifilm to one Nextcloud folder.
 
 It runs on the Pi from a systemd timer, so it must be a quiet no-op unless the
 wired LAN is up, must copy (never delete) so an SD-card cleanup cannot erase the
@@ -43,7 +43,7 @@ def _cfg(**over) -> NextcloudConfig:
         user="george",
         password="app-secret-123",
         target_dir="MartinParr",
-        source_dir=Path("/home/george/Pictures/parr"),
+        source_dir=Path("/home/george/Pictures/pifilm"),
     )
     base.update(over)
     return NextcloudConfig(**base)
@@ -183,7 +183,7 @@ def test_copy_command_copies_not_syncs_with_target_and_min_age():
     assert "copy" in cmd
     assert "sync" not in cmd
     assert f"{REMOTE_NAME}:MartinParr" in cmd
-    assert "/home/george/Pictures/parr" in cmd
+    assert "/home/george/Pictures/pifilm" in cmd
     assert "--min-age" in cmd
     assert "--dry-run" not in cmd
     assert "app-secret-123" not in " ".join(cmd)

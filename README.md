@@ -6,12 +6,15 @@ The prototype is still in progress but I'm aiming at a handheld point and shoot 
 Once the prototype is working as expected, additional parts would include a proper 3D printed case, and potential upgrade to the Raspi high quality camera module and external battery HAT.
 
 
-# Martin Parr Look
+# Pi Film Reversal
 
-A color-grading experiment inspired by Martin Parr's saturated,
-flash-lit color-negative photographs: vivid reds, yellows and blues, crisp
-contrast, neutral whites, and fine grain. Runs on a Mac for training and a
-Raspberry Pi for capture, using the learned 3D-LUT approach from `kodachrome-film`.
+An experiment in pushing the Raspberry Pi camera to recreate film and
+photographic looks with machine learning: it learns a 3D-LUT colour grade from
+a set of reference photographs, then applies it on-device at capture time. The
+first target is Martin Parr's saturated, flash-lit colour-negative look — vivid
+reds, yellows and blues, crisp contrast, neutral whites, and fine grain — with
+more film stocks and looks to follow. Runs on a Mac for training and a Raspberry
+Pi for capture, using the learned 3D-LUT approach from `kodachrome-film`.
 
 The bundled look is a **handcrafted, untrained starter preset**; no reference
 photographs were used to train that preset. Separately, the local
@@ -24,7 +27,7 @@ camera. Artifacts and training data are gitignored and are not included in a clo
 To test this trained model after installing the package, explicitly select it:
 
 ```bash
-parr-process /path/to/ungraded-photos /path/to/results \
+pifilm-process /path/to/ungraded-photos /path/to/results \
   --artifacts artifacts/personal-collection-01-v1
 ```
 
@@ -33,7 +36,7 @@ Without `--artifacts`, commands continue to use the untrained starter preset.
 ## Sample results
 
 Photos captured on the Raspberry Pi with the Camera Module 3 Wide (IMX708),
-the ungraded original on the left and the graded `_parr.jpg` on the right.
+the ungraded original on the left and the graded `_graded.jpg` on the right.
 
 | Original | Martin Parr look |
 | --- | --- |
@@ -55,7 +58,7 @@ for every step, which machine it runs on and why:
 1. **Mac** — clone, venv, `pip install -e '.[train,dev,deploy]'`, PlatformIO, tests.
 2. **The one `.env` file** — every credential and address, read by the deploy
    script, the hotspot script and the firmware build.
-3. **Pi, OS and network** — Trixie, hostname `parr`, Ethernet administration,
+3. **Pi, OS and network** — Trixie, hostname `pifilm`, Ethernet administration,
    then the Pi's own Wi-Fi hotspot that the Stick joins.
 4. **Pi, application and service** — venv with system OpenCV, choice of look,
    token file, systemd unit, reboot test.
@@ -113,14 +116,14 @@ Pi saves original + graded JPEG + capture log → marks job complete
    optional fine grain. The bundled starter is the default; `--artifacts DIR`
    explicitly selects another LUT and its associated normalization/grain settings.
 5. **Save locally before declaring completion.** By default, the Pi writes to
-   `~/Pictures/parr/YYYY-MM-DD/`: the original camera JPEG as `*_original.jpg`
+   `~/Pictures/pifilm/YYYY-MM-DD/`: the original camera JPEG as `*_original.jpg`
    when available, otherwise an encoded `*_ungraded.jpg`; the full-resolution
-   graded `*_parr.jpg`; and an entry in `captures.jsonl`. The log records file
+   graded `*_graded.jpg`; and an entry in `captures.jsonl`. The log records file
    names, timestamp, LUT hash, normalization gains, grain seed, camera stream
    settings and processing timings. The job is marked complete after these writes
    succeed.
 6. **Transfer a graded preview to the Stick.** After completion, the Stick requests
-   `GET /v1/captures/{id}/image.jpg`. The Pi reads that job's saved **`*_parr.jpg`**
+   `GET /v1/captures/{id}/image.jpg`. The Pi reads that job's saved **`*_graded.jpg`**
    and generates an aspect-preserving **240 × 135 JPEG**, with black padding if
    needed and a **64 KiB** transfer limit. This is a download initiated by the
    Stick, not a push/upload of the full-resolution file. Grading is not repeated
@@ -141,8 +144,8 @@ service commands.
 ## Using the tools directly
 
 ```bash
-.venv/bin/parr-process /path/to/originals /path/to/parr-results
-.venv/bin/parr-capture --no-preview --show-captures
+.venv/bin/pifilm-process /path/to/originals /path/to/pifilm-results
+.venv/bin/pifilm-capture --no-preview --show-captures
 ```
 
 `SPACE` shows TV color bars while a snapshot is captured and processed, then
@@ -150,9 +153,9 @@ displays the graded photo until the next capture. `Q` or Escape exits. Fullscree
 display fits the image without cropping or stretching. Plain `--no-preview`
 uses terminal controls without a window; `--fake` uses synthetic camera frames.
 
-Captures go to `~/Pictures/parr/YYYY-MM-DD/`: the camera JPEG is saved verbatim
+Captures go to `~/Pictures/pifilm/YYYY-MM-DD/`: the camera JPEG is saved verbatim
 as `*_original.jpg` when available, otherwise `*_ungraded.jpg`, alongside
-`*_parr.jpg` and `captures.jsonl`. These commands and outputs are separate from
+`*_graded.jpg` and `captures.jsonl`. These commands and outputs are separate from
 the Kodachrome project. The default USB path requests a 1920 × 1080 MJPEG stream
 at 30 fps; display resolution does not change capture resolution. Use `--device`
 to select a USB camera.
@@ -168,7 +171,7 @@ with `--system-site-packages`. Select the tuning file for the exact module with
 `--tuning-file` (for example `imx708_wide.json`):
 
 ```bash
-.venv/bin/parr-capture --camera picamera2 --tuning-file imx708_wide.json --no-preview
+.venv/bin/pifilm-capture --camera picamera2 --tuning-file imx708_wide.json --no-preview
 ```
 
 First-time hardware bring-up, including `rpicam-hello --list-cameras`, a
@@ -182,7 +185,7 @@ ISP's own rendering — a Picamera2 frame is always a full-quality original,
 named `_original.jpg` whether or not a DNG is also saved), a `<stem>.dng` raw
 sidecar from the same request (on by default — about 18 MB DNG, roughly 28 MB
 per shot in total; skip it with `--no-dng` for long sessions, which omits only
-the `.dng` sidecar and never renames the original), and the usual `_parr.jpg`.
+the `.dng` sidecar and never renames the original), and the usual `_graded.jpg`.
 `captures.jsonl` adds `camera_metadata` (a filtered, JSON-safe subset such as
 `ExposureTime`, `AnalogueGain`, `Lux`, `LensPosition`, `AfState`) and `dng`
 (the sidecar filename) when present. Autofocus defaults to continuous AF at
@@ -195,7 +198,7 @@ The preset increases midtone color and contrast with a smooth tone curve,
 compresses out-of-gamut chroma, and adds subtle grain (`0.004`). Rebuild it with:
 
 ```bash
-.venv/bin/parr-preset --out artifacts/starter-v1
+.venv/bin/pifilm-preset --out artifacts/starter-v1
 ```
 
 Pass `--highlights 0.6` to hold coloured highlights back from clipping; `0`
@@ -203,7 +206,7 @@ Pass `--highlights 0.6` to hold coloured highlights back from clipping; `0`
 
 ## Archiving photos to Nextcloud
 
-Optionally, the Pi pushes every capture under `~/Pictures/parr` to a folder on a
+Optionally, the Pi pushes every capture under `~/Pictures/pifilm` to a folder on a
 Nextcloud server, so there is an off-device archive. `scripts/nextcloud_sync.py`
 runs `rclone copy` over Nextcloud's WebDAV endpoint — the rsync-equivalent that a
 Nextcloud HTTP server actually speaks (plain `rsync` cannot). Its behaviour is
@@ -220,12 +223,12 @@ deliberate:
   obscured with `rclone obscure` (plaintext on stdin), and passed to rclone
   through `RCLONE_CONFIG_*` environment variables — never an argv, a process
   listing, or an rclone config file on disk.
-- **Incremental.** Everything under `~/Pictures/parr` is synced — the
-  `_original`/`_ungraded` JPEGs, the graded `_parr.jpg`, the `.dng` raws, and
+- **Incremental.** Everything under `~/Pictures/pifilm` is synced — the
+  `_original`/`_ungraded` JPEGs, the graded `_graded.jpg`, the `.dng` raws, and
   `captures.jsonl` — and rclone skips files already uploaded.
 
 **Scheduling is a systemd timer, not cron.** Two example units live in `deploy/`:
-`parr-nextcloud-sync.timer` fires the `parr-nextcloud-sync.service` oneshot a few
+`pifilm-nextcloud-sync.timer` fires the `pifilm-nextcloud-sync.service` oneshot a few
 minutes after boot and then every 15 minutes (`OnUnitActiveSec=15min`,
 `Persistent=true`). Nothing runs on a schedule until you install and enable them.
 
@@ -239,11 +242,11 @@ enable the timer:
 .venv/bin/python scripts/nextcloud_sync.py --env .env --apply
 
 # then schedule it (drops the .example suffix in the destination names)
-sudo cp deploy/parr-nextcloud-sync.service.example /etc/systemd/system/parr-nextcloud-sync.service
-sudo cp deploy/parr-nextcloud-sync.timer.example   /etc/systemd/system/parr-nextcloud-sync.timer
+sudo cp deploy/pifilm-nextcloud-sync.service.example /etc/systemd/system/pifilm-nextcloud-sync.service
+sudo cp deploy/pifilm-nextcloud-sync.timer.example   /etc/systemd/system/pifilm-nextcloud-sync.timer
 sudo systemctl daemon-reload
-sudo systemctl enable --now parr-nextcloud-sync.timer
-systemctl list-timers parr-nextcloud-sync.timer   # confirm NEXT / LAST
+sudo systemctl enable --now pifilm-nextcloud-sync.timer
+systemctl list-timers pifilm-nextcloud-sync.timer   # confirm NEXT / LAST
 ```
 
 Full steps — the app-password setup, every `.env` key, and troubleshooting — are
@@ -264,14 +267,14 @@ groups are excluded. See [the reference guide](docs/reference-sources.md) for
 additional sources, curation notes and the difference between visual research
 and training files. Use reference files you have permission to use. The project
 takes local image folders; it does not scrape Parr's website or assume that
-photos *of* Parr are photos *by* him. The optional `parr-fetch --category
+photos *of* Parr are photos *by* him. The optional `pifilm-fetch --category
 'Category:...'` command downloads an explicitly chosen Wikimedia Commons
 category, retaining licence metadata; that is a generic corpus utility, not a
 ready-made Parr reference set.
 
 Training fits a 33³ RGB lookup table via color-distribution transfer and smooth
 least squares. It splits by image, evaluates held-out data, and produces
-`parr.cube`, `params.json`, and a report with contact sheets, tone ramps, metrics
+`pifilm.cube`, `params.json`, and a report with contact sheets, tone ramps, metrics
 and quality gates. A LUT models global color and tone, not subjects,
 composition, focus or lighting geometry. The dated reports in `docs/` record
 what past runs produced; `todo.md` section 1 records what is needed for better
@@ -290,19 +293,19 @@ Raspberry Pi 3B with no machine-learning runtime installed.
 ### At capture time, on the Pi
 
 Every graded frame goes through three steps, in a fixed order, in
-`parr/pipeline.py`:
+`pifilm/pipeline.py`:
 
-1. **Normalisation** (`parr/normalize.py`). Per-frame white balance and an
+1. **Normalisation** (`pifilm/normalize.py`). Per-frame white balance and an
    exposure or levels correction, computed in linear light and applied to
    the luma channel only, so contrast changes do not inflate saturation. It
    compiles into three 256-entry tables plus one for tone, applied with
    OpenCV's `LUT` and two `cvtColor` calls: about 100 ms for 1080p on the Pi.
    The same code, in floating point, prepared every training image, so the LUT
    sees the input distribution it was fitted on.
-2. **The 3D LUT** (`parr/lut.py`). Trilinear interpolation over the 35,937
+2. **The 3D LUT** (`pifilm/lut.py`). Trilinear interpolation over the 35,937
    nodes, executed by Pillow's `ImageFilter.Color3DLUT` in C with 16-bit fixed
    point. A NumPy reference implementation exists for tests and the trainer.
-3. **Grain** (`parr/grain.py`). Gaussian noise on luminance only, blurred by
+3. **Grain** (`pifilm/grain.py`). Gaussian noise on luminance only, blurred by
    `blur_sigma` so it clumps like film rather than looking like sensor noise,
    scaled by `4Y(1 − Y)` so it vanishes in deep shadow and blown highlights.
    The seed is recorded per capture, so any graded file can be regenerated
@@ -310,7 +313,7 @@ Every graded frame goes through three steps, in a fixed order, in
 
 ### At training time, on the Mac
 
-`parr-train` (`parr/train/`) turns two folders of images into that LUT:
+`pifilm-train` (`pifilm/train/`) turns two folders of images into that LUT:
 
 1. **Corpus building** (`dataset.py`). Each corpus is split **by image**
    before any pixel is sampled, 20 % held out. Every image is oriented from
@@ -365,7 +368,7 @@ The full procedure, from an empty `data/` folder to a verified deployment, is
 | Pillow | runtime and trainer | Image I/O, EXIF orientation, ICC conversion (`ImageCms`), the `Color3DLUT` filter, `.cube` round-trips, contact sheets |
 | OpenCV (`cv2`) | runtime and trainer | Colour-space conversions, the 256-entry `LUT` tables, Gaussian blur for grain, resizing, and V4L2 camera capture on the Pi |
 | SciPy | trainer only | Sparse matrices, the conjugate-gradient solver, isotonic regression |
-| requests, tqdm | `parr-fetch` only | Wikimedia Commons downloads with licence checks |
+| requests, tqdm | `pifilm-fetch` only | Wikimedia Commons downloads with licence checks |
 | smbus2, gpiozero | Pi only, `--ups x728` | Reading the UPS fuel gauge over I2C and the power-loss pin |
 | Paramiko | Mac only, deploy script | SSH to the Pi with a reject-unknown-hosts policy |
 | pytest, ruff, build | development | Tests, lint, wheel build |
@@ -381,7 +384,7 @@ at runtime and no data leaves the machine.
 |---|---|---|
 | `pip install -e .` | NumPy, Pillow | The Pi, which gets OpenCV from apt |
 | `.[opencv]` | + `opencv-python` | Any non-Pi machine that runs the pipeline |
-| `.[train]` | + SciPy, requests, tqdm, `opencv-python` | The Mac, for `parr-train` and `parr-fetch` |
+| `.[train]` | + SciPy, requests, tqdm, `opencv-python` | The Mac, for `pifilm-train` and `pifilm-fetch` |
 | `.[deploy]` | + Paramiko | The Mac, for `scripts/deploy_remote.py` |
 | `.[dev]` | + pytest, ruff, build, `opencv-python` | Anyone running the tests |
 
@@ -389,7 +392,7 @@ On the Pi, `python3-opencv`, `python3-numpy` and `python3-pil` come from apt
 and the venv is created with `--system-site-packages`, because the apt OpenCV
 is built with GTK for the two-screen mode and the pip wheel is not; `smbus2`
 and `gpiozero` are preinstalled on Raspberry Pi OS. OpenCV is imported through
-one guard, `parr/_cv2.py`, which explains the right fix when it is missing.
+one guard, `pifilm/_cv2.py`, which explains the right fix when it is missing.
 
 ### What a LUT cannot do
 

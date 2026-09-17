@@ -13,7 +13,7 @@ M5StickS3 with M5Unified.
 | Machine | Runs | Why here |
 |---|---|---|
 | Mac | Development, tests, training, firmware build and flash, remote administration of the Pi | Training needs SciPy and a fast CPU. The PlatformIO toolchain lives here. There is one `.env` file, and it lives here. |
-| Raspberry Pi 3B | `parr-capture` as a systemd service: camera, grading, storage, the HTTP API, and its own Wi-Fi hotspot | The camera is plugged into it. It must boot unattended on battery. Its OpenCV comes from apt because the pip wheel has no GUI support for two-screen mode. |
+| Raspberry Pi 3B | `pifilm-capture` as a systemd service: camera, grading, storage, the HTTP API, and its own Wi-Fi hotspot | The camera is plugged into it. It must boot unattended on battery. Its OpenCV comes from apt because the pip wheel has no GUI support for two-screen mode. |
 | M5StickS3 | Firmware: shutter button, status screen, last-photo thumbnail, battery badge | No compute of its own. It only talks to the Pi over the Pi's hotspot. Its Wi-Fi and token are baked in at build time. |
 
 In the field there is no home network. The Pi is the access point, the Stick is
@@ -27,15 +27,15 @@ Everything else is driven from here, including the Pi's install over Ethernet
 and the Stick's flash over USB.
 
 ```bash
-git clone <repo-url> martin-parr-project
-cd martin-parr-project
+git clone <repo-url> pi-film-reversal
+cd pi-film-reversal
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -e '.[train,dev,deploy]'
 brew install platformio          # or: pip install platformio
 ```
 
-The extras: `train` adds SciPy and requests for `parr-train`, `dev` adds
+The extras: `train` adds SciPy and requests for `pifilm-train`, `dev` adds
 pytest, ruff and build, `deploy` adds Paramiko for `scripts/deploy_remote.py`.
 
 Verify before going on:
@@ -60,10 +60,10 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(32))'   # a token value
 |---|---|---|
 | `PI_HOST`, `PI_USER`, `PI_PROJECT_DIR`, `PI_SSH_PASSWORD` | `scripts/deploy_remote.py` on the Mac | The Pi's hostname (`parr.local` over Ethernet), account, and checkout path |
 | `WIFI_SSID`, `WIFI_PASSWORD` | `scripts/pi_hotspot.py` on the Pi (creates the hotspot) and the firmware build (joins it) | Each other, by construction. WPA2 needs 8 to 63 printable ASCII characters. |
-| `PARR_REMOTE_URL` | Firmware build (the address the Stick calls) and `pi_hotspot.py` (the hotspot's own address) | A plain IPv4 host, `http://10.42.0.1:8765` |
-| `PARR_LISTEN` | `deploy_remote.py`; mirrors the unit's `--remote-listen` | `0.0.0.0:8765` |
-| `PARR_REMOTE_TOKEN` | Firmware build, and the Pi's `/etc/parr-capture.env` | Identical on both sides, or every request gets 401 |
-| `PI_ARTIFACT_DIR` | `deploy_remote.py` inspection; mirrors the unit's `--artifacts` | A directory on the Pi holding `params.json` and `parr.cube` |
+| `PIFILM_REMOTE_URL` | Firmware build (the address the Stick calls) and `pi_hotspot.py` (the hotspot's own address) | A plain IPv4 host, `http://10.42.0.1:8765` |
+| `PIFILM_LISTEN` | `deploy_remote.py`; mirrors the unit's `--remote-listen` | `0.0.0.0:8765` |
+| `PIFILM_REMOTE_TOKEN` | Firmware build, and the Pi's `/etc/pifilm-capture.env` | Identical on both sides, or every request gets 401 |
+| `PI_ARTIFACT_DIR` | `deploy_remote.py` inspection; mirrors the unit's `--artifacts` | A directory on the Pi holding `params.json` and `pifilm.cube` |
 
 Why one file: the hotspot the Pi creates, the network the Stick joins, the
 address the Stick calls, and the address the Pi owns must all agree. They do
@@ -92,7 +92,7 @@ sudo apt install -y git python3-venv python3-opencv python3-numpy python3-pil
 Plug the Pi into your router or straight into the Mac. Then:
 
 ```sh
-sudo raspi-config nonint do_hostname parr
+sudo raspi-config nonint do_hostname pifilm
 nmcli -t -f NAME,TYPE connection show | grep ethernet      # netplan-eth0 on Trixie
 sudo nmcli connection modify netplan-eth0 ipv4.method auto ipv4.link-local enabled
 sudo raspi-config nonint do_wifi_country DE                # your country code
@@ -111,14 +111,14 @@ without this setting the wired port would have no IPv4 address at all.
 
 ```sh
 mkdir -p ~/repos && cd ~/repos
-git clone <repo-url> martin-parr-project
+git clone <repo-url> pi-film-reversal
 ```
 
 From the Mac, copy the completed `.env`:
 
 ```sh
-scp .env george@parr.local:repos/martin-parr-project/.env
-ssh george@parr.local chmod 600 repos/martin-parr-project/.env
+scp .env george@parr.local:repos/pi-film-reversal/.env
+ssh george@parr.local chmod 600 repos/pi-film-reversal/.env
 ```
 
 ### 3.4 Hotspot
@@ -126,10 +126,10 @@ ssh george@parr.local chmod 600 repos/martin-parr-project/.env
 On the Pi, over the Ethernet session:
 
 ```sh
-cd ~/repos/martin-parr-project
+cd ~/repos/pi-film-reversal
 .venv/bin/python scripts/pi_hotspot.py --env .env          # dry run, passphrase redacted
 sudo .venv/bin/python scripts/pi_hotspot.py --env .env --apply
-nmcli connection show --active                              # parr-ap on wlan0
+nmcli connection show --active                              # pifilm-ap on wlan0
 nmcli -t -f NAME,TYPE connection show | grep wireless       # find the home profile
 sudo nmcli connection modify netplan-wlan0-<SSID> connection.autoconnect no
 ```
@@ -152,11 +152,11 @@ and the Stick is 2.4 GHz only, which the Pi 3B radio provides.
 ### 4.1 Install the package
 
 ```sh
-cd ~/repos/martin-parr-project
+cd ~/repos/pi-film-reversal
 python3 -m venv --system-site-packages .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -e .
-.venv/bin/parr-capture --fake --no-preview                  # smoke test; Q to quit
+.venv/bin/pifilm-capture --fake --no-preview                  # smoke test; Q to quit
 ```
 
 `--system-site-packages` is deliberate: it lets the venv use the apt OpenCV,
@@ -173,7 +173,7 @@ On Picamera2, each capture saves three files: `_original.jpg` (the ISP's own
 rendering), `<stem>.dng` (a raw sidecar from the same capture request, on by
 default; `--no-dng` disables it and saves storage — about 28 MB per shot
 otherwise, and only omits the `.dng`; the original still stays `_original.jpg`),
-and `_parr.jpg` (the graded output). `captures.jsonl` gains
+and `_graded.jpg` (the graded output). `captures.jsonl` gains
 `camera_metadata` (a filtered subset of the request's metadata, such as
 `ExposureTime`, `AnalogueGain`, `Lux`, `LensPosition`) and `dng` (the sidecar's
 filename) when present. Autofocus defaults to continuous
@@ -186,14 +186,14 @@ controlled, reference-matching shoots.
 
 The service loads one artifact directory. Two choices:
 
-- `parr/data` inside the checkout. The bundled, untrained starter preset. It
+- `pifilm/data` inside the checkout. The bundled, untrained starter preset. It
   exists in every clone and is the default in `.env.example` and the unit.
 - A trained artifact. Copy its directory, containing `params.json` and
-  `parr.cube`, from the Mac. Artifacts are gitignored, so they never arrive by
+  `pifilm.cube`, from the Mac. Artifacts are gitignored, so they never arrive by
   `git pull`:
 
   ```sh
-  rsync -av artifacts/<name>/ george@parr.local:repos/martin-parr-project/artifacts/<name>/
+  rsync -av artifacts/<name>/ george@parr.local:repos/pi-film-reversal/artifacts/<name>/
   ```
 
 Whichever you choose, use the same absolute path for `PI_ARTIFACT_DIR` in
@@ -206,29 +206,29 @@ always check which one was in use.
 The service must not have the token on its command line, so it reads it from a
 root-only environment file. The key must be spelled exactly, with no `export`,
 quotes or Windows line endings; a misspelling puts the service in a restart
-loop with `error: --remote-listen requires PARR_REMOTE_TOKEN`.
+loop with `error: --remote-listen requires PIFILM_REMOTE_TOKEN`.
 
 ```sh
-sudo install -m 600 /dev/null /etc/parr-capture.env
-sudoedit /etc/parr-capture.env          # one line: PARR_REMOTE_TOKEN=<same value as .env>
-sudo sed -E 's/=.*/=<redacted>/' /etc/parr-capture.env | cat -A   # check the shape
+sudo install -m 600 /dev/null /etc/pifilm-capture.env
+sudoedit /etc/pifilm-capture.env          # one line: PIFILM_REMOTE_TOKEN=<same value as .env>
+sudo sed -E 's/=.*/=<redacted>/' /etc/pifilm-capture.env | cat -A   # check the shape
 ```
 
 ### 4.4 Install and start the service
 
-Open `deploy/parr-capture.service.example` and check `User`,
+Open `deploy/pifilm-capture.service.example` and check `User`,
 `WorkingDirectory`, the venv path and `--artifacts` match your Pi. Then:
 
 ```sh
-sudo install -m 644 deploy/parr-capture.service.example /etc/systemd/system/parr-capture.service
+sudo install -m 644 deploy/pifilm-capture.service.example /etc/systemd/system/pifilm-capture.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now parr-capture.service
-sleep 25 && systemctl status parr-capture.service --no-pager
-sudo ss -ltnp | grep 8765                                   # 0.0.0.0:8765 by parr-capture
+sudo systemctl enable --now pifilm-capture.service
+sleep 25 && systemctl status pifilm-capture.service --no-pager
+sudo ss -ltnp | grep 8765                                   # 0.0.0.0:8765 by pifilm-capture
 curl -s -o /dev/null -w '%{http_code}\n' http://10.42.0.1:8765/v1/status   # 401 without token
 ```
 
-The unit runs `parr-capture --no-preview --remote-listen 0.0.0.0:8765
+The unit runs `pifilm-capture --no-preview --remote-listen 0.0.0.0:8765
 --artifacts <dir> --ups x728`. `--no-preview` because there is no screen;
 `0.0.0.0` because the hotspot address may not exist yet at the moment the
 service starts, and binding to all interfaces avoids that race; `--ups x728`
@@ -249,11 +249,11 @@ through `sudo -n`, which needs a rule. Two short lines, because a long rule
 that soft-wraps on paste becomes a sudoers syntax error:
 
 ```sh
-sudo tee /etc/sudoers.d/parr-capture >/dev/null <<'EOF'
-george ALL=(root) NOPASSWD: /usr/bin/systemctl start parr-capture.service
-george ALL=(root) NOPASSWD: /usr/bin/systemctl stop parr-capture.service
+sudo tee /etc/sudoers.d/pifilm-capture >/dev/null <<'EOF'
+george ALL=(root) NOPASSWD: /usr/bin/systemctl start pifilm-capture.service
+george ALL=(root) NOPASSWD: /usr/bin/systemctl stop pifilm-capture.service
 EOF
-sudo chmod 440 /etc/sudoers.d/parr-capture
+sudo chmod 440 /etc/sudoers.d/pifilm-capture
 sudo visudo -c
 ```
 
@@ -266,17 +266,17 @@ sudo reboot
 About a minute later, from the Mac:
 
 ```sh
-ssh george@parr.local 'nmcli -t -f NAME,DEVICE connection show --active; systemctl is-active parr-capture.service'
+ssh george@parr.local 'nmcli -t -f NAME,DEVICE connection show --active; systemctl is-active pifilm-capture.service'
 ```
 
-You want `parr-ap:wlan0` and `active`. Everything from here on assumes the Pi
+You want `pifilm-ap:wlan0` and `active`. Everything from here on assumes the Pi
 comes back on its own after a power cycle, because in the field that is the
 only way it will ever start.
 
 ### 4.7 UPS (optional)
 
 For a battery-powered handheld, fit the Geekworm X728 UPS shield. `--ups
-x728` on the `parr-capture` service (§4.4) is the only project-side switch;
+x728` on the `pifilm-capture` service (§4.4) is the only project-side switch;
 reading the gauge needs the header I2C bus enabled, which is disabled by
 default ([docs/x728-ups.md](x728-ups.md) section 4). Geekworm's installer
 provides the power-button service, which is unrelated to reading the gauge.
@@ -289,7 +289,7 @@ as `Pi 77%`, `Pi 77%+` on external power, and `Pi --%` when unknown.
 
 ### 4.8 Nextcloud photo sync (optional)
 
-To keep an off-device archive of every capture, push `~/Pictures/parr` to a
+To keep an off-device archive of every capture, push `~/Pictures/pifilm` to a
 Nextcloud folder over WebDAV. It runs from the Pi only when the wired LAN is
 up, copies (never deletes) so an SD-card cleanup cannot erase the archive, and
 keeps the Nextcloud password out of every command line. Fill the `NEXTCLOUD_*`
@@ -319,7 +319,7 @@ that proves the thumbnail came from the graded file are in
 [the firmware README](../firmware/sticks3/README.md).
 
 Rebuild and reflash after any change to `WIFI_SSID`, `WIFI_PASSWORD`,
-`PARR_REMOTE_URL` or `PARR_REMOTE_TOKEN`. Build outputs contain those values;
+`PIFILM_REMOTE_URL` or `PIFILM_REMOTE_TOKEN`. Build outputs contain those values;
 keep them off shared machines.
 
 ## 6. Training a look (optional)
@@ -331,7 +331,7 @@ report explained gate by gate, is [the training guide](training.md).
 
 ### 6.1 What training does and does not do
 
-`parr-train` fits a 33³ colour lookup table so that the colour distribution of
+`pifilm-train` fits a 33³ colour lookup table so that the colour distribution of
 your camera's frames moves toward the colour distribution of a folder of
 reference photographs. It learns global colour and tone. It cannot learn flash
 lighting, composition, or subjects, and it cannot add colour to a scene that
@@ -345,14 +345,14 @@ Both folders are gitignored. Nothing in them is ever committed.
 
 | Folder | Contents | Minimum | Notes |
 |---|---|---|---|
-| `data/source/` | Ungraded frames from the Innomaker camera | 30 images, 50+ better | Use the `*_ungraded.jpg` or `*_original.jpg` files from `~/Pictures/parr/` on the Pi, across many scenes and lighting conditions. Not web photos. |
+| `data/source/` | Ungraded frames from the Innomaker camera | 30 images, 50+ better | Use the `*_ungraded.jpg` or `*_original.jpg` files from `~/Pictures/pifilm/` on the Pi, across many scenes and lighting conditions. Not web photos. |
 | `data/references/` | Finished reference photographs in the target look | 200 images | One coherent period and lighting style. Only files you have permission to use. See [reference sources](reference-sources.md). |
 
 Pull camera frames from the Pi with:
 
 ```sh
 rsync -av --include='*/' --include='*_ungraded.jpg' --include='*_original.jpg' --exclude='*' \
-  george@parr.local:Pictures/parr/ data/source-raw/
+  george@parr.local:Pictures/pifilm/ data/source-raw/
 ```
 
 then select and copy the frames you want into `data/source/`.
@@ -360,10 +360,10 @@ then select and copy the frames you want into `data/source/`.
 ### 6.3 Train, inspect, test
 
 ```bash
-.venv/bin/parr-train --source data/source --target data/references --out artifacts/parr-v1
-cat artifacts/parr-v1/report/summary.txt
-open artifacts/parr-v1/report/contact_sheet.png
-.venv/bin/parr-process /path/to/test-frames /path/to/results --artifacts artifacts/parr-v1
+.venv/bin/pifilm-train --source data/source --target data/references --out artifacts/pifilm-v1
+cat artifacts/pifilm-v1/report/summary.txt
+open artifacts/pifilm-v1/report/contact_sheet.png
+.venv/bin/pifilm-process /path/to/test-frames /path/to/results --artifacts artifacts/pifilm-v1
 ```
 
 Exit codes: 0 all gates passed; 1 the corpus or arguments were unusable; 3 an
@@ -378,10 +378,10 @@ runs produced and why two of them were rejected.
 ### 6.4 Deploy a trained look to the Pi
 
 ```sh
-rsync -av artifacts/parr-v1/ george@parr.local:repos/martin-parr-project/artifacts/parr-v1/
+rsync -av artifacts/pifilm-v1/ george@parr.local:repos/pi-film-reversal/artifacts/pifilm-v1/
 ```
 
-On the Pi, set `--artifacts` in `/etc/systemd/system/parr-capture.service` to
+On the Pi, set `--artifacts` in `/etc/systemd/system/pifilm-capture.service` to
 that directory, `daemon-reload`, restart, and take a capture. Its record in
 `captures.jsonl` must show the new `lut_sha1`. Update `PI_ARTIFACT_DIR` in
 `.env` to match.
@@ -390,28 +390,28 @@ that directory, `daemon-reload`, restart, and take a capture. Its record in
 
 - **Power on.** Hotspot up in 10 to 20 s, service answering in about 30 s, Stick
   READY shortly after. The Stick retries on its own.
-- **Pull photos.** Plug in the cable: `rsync -av george@parr.local:Pictures/parr/ ~/Pictures/parr-pi/`
+- **Pull photos.** Plug in the cable: `rsync -av george@parr.local:Pictures/pifilm/ ~/Pictures/pifilm-pi/`
 - **Inspect or restart remotely.** `.venv/bin/python scripts/deploy_remote.py --env .env`
   inspects; add `--restart` for the guarded restart (needs 4.5).
-- **Logs.** On the Pi: `journalctl -u parr-capture.service -n 100`. On the Stick:
+- **Logs.** On the Pi: `journalctl -u pifilm-capture.service -n 100`. On the Stick:
   the serial monitor.
-- **Change the token or passphrase.** Edit `.env`; update `/etc/parr-capture.env`
+- **Change the token or passphrase.** Edit `.env`; update `/etc/pifilm-capture.env`
   and restart the service (token), or re-run `pi_hotspot.py --apply` over
   Ethernet (passphrase); rebuild and reflash the Stick.
-- **Back on home Wi-Fi temporarily.** Over Ethernet: `sudo nmcli connection down parr-ap`
+- **Back on home Wi-Fi temporarily.** Over Ethernet: `sudo nmcli connection down pifilm-ap`
   then `sudo nmcli connection up netplan-wlan0-<SSID>`; reverse to return.
-- **Stop.** `sudo systemctl stop parr-capture.service`.
+- **Stop.** `sudo systemctl stop pifilm-capture.service`.
 
 ## 8. The order, on one page
 
 1. Mac: clone, venv, `pip install -e '.[train,dev,deploy]'`, PlatformIO, tests pass.
 2. `.env`: copy from example, fill in, `chmod 600`. Generate the token here.
 3. Pi OS: flash Trixie, first boot on home Wi-Fi, update.
-4. Pi network: hostname `parr`, wired link-local, Wi-Fi country, reboot, confirm `ssh parr.local` over the cable.
+4. Pi network: hostname `pifilm`, wired link-local, Wi-Fi country, reboot, confirm `ssh parr.local` over the cable.
 5. Pi checkout: clone, copy `.env`.
 6. Pi app: venv with system packages, `pip install -e .`, `--fake` smoke test.
 7. Pi hotspot: dry run, `--apply`, disable the home profile.
-8. Pi look: `parr/data` or rsync a trained artifact; paths agree in `.env` and the unit.
+8. Pi look: `pifilm/data` or rsync a trained artifact; paths agree in `.env` and the unit.
 9. Pi service: token file, install unit, enable, check port 8765 and a 401 without token.
 10. Pi sudoers rule (optional), then reboot test: hotspot and service return unattended.
 11. Stick: validate `.env`, build, flash, watch the log, take a photo, verify it is graded.

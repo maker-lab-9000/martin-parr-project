@@ -10,8 +10,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from parr.experiments.partitions import load_partition
-from parr.experiments.regression import sha256, verify_snapshot
+from pifilm.experiments.partitions import load_partition
+from pifilm.experiments.regression import sha256, verify_snapshot
 
 SOURCE_IDS = ('120804 120813 120819 120829 120839 120916 120926 120931 120937 '
               '120943 123755 123807 123815 123825 123835').split()

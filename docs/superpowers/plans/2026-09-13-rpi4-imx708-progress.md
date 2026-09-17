@@ -28,9 +28,9 @@ Dependency review: 2026-09-13, following highlight-protection commits
 - Moved highlight-value selection into the first IMX708 training workflow;
   old-camera results do not select a new-camera default.
 - Preserved separate controls for normalisation, LUT strength and highlights.
-- Identified the scene-grouped CLI gap: `parr/experiments/train.py` accepts a
+- Identified the scene-grouped CLI gap: `pifilm/experiments/train.py` accepts a
   `FitConfig` through its Python API but its CLI only exposes `--neutral-cap`.
-  `parr-train` exposes highlights but partitions automatically by image.
+  `pifilm-train` exposes highlights but partitions automatically by image.
 - Added an explicit source/runtime parity requirement: pre-JPEG pixels and
   decoded saved-JPEG pixels are not identical inputs for exact replay.
 - Clarified that new normalisation requires a refit, but suitable originals
@@ -57,8 +57,8 @@ Dependency review: 2026-09-13, following highlight-protection commits
 
 ## Next implementation unit
 
-Prepare the Phase 1 task-by-task plan against `parr/capture/camera.py`,
-`parr/capture/app.py` and the existing fake-camera tests. Include how request
+Prepare the Phase 1 task-by-task plan against `pifilm/capture/camera.py`,
+`pifilm/capture/app.py` and the existing fake-camera tests. Include how request
 ownership can support Phase 3 without prematurely releasing saved-image data,
 and preserve the V4L2/FakeCamera paths and Stick thumbnail behaviour.
 Photo collection is not a blocker for writing or testing that software plan.
@@ -111,7 +111,7 @@ Hardware confirmed and Phase 1 accepted on the real board.
 (PR #9/#11), so it had the Picamera2 backend but not the `--ups` flag. The
 installed unit (from the UPS deployment) passes `--ups x728`, so the first deploy
 crash-looped with `unrecognized arguments: --ups x728`. Fixed by merging
-`origin/main` into the branch (one import conflict in `parr/capture/app.py`,
+`origin/main` into the branch (one import conflict in `pifilm/capture/app.py`,
 resolved to keep both the `--camera` and `--ups` wiring). Full suite 475 passed,
 ruff clean.
 
@@ -158,7 +158,7 @@ Tasks 1–4 on `plan/imx708-af-metadata-dng`.
   `tests/test_picamera.py` that drives the real `Picamera2Camera` (via the
   injected fake `picamera2`/`libcamera` modules and a fake capture request)
   through a real `CaptureSession`, asserting the day folder holds
-  `*_original.jpg`, `*.dng` and `*_parr.jpg`; that the last `captures.jsonl`
+  `*_original.jpg`, `*.dng` and `*_graded.jpg`; that the last `captures.jsonl`
   record carries `frame_source == "picamera2"`, `camera_metadata`, `dng` and the
   sensor fields; and that `fitted_jpeg` on the graded file returns a
   240 × 135 thumbnail. A second test drives `Picamera2Camera(save_dng=False)`

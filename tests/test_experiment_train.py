@@ -5,11 +5,11 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from parr.artifacts import Artifacts
-from parr.experiments.regression import sha256
-from parr.preset import write_starter
-from parr.train.dataset import SampleConfig
-from parr.train.fit import FitConfig
+from pifilm.artifacts import Artifacts
+from pifilm.experiments.regression import sha256
+from pifilm.preset import write_starter
+from pifilm.train.dataset import SampleConfig
+from pifilm.train.fit import FitConfig
 
 
 def training_inputs(tmp_path):
@@ -34,8 +34,8 @@ def training_inputs(tmp_path):
 def test_explicit_training_writes_a_loadable_artifact_with_honest_provenance(
     tmp_path, monkeypatch, relative_root
 ):
-    from parr.experiments import train as runner
-    from parr.experiments.train import train_candidate
+    from pifilm.experiments import train as runner
+    from pifilm.experiments.train import train_candidate
     pools = {}
     real_build, real_fit = runner.build_pool, runner.fit
 
@@ -71,8 +71,8 @@ def test_explicit_training_writes_a_loadable_artifact_with_honest_provenance(
 
 
 def test_training_rejects_regression_leakage_before_creating_output(tmp_path, monkeypatch):
-    from parr.experiments import train as runner
-    from parr.experiments.train import train_candidate
+    from pifilm.experiments import train as runner
+    from pifilm.experiments.train import train_candidate
     monkeypatch.setattr(
         runner, 'fit', lambda *args: pytest.fail('fit must not run on excluded data')
     )
@@ -85,7 +85,7 @@ def test_training_rejects_regression_leakage_before_creating_output(tmp_path, mo
 
 
 def test_training_never_overwrites_artifact_created_while_fitting(tmp_path, monkeypatch):
-    from parr.experiments import train as runner
+    from pifilm.experiments import train as runner
     root = training_inputs(tmp_path)
     out = tmp_path / 'trained'
     real_fit = runner.fit

@@ -4,7 +4,7 @@
 
 **Goal:** Show the Pi's X728 UPS battery level and external-power state on the StickS3, in a badge next to the Stick's own battery badge.
 
-**Architecture:** The Pi reads the X728 fuel gauge (I2C `0x36`) and power-loss pin (BCM 6) in a background poller inside `parr-capture`, and publishes the result as a `pi_battery` object in the existing `GET /v1/status` payload. The Stick already polls that endpoint twice a second; a small Arduino-free parser extracts the new fields and feeds a second `BatteryMonitor`, and the display draws a second badge in the bottom-left corner. Hardware access on the Pi is behind an injected interface so every decision is unit-tested with fakes.
+**Architecture:** The Pi reads the X728 fuel gauge (I2C `0x36`) and power-loss pin (BCM 6) in a background poller inside `pifilm-capture`, and publishes the result as a `pi_battery` object in the existing `GET /v1/status` payload. The Stick already polls that endpoint twice a second; a small Arduino-free parser extracts the new fields and feeds a second `BatteryMonitor`, and the display draws a second badge in the bottom-left corner. Hardware access on the Pi is behind an injected interface so every decision is unit-tested with fakes.
 
 **Tech Stack:** Python 3.11+, `smbus2` and `gpiozero` (both already on the Pi), pytest; C++17 with PlatformIO, Unity native tests, M5Unified.
 
@@ -24,7 +24,7 @@
 ### Task 1: Fuel gauge decoding and the X728 provider
 
 **Files:**
-- Create: `parr/capture/power.py`
+- Create: `pifilm/capture/power.py`
 - Test: `tests/test_power.py`
 
 **Interfaces:**
@@ -43,7 +43,7 @@
 
 import pytest
 
-from parr.capture.power import PowerError, PowerStatus, X728Ups, decode_word
+from pifilm.capture.power import PowerError, PowerStatus, X728Ups, decode_word
 
 
 class FakeBus:
@@ -95,12 +95,12 @@ def test_bus_errors_become_power_errors_with_the_i2c_remedy():
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `.venv/bin/pytest -q tests/test_power.py`
-Expected: `ModuleNotFoundError: No module named 'parr.capture.power'`
+Expected: `ModuleNotFoundError: No module named 'pifilm.capture.power'`
 
 - [ ] **Step 3: Write the minimal implementation**
 
 ```python
-# parr/capture/power.py
+# pifilm/capture/power.py
 """Battery and external-power state of the Pi's UPS, for the status endpoint.
 
 Only the Geekworm X728 is supported. Its fuel gauge is a MAX17040-class chip
@@ -162,13 +162,13 @@ class X728Ups:
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `.venv/bin/pytest -q tests/test_power.py && .venv/bin/ruff check parr tests`
+Run: `.venv/bin/pytest -q tests/test_power.py && .venv/bin/ruff check pifilm tests`
 Expected: `5 passed`, `All checks passed!`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add parr/capture/power.py tests/test_power.py
+git add pifilm/capture/power.py tests/test_power.py
 git commit -m "Decode the X728 fuel gauge and power-loss pin"
 ```
 
@@ -177,7 +177,7 @@ git commit -m "Decode the X728 fuel gauge and power-loss pin"
 ### Task 2: Background poller with a cached snapshot
 
 **Files:**
-- Modify: `parr/capture/power.py`
+- Modify: `pifilm/capture/power.py`
 - Test: `tests/test_power.py`
 
 **Interfaces:**
@@ -190,7 +190,7 @@ The HTTP handler must never block on I2C, so reads happen on a thread and the ha
 
 ```python
 # append to tests/test_power.py
-from parr.capture.power import PowerMonitor
+from pifilm.capture.power import PowerMonitor
 
 
 class ScriptedProvider:
@@ -273,7 +273,7 @@ Expected: `ImportError: cannot import name 'PowerMonitor'`
 - [ ] **Step 3: Write the minimal implementation**
 
 ```python
-# append to parr/capture/power.py
+# append to pifilm/capture/power.py
 import threading
 import time
 
@@ -332,7 +332,7 @@ class PowerMonitor:
     def start(self) -> None:
         if self._thread is not None:
             return
-        self._thread = threading.Thread(target=self._run, name="parr-power", daemon=True)
+        self._thread = threading.Thread(target=self._run, name="pifilm-power", daemon=True)
         self._thread.start()
 
     def close(self) -> None:
@@ -343,13 +343,13 @@ Move the `import threading` and `import time` lines to the top of the module wit
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `.venv/bin/pytest -q tests/test_power.py && .venv/bin/ruff check parr tests`
+Run: `.venv/bin/pytest -q tests/test_power.py && .venv/bin/ruff check pifilm tests`
 Expected: `10 passed`, `All checks passed!`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add parr/capture/power.py tests/test_power.py
+git add pifilm/capture/power.py tests/test_power.py
 git commit -m "Poll the UPS on a thread and serve a bounded-age snapshot"
 ```
 
@@ -358,7 +358,7 @@ git commit -m "Poll the UPS on a thread and serve a bounded-age snapshot"
 ### Task 3: `pi_battery` in the status payload
 
 **Files:**
-- Modify: `parr/capture/remote.py` (`RemoteCaptureServer.__init__` around line 49, `_status_payload` around line 199)
+- Modify: `pifilm/capture/remote.py` (`RemoteCaptureServer.__init__` around line 49, `_status_payload` around line 199)
 - Test: `tests/test_remote.py`
 
 **Interfaces:**
@@ -369,7 +369,7 @@ git commit -m "Poll the UPS on a thread and serve a bounded-age snapshot"
 
 ```python
 # append to tests/test_remote.py
-from parr.capture.power import PowerStatus
+from pifilm.capture.power import PowerStatus
 
 
 def test_status_reports_pi_battery_when_a_power_source_is_configured(tmp_path):
@@ -410,7 +410,7 @@ Expected: `TypeError: __init__() got an unexpected keyword argument 'power'` and
 
 - [ ] **Step 3: Write the minimal implementation**
 
-In `parr/capture/remote.py`, extend the constructor and payload:
+In `pifilm/capture/remote.py`, extend the constructor and payload:
 
 ```python
 from collections.abc import Callable
@@ -460,13 +460,13 @@ from .power import PowerStatus
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `.venv/bin/pytest -q tests/test_remote.py && .venv/bin/ruff check parr tests`
+Run: `.venv/bin/pytest -q tests/test_remote.py && .venv/bin/ruff check pifilm tests`
 Expected: all remote tests pass including the two new ones; ruff clean.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add parr/capture/remote.py tests/test_remote.py
+git add pifilm/capture/remote.py tests/test_remote.py
 git commit -m "Publish the Pi battery in the status payload"
 ```
 
@@ -475,9 +475,9 @@ git commit -m "Publish the Pi battery in the status payload"
 ### Task 4: `--ups x728` on the command line, wired into the service
 
 **Files:**
-- Modify: `parr/capture/power.py` (add `build_ups`)
-- Modify: `parr/capture/app.py` (argument parser around line 440; server construction at line 505; shutdown in the `finally` block)
-- Modify: `deploy/parr-capture.service.example` (`ExecStart`)
+- Modify: `pifilm/capture/power.py` (add `build_ups`)
+- Modify: `pifilm/capture/app.py` (argument parser around line 440; server construction at line 505; shutdown in the `finally` block)
+- Modify: `deploy/pifilm-capture.service.example` (`ExecStart`)
 - Modify: `.env.example` (comment only)
 - Test: `tests/test_power.py`
 
@@ -489,7 +489,7 @@ git commit -m "Publish the Pi battery in the status payload"
 
 ```python
 # append to tests/test_power.py
-from parr.capture.power import build_ups
+from pifilm.capture.power import build_ups
 
 
 def test_build_ups_none_returns_no_monitor():
@@ -535,7 +535,7 @@ Expected: `ImportError: cannot import name 'build_ups'`
 - [ ] **Step 3: Write the minimal implementation**
 
 ```python
-# append to parr/capture/power.py
+# append to pifilm/capture/power.py
 UPS_CHOICES = ("none", "x728")
 
 
@@ -570,7 +570,7 @@ def build_ups(name: str, *, open_bus=None, open_pin=None) -> PowerMonitor | None
     return PowerMonitor(X728Ups(bus, pld_is_high=open_pin(X728_PLD_PIN)))
 ```
 
-In `parr/capture/app.py`, add the flag next to `--remote-listen`:
+In `pifilm/capture/app.py`, add the flag next to `--remote-listen`:
 
 ```python
     parser.add_argument(
@@ -595,17 +595,17 @@ with `from .power import UPS_CHOICES, PowerError, build_ups` among the imports. 
 
 Pass it to the server: `RemoteCaptureServer(controller, remote_token, args.remote_listen, power=power.snapshot if power else None)`. In the `finally` block, before `remote.close()`, add `if power is not None: power.close()`.
 
-In `deploy/parr-capture.service.example`, append ` --ups x728` to `ExecStart` and add a comment line above it: `# --ups x728 reads the Geekworm X728 fuel gauge for the Stick's Pi-battery badge; drop it on a Pi without the shield.` In `.env.example`, add a comment under `PARR_LISTEN`: `# The service unit's --ups flag selects the UPS (none or x728); see docs/x728-ups.md.`
+In `deploy/pifilm-capture.service.example`, append ` --ups x728` to `ExecStart` and add a comment line above it: `# --ups x728 reads the Geekworm X728 fuel gauge for the Stick's Pi-battery badge; drop it on a Pi without the shield.` In `.env.example`, add a comment under `PIFILM_LISTEN`: `# The service unit's --ups flag selects the UPS (none or x728); see docs/x728-ups.md.`
 
 - [ ] **Step 4: Run the tests and the fake capture path to verify**
 
-Run: `.venv/bin/pytest -q -m 'not slow' && .venv/bin/ruff check . && .venv/bin/parr-capture --fake --no-preview --ups none --help >/dev/null && echo ok`
-Expected: full suite passes, ruff clean, `ok`. On a Mac `--ups x728` must fail fast with the I2C remedy: `.venv/bin/parr-capture --fake --no-preview --ups x728; echo "exit $?"` prints `error: cannot open I2C bus 1 ...` and `exit 2` (or `No module named 'smbus2'` if the lazy import fails first; either is a clean exit 2).
+Run: `.venv/bin/pytest -q -m 'not slow' && .venv/bin/ruff check . && .venv/bin/pifilm-capture --fake --no-preview --ups none --help >/dev/null && echo ok`
+Expected: full suite passes, ruff clean, `ok`. On a Mac `--ups x728` must fail fast with the I2C remedy: `.venv/bin/pifilm-capture --fake --no-preview --ups x728; echo "exit $?"` prints `error: cannot open I2C bus 1 ...` and `exit 2` (or `No module named 'smbus2'` if the lazy import fails first; either is a clean exit 2).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add parr/capture/power.py parr/capture/app.py deploy/parr-capture.service.example .env.example tests/test_power.py
+git add pifilm/capture/power.py pifilm/capture/app.py deploy/pifilm-capture.service.example .env.example tests/test_power.py
 git commit -m "Add --ups x728 to publish the Pi battery from the capture service"
 ```
 
@@ -938,11 +938,11 @@ git commit -m "Show the Pi's UPS battery in a second badge on the Stick"
 On the Pi, after `git pull` and `.venv/bin/python -m pip install -e .`:
 
 ```sh
-sudo sed -i 's#\(--artifacts [^ ]*\)#\1 --ups x728#' /etc/systemd/system/parr-capture.service
-grep ExecStart /etc/systemd/system/parr-capture.service
-sudo systemctl daemon-reload && sudo systemctl restart parr-capture.service
-sleep 25 && journalctl -u parr-capture.service -n 5 --no-pager
-curl -s -H "Authorization: Bearer $(sudo grep -oP '(?<=PARR_REMOTE_TOKEN=).*' /etc/parr-capture.env)" http://10.42.0.1:8765/v1/status; echo
+sudo sed -i 's#\(--artifacts [^ ]*\)#\1 --ups x728#' /etc/systemd/system/pifilm-capture.service
+grep ExecStart /etc/systemd/system/pifilm-capture.service
+sudo systemctl daemon-reload && sudo systemctl restart pifilm-capture.service
+sleep 25 && journalctl -u pifilm-capture.service -n 5 --no-pager
+curl -s -H "Authorization: Bearer $(sudo grep -oP '(?<=PIFILM_REMOTE_TOKEN=).*' /etc/pifilm-capture.env)" http://10.42.0.1:8765/v1/status; echo
 ```
 
 Expected: the journal shows `Reading the x728 UPS every 10 s.` and the status JSON contains `"pi_battery":{"percent":..,"voltage_mv":..,"external_power":true}`.
@@ -963,7 +963,7 @@ git commit -m "Document the UPS battery badge and the X728 deployment"
 ## Out of scope, noted for later
 
 - Recording `pi_battery` in each `captures.jsonl` record, for battery-per-shot analysis.
-- Moving the low-battery shutdown decision from Geekworm's sample script into `parr-capture`, so there is one owner of the gauge and the Stick can show "Pi shutting down".
+- Moving the low-battery shutdown decision from Geekworm's sample script into `pifilm-capture`, so there is one owner of the gauge and the Stick can show "Pi shutting down".
 - A `POST /v1/system/shutdown` triggered from the Stick, which would pulse BCM 26 through `xSoft.sh`.
 
 ## Self-review

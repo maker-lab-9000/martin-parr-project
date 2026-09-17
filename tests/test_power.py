@@ -2,7 +2,7 @@
 
 import pytest
 
-from parr.capture.power import (
+from pifilm.capture.power import (
     PowerError,
     PowerMonitor,
     PowerStatus,
@@ -243,7 +243,7 @@ def test_build_ups_rejects_unknown_names():
         build_ups("apc")
 
 
-# --- parr-battery CLI -----------------------------------------------------
+# --- pifilm-battery CLI -----------------------------------------------------
 
 
 def _battery_build(words=None, pld_high=False):

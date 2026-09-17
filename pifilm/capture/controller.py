@@ -55,7 +55,7 @@ class CaptureController:
         self._closed = False
         self._work: queue.Queue[str | None] = queue.Queue()
         self._worker = threading.Thread(
-            target=self._run, name="parr-capture-worker", daemon=True,
+            target=self._run, name="pifilm-capture-worker", daemon=True,
         )
         self._worker.start()
 

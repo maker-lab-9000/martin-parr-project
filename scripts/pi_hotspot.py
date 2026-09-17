@@ -2,7 +2,7 @@
 
 Run this ON THE PI. It reads the same ``.env`` the firmware build uses, so
 ``WIFI_SSID`` / ``WIFI_PASSWORD`` become the hotspot credentials and the host
-part of ``PARR_REMOTE_URL`` becomes the hotspot address. One file, both sides,
+part of ``PIFILM_REMOTE_URL`` becomes the hotspot address. One file, both sides,
 no chance of the Stick dialling an address the Pi does not own.
 
 The connection is written as a NetworkManager keyfile with mode 0600 rather
@@ -35,8 +35,8 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from firmware.sticks3.scripts.generate_config import parse_env_file
 
-CONNECTION_ID = "parr-ap"
-DEFAULT_KEYFILE = Path("/etc/NetworkManager/system-connections/parr-ap.nmconnection")
+CONNECTION_ID = "pifilm-ap"
+DEFAULT_KEYFILE = Path("/etc/NetworkManager/system-connections/pifilm-ap.nmconnection")
 _UUID_NAMESPACE = uuid.UUID("6f1c2b3e-7a4d-4c1e-9b8a-2d5f0e7c1a90")
 _PSK_LINE = re.compile(r"^psk=.*$", re.MULTILINE)
 
@@ -64,13 +64,13 @@ def _psk(values: Mapping[str, str]) -> str:
 
 def _ap_address(values: Mapping[str, str]) -> str:
     """The hotspot owns exactly the IPv4 address the firmware will call."""
-    url = _required(values, "PARR_REMOTE_URL")
+    url = _required(values, "PIFILM_REMOTE_URL")
     host = urlsplit(url).hostname
     try:
         address = ipaddress.IPv4Address(host or "")
     except ipaddress.AddressValueError as exc:
         raise ValueError(
-            f"PARR_REMOTE_URL must use a plain IPv4 host such as http://10.42.0.1:8765, "
+            f"PIFILM_REMOTE_URL must use a plain IPv4 host such as http://10.42.0.1:8765, "
             f"got {url!r}"
         ) from exc
     return f"{address}/24"

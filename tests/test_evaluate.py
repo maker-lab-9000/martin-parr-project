@@ -1,10 +1,10 @@
 import numpy as np
 import pytest
 
-from parr.color import lch_to_oklab, srgb_to_oklab
-from parr.lut import LUT3D
-from parr.train.dataset import PixelPool
-from parr.train.evaluate import (
+from pifilm.color import lch_to_oklab, srgb_to_oklab
+from pifilm.lut import LUT3D
+from pifilm.train.dataset import PixelPool
+from pifilm.train.evaluate import (
     Evaluator,
     channels_are_monotone,
     check_gates,
@@ -147,7 +147,7 @@ def test_hue_bin_shifts_report_darkening():
 
 
 def test_hue_hist_residual_is_zero_when_reweighting_is_exact():
-    from parr.train.transport import hue_weights
+    from pifilm.train.transport import hue_weights
 
     rng = np.random.default_rng(8)
     src_lab = lch_to_oklab(

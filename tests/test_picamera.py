@@ -8,15 +8,15 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from parr.artifacts import Artifacts, write_artifact
-from parr.capture.app import CaptureSession
-from parr.capture.camera import CameraError, Frame
-from parr.capture.picamera import DEFAULT_TUNING_FILE, Picamera2Camera
-from parr.capture.thumbnail import fitted_jpeg
-from parr.grain import GrainParams
-from parr.lut import LUT3D
-from parr.normalize import NormalizeParams
-from parr.pipeline import Pipeline
+from pifilm.artifacts import Artifacts, write_artifact
+from pifilm.capture.app import CaptureSession
+from pifilm.capture.camera import CameraError, Frame
+from pifilm.capture.picamera import DEFAULT_TUNING_FILE, Picamera2Camera
+from pifilm.capture.thumbnail import fitted_jpeg
+from pifilm.grain import GrainParams
+from pifilm.lut import LUT3D
+from pifilm.normalize import NormalizeParams
+from pifilm.pipeline import Pipeline
 
 NATIVE_SIZE = (4608, 2592)
 RAW_FORMAT = "SBGGR10_CSI2P"
@@ -860,15 +860,15 @@ def test_native_capture_session_saves_full_size_outputs_metadata_and_thumbnail(
 
     # Picamera2 has no camera JPEG, but supplies a DNG by default, so the saved
     # original is named "_original.jpg" (not "_ungraded.jpg") and a DNG sidecar
-    # is written alongside it; see the module docstring in parr/capture/app.py.
+    # is written alongside it; see the module docstring in pifilm/capture/app.py.
     assert result.original.name.endswith("_original.jpg")
-    with Image.open(result.original) as ungraded, Image.open(result.parr) as graded:
+    with Image.open(result.original) as ungraded, Image.open(result.pifilm) as graded:
         assert ungraded.size == NATIVE_SIZE
         assert graded.size == NATIVE_SIZE
 
     day_dir = result.original.parent
     assert [p.name for p in day_dir.glob("*_original.jpg")] == [result.original.name]
-    assert [p.name for p in day_dir.glob("*_parr.jpg")] == [result.parr.name]
+    assert [p.name for p in day_dir.glob("*_graded.jpg")] == [result.pifilm.name]
     dng_names = [p.name for p in day_dir.glob("*.dng")]
     assert len(dng_names) == 1
 
@@ -887,7 +887,7 @@ def test_native_capture_session_saves_full_size_outputs_metadata_and_thumbnail(
     dng_path = day_dir / record["dng"]
     assert dng_path.read_bytes()[:4] == b"II*\x00"
 
-    with Image.open(io.BytesIO(fitted_jpeg(result.parr))) as thumbnail:
+    with Image.open(io.BytesIO(fitted_jpeg(result.pifilm))) as thumbnail:
         assert thumbnail.size == (240, 135)
 
 
@@ -898,7 +898,7 @@ def test_native_capture_session_omits_dng_when_backend_disables_it(
     to extract a DNG, but the frame is still the camera's own ISP rendering, so
     the original stays named ``_original.jpg``; only the DNG sidecar is omitted.
     See the "Output layout" section of the module docstring in
-    parr/capture/app.py.
+    pifilm/capture/app.py.
     """
     bgr = np.broadcast_to(
         np.array([[[25, 110, 220]]], dtype=np.uint8),
@@ -932,7 +932,7 @@ def test_native_capture_session_omits_dng_when_backend_disables_it(
     day_dir = result.original.parent
     assert not list(day_dir.glob("*.dng"))
     assert [p.name for p in day_dir.glob("*_original.jpg")] == [result.original.name]
-    assert [p.name for p in day_dir.glob("*_parr.jpg")] == [result.parr.name]
+    assert [p.name for p in day_dir.glob("*_graded.jpg")] == [result.pifilm.name]
 
     record_path, = (tmp_path / "captures").rglob("captures.jsonl")
     record = json.loads(record_path.read_text())

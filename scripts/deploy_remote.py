@@ -45,15 +45,15 @@ def deployment_config(values: Mapping[str, str]) -> DeploymentConfig:
         project_dir=_required(values, "PI_PROJECT_DIR"),
         ssh_password=_required(values, "PI_SSH_PASSWORD"),
         artifact_dir=_required(values, "PI_ARTIFACT_DIR"),
-        remote_token=_required(values, "PARR_REMOTE_TOKEN"),
-        listen=values.get("PARR_LISTEN") or DEFAULT_LISTEN,
+        remote_token=_required(values, "PIFILM_REMOTE_TOKEN"),
+        listen=values.get("PIFILM_LISTEN") or DEFAULT_LISTEN,
     )
 
 
 def build_capture_command(config: DeploymentConfig, *, show_captures: bool) -> str:
     """Build the command only after its artifact directory has been inspected."""
     parts = [
-        f"{config.project_dir}/.venv/bin/parr-capture",
+        f"{config.project_dir}/.venv/bin/pifilm-capture",
         "--no-preview",
     ]
     if show_captures:
@@ -98,11 +98,12 @@ def inspection_commands(config: DeploymentConfig) -> list[tuple[str, str]]:
         ("project", f"test -d {project}"),
         (
             "artifact",
-            f"test -d {artifact} && test -f {artifact}/params.json && test -f {artifact}/parr.cube",
+            f"test -d {artifact} && test -f {artifact}/params.json "
+            f"&& test -f {artifact}/pifilm.cube",
         ),
         (
             "service pid",
-            "systemctl show -p MainPID --value parr-capture.service 2>/dev/null || true",
+            "systemctl show -p MainPID --value pifilm-capture.service 2>/dev/null || true",
         ),
         ("capture process", "pgrep -af '[p]arr-capture' || true"),
         ("camera owners", "fuser -v /dev/video* 2>/dev/null || true"),
@@ -147,7 +148,7 @@ def _has_foreign_initial_owner(inspection: Mapping[str, str]) -> bool:
     camera_ids = _camera_owner_ids(camera_output)
     if capture_ids - allowed or camera_ids - allowed:
         return True
-    if capture_output and (not capture_ids or "parr-capture" not in capture_output):
+    if capture_output and (not capture_ids or "pifilm-capture" not in capture_output):
         return True
     return bool(camera_output and not camera_ids)
 
@@ -158,20 +159,20 @@ def restart_headless_service(client: Any, inspection: Mapping[str, str]) -> None
         raise RuntimeError("refusing restart: foreign capture or camera owner is active")
     # A known service-owned process may hold the camera initially. Stop it, then
     # recheck before starting a replacement so two processes cannot compete.
-    status, _output, error = _run(client, "sudo -n systemctl stop parr-capture.service")
+    status, _output, error = _run(client, "sudo -n systemctl stop pifilm-capture.service")
     if status:
         detail = error.strip() or "command failed"
-        raise RuntimeError(f"could not stop parr-capture.service: {detail}")
+        raise RuntimeError(f"could not stop pifilm-capture.service: {detail}")
     status, process_output, _error = _run(client, "pgrep -af '[p]arr-capture' || true")
     if status or process_output.strip():
         raise RuntimeError("refusing restart: a capture process remains after service stop")
     status, camera_output, _error = _run(client, "fuser -v /dev/video* 2>/dev/null || true")
     if status or camera_output.strip():
         raise RuntimeError("refusing restart: a process still owns a camera after service stop")
-    status, _output, error = _run(client, "sudo -n systemctl start parr-capture.service")
+    status, _output, error = _run(client, "sudo -n systemctl start pifilm-capture.service")
     if status:
         detail = error.strip() or "command failed"
-        raise RuntimeError(f"could not start parr-capture.service: {detail}")
+        raise RuntimeError(f"could not start pifilm-capture.service: {detail}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -191,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{label}: {output or 'none'}")
         if args.restart:
             restart_headless_service(client, inspection)
-            print("headless parr-capture service restarted")
+            print("headless pifilm-capture service restarted")
     finally:
         client.close()
     return 0

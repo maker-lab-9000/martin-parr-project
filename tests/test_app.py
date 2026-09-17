@@ -13,20 +13,20 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from parr.artifacts import Artifacts, write_artifact
-from parr.capture.app import (
+from pifilm.artifacts import Artifacts, write_artifact
+from pifilm.capture.app import (
     CaptureSession,
     _colour_gains,
     main,
     run_headless_loop,
     run_preview_loop,
 )
-from parr.capture.camera import CameraError, FakeCamera, Frame, StreamInfo, synthetic_frame
-from parr.grain import GrainParams
-from parr.imageio import load_rgb
-from parr.lut import LUT3D
-from parr.normalize import NormalizeParams
-from parr.pipeline import Pipeline
+from pifilm.capture.camera import CameraError, FakeCamera, Frame, StreamInfo, synthetic_frame
+from pifilm.grain import GrainParams
+from pifilm.imageio import load_rgb
+from pifilm.lut import LUT3D
+from pifilm.normalize import NormalizeParams
+from pifilm.pipeline import Pipeline
 
 
 def _jpeg_bytes(rgb):
@@ -50,16 +50,16 @@ def _session(tmp_path, pipeline, camera=None, now=None):
 
 def test_remote_listener_refuses_to_start_without_a_token(monkeypatch, capsys):
     """A listener without the shared secret would be an unauthenticated shutter button."""
-    monkeypatch.delenv("PARR_REMOTE_TOKEN", raising=False)
+    monkeypatch.delenv("PIFILM_REMOTE_TOKEN", raising=False)
 
     assert main(["--remote-listen", "127.0.0.1:8765"]) == 2
 
-    assert "PARR_REMOTE_TOKEN" in capsys.readouterr().err
+    assert "PIFILM_REMOTE_TOKEN" in capsys.readouterr().err
 
 
 def test_remote_listener_keeps_running_without_a_tty(monkeypatch, tmp_path):
     """The remote control path must not fall through to the terminal-only error."""
-    from parr.capture import app
+    from pifilm.capture import app
 
     listeners = []
 
@@ -79,7 +79,7 @@ def test_remote_listener_keeps_running_without_a_tty(monkeypatch, tmp_path):
         def close(self):
             self.closed = True
 
-    monkeypatch.setenv("PARR_REMOTE_TOKEN", "secret")
+    monkeypatch.setenv("PIFILM_REMOTE_TOKEN", "secret")
     monkeypatch.setattr(app, "RemoteCaptureServer", Listener)
     monkeypatch.setattr(app.Artifacts, "resolve", lambda _: object())
     monkeypatch.setattr(app, "Pipeline", lambda _: object())
@@ -93,7 +93,7 @@ def test_remote_listener_keeps_running_without_a_tty(monkeypatch, tmp_path):
 
 
 def test_ups_monitor_is_never_left_running_when_startup_fails(tmp_path, monkeypatch):
-    from parr.capture import app
+    from pifilm.capture import app
 
     class FakeMonitor:
         def __init__(self):
@@ -167,7 +167,7 @@ def test_log_line_carries_full_provenance(tmp_path, pipeline):
     session.capture()
     line = json.loads((tmp_path / "shots" / "2026-09-03" / "captures.jsonl").read_text().strip())
     assert set(line) >= {
-        "timestamp", "original", "parr", "frame_source", "wb_gains", "exposure_gain",
+        "timestamp", "original", "pifilm", "frame_source", "wb_gains", "exposure_gain",
         "clamped", "grain_seed", "lut_sha1", "params_version", "package_version",
         "width", "height", "fourcc", "fps", "pipeline_ms", "shutter_to_saved_ms",
     }
@@ -195,7 +195,7 @@ def test_recorded_seed_reproduces_the_graded_file(tmp_path, pipeline):
     assert np.array_equal(first, second), "the same seed must give the same pixels"
 
     original = np.asarray(Image.open(result.original).convert("RGB"))
-    saved = np.asarray(Image.open(result.parr).convert("RGB"))
+    saved = np.asarray(Image.open(result.pifilm).convert("RGB"))
     again, _ = pipeline.process(original, rng=np.random.default_rng(seed))
     diff = np.abs(again.astype(int) - saved.astype(int))
     assert diff.mean() < 3.0
@@ -221,7 +221,7 @@ def test_headless_loop_captures_on_space_and_quits_on_q(tmp_path, pipeline):
     keys = iter([None, " ", "x", " ", "q"])
     messages = []
     assert run_headless_loop(session, read_key=lambda: next(keys), out=messages.append) == 2
-    assert len(list((tmp_path / "shots").rglob("*_parr.jpg"))) == 2
+    assert len(list((tmp_path / "shots").rglob("*_graded.jpg"))) == 2
     assert any("Saved" in m for m in messages)
 
 
@@ -265,8 +265,8 @@ def test_capture_display_closes_owned_controller_when_window_initialization_fail
     """Returning before the display loop must not leave a worker owning the camera."""
     import cv2
 
-    from parr.capture import app
-    from parr.capture.controller import CaptureController as RealCaptureController
+    from pifilm.capture import app
+    from pifilm.capture.controller import CaptureController as RealCaptureController
 
     session = _session(tmp_path, pipeline)
     session.camera.close = Mock(wraps=session.camera.close)
@@ -377,7 +377,7 @@ def test_capture_display_changes_only_after_snapshot(
         read_key = None
     assert run_preview_loop(session, captures_only=True, read_key=read_key)
 
-    files = sorted((tmp_path / "shots").rglob("*_parr.jpg"), key=lambda p: p.stat().st_mtime_ns)
+    files = sorted((tmp_path / "shots").rglob("*_graded.jpg"), key=lambda p: p.stat().st_mtime_ns)
     assert len(files) == 2
     for displayed, saved in zip(capture_gui[2::2], files, strict=True):
         rgb, _ = load_rgb(saved)
@@ -392,7 +392,7 @@ def test_capture_display_polls_controller_and_shows_loading_before_result(
     """Calling ``session.capture`` on the GUI thread would prevent this repaint."""
     import cv2
 
-    from parr.capture.controller import CaptureController
+    from pifilm.capture.controller import CaptureController
 
     session = _session(tmp_path, pipeline)
     capture = session.capture
@@ -438,7 +438,7 @@ def test_external_capture_updates_pi_display(
 ):
     import cv2
 
-    from parr.capture.controller import CaptureController
+    from pifilm.capture.controller import CaptureController
 
     session = _session(tmp_path, pipeline)
     capture = session.capture
@@ -478,7 +478,7 @@ def test_external_capture_updates_pi_display(
             assert len(np.unique(capture_gui[-1][0], axis=0)) == 7
             finish_capture()
             return -1
-        saved = controller.status("remote-shot").result.parr
+        saved = controller.status("remote-shot").result.pifilm
         rgb, _ = load_rgb(saved)
         expected = cv2.resize(rgb, (640, 360), interpolation=cv2.INTER_AREA)[:, :, ::-1]
         assert np.array_equal(capture_gui[-1], expected)
@@ -526,7 +526,7 @@ def test_capture_display_keeps_last_photo_after_failed_capture(
     assert "dropped snapshot" in capsys.readouterr().out
     if failed_attempt == 2:
         assert np.array_equal(capture_gui[-1], capture_gui[2])
-    assert len(list((tmp_path / "shots").rglob("*_parr.jpg"))) == 1
+    assert len(list((tmp_path / "shots").rglob("*_graded.jpg"))) == 1
 
 
 def test_capture_display_preserves_portrait_aspect_ratio(
@@ -590,7 +590,7 @@ def test_fullscreen_capture_fits_display_resolution(
     assert len(np.unique(capture_gui[2][0], axis=0)) == 7
 
     left, top, width, height = image_rect
-    saved, = (tmp_path / "shots").rglob("*_parr.jpg")
+    saved, = (tmp_path / "shots").rglob("*_graded.jpg")
     rgb, _ = load_rgb(saved)
     expected = cv2.resize(rgb, (width, height), interpolation=cv2.INTER_AREA)[:, :, ::-1]
     actual = capture_gui[-1]
@@ -605,7 +605,7 @@ def test_resolution_change_redraws_full_resolution_photo_without_recapture(
 ):
     import cv2
 
-    from parr.capture.controller import CaptureController
+    from pifilm.capture.controller import CaptureController
 
     camera = FakeCamera([synthetic_frame(720, 1280)])
     camera.read = Mock(wraps=camera.read)
@@ -640,7 +640,7 @@ def test_resolution_change_redraws_full_resolution_photo_without_recapture(
         controller.close()
     assert camera.read.call_count == pipeline.process.call_count == 1
     assert len(capture_gui) == 4  # prompt, loading, photo, resized photo
-    saved, = (tmp_path / "shots").rglob("*_parr.jpg")
+    saved, = (tmp_path / "shots").rglob("*_graded.jpg")
     rgb, _ = load_rgb(saved)
     assert np.array_equal(capture_gui[-1], rgb[:, :, ::-1])
 
@@ -686,7 +686,7 @@ def test_gtk_geometry_includes_borders_outside_the_image(
 ):
     import cv2
 
-    from parr.capture.app import _window_size
+    from pifilm.capture.app import _window_size
 
     monkeypatch.setattr(cv2, "getWindowImageRect", lambda name: (0, 0, *image_size))
     monkeypatch.setattr(
@@ -756,7 +756,7 @@ def test_capture_display_gui_failure_cleans_up_and_allows_fallback(
     assert run_preview_loop(_session(tmp_path, pipeline), captures_only=True) is False
     assert cleanup.call_count == (0 if failure_at == "namedWindow" else 1)
     if failure_at == "saved_image":
-        assert len(list((tmp_path / "shots").rglob("*_parr.jpg"))) == 1
+        assert len(list((tmp_path / "shots").rglob("*_graded.jpg"))) == 1
 
 
 @pytest.mark.parametrize("no_preview", [False, True])
@@ -764,7 +764,7 @@ def test_capture_display_gui_failure_cleans_up_and_allows_fallback(
 def test_main_show_captures_selects_snapshot_mode(
     tmp_path, monkeypatch, no_preview, has_terminal,
 ):
-    from parr.capture import app
+    from pifilm.capture import app
 
     monkeypatch.setattr(app, "has_display", lambda: True)
     monkeypatch.setattr("sys.stdin.isatty", lambda: has_terminal)
@@ -787,7 +787,7 @@ def test_main_show_captures_selects_snapshot_mode(
 
 @pytest.mark.parametrize("display_available", [False, True])
 def test_main_show_captures_falls_back_to_terminal(tmp_path, monkeypatch, display_available):
-    from parr.capture import app
+    from pifilm.capture import app
 
     monkeypatch.setattr(app, "has_display", lambda: display_available)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
@@ -830,7 +830,7 @@ class _CameraDouble:
 @pytest.fixture
 def camera_cli(monkeypatch):
     """Run ``main`` through its real terminal loop without camera hardware."""
-    from parr.capture import app
+    from pifilm.capture import app
 
     monkeypatch.setattr(app.Artifacts, "resolve", lambda _: object())
     monkeypatch.setattr(app, "Pipeline", lambda _: object())
@@ -1188,10 +1188,10 @@ def test_colour_gains_parses_to_a_float_tuple(camera_cli, monkeypatch):
 def test_capture_writes_original_and_dng_and_records_metadata(tmp_path):
     import numpy as np
 
-    from parr.artifacts import Artifacts
-    from parr.capture.app import CaptureSession
-    from parr.capture.camera import Frame, StreamInfo
-    from parr.pipeline import Pipeline
+    from pifilm.artifacts import Artifacts
+    from pifilm.capture.app import CaptureSession
+    from pifilm.capture.camera import Frame, StreamInfo
+    from pifilm.pipeline import Pipeline
 
     class MetaCamera:
         stream_info = StreamInfo(4608, 2592, 14.35, "RGB888", False,
@@ -1208,7 +1208,7 @@ def test_capture_writes_original_and_dng_and_records_metadata(tmp_path):
     sess = CaptureSession(MetaCamera(), Pipeline(Artifacts.default()), tmp_path,
                           seed_rng=np.random.default_rng(0))
     result = sess.capture()
-    day = result.parr.parent
+    day = result.pifilm.parent
     assert result.original.name.endswith("_original.jpg")
     dng = day / (result.original.name.replace("_original.jpg", ".dng"))
     assert dng.read_bytes() == b"II*\x00fake-dng-bytes"
@@ -1220,10 +1220,10 @@ def test_capture_writes_original_and_dng_and_records_metadata(tmp_path):
 def test_capture_skips_dng_when_disabled(tmp_path):
     import numpy as np
 
-    from parr.artifacts import Artifacts
-    from parr.capture.app import CaptureSession
-    from parr.capture.camera import Frame, StreamInfo
-    from parr.pipeline import Pipeline
+    from pifilm.artifacts import Artifacts
+    from pifilm.capture.app import CaptureSession
+    from pifilm.capture.camera import Frame, StreamInfo
+    from pifilm.pipeline import Pipeline
 
     class C:
         stream_info = StreamInfo(8, 8, 0.0, "RGB888", False)
@@ -1234,7 +1234,7 @@ def test_capture_skips_dng_when_disabled(tmp_path):
     sess = CaptureSession(C(), Pipeline(Artifacts.default()), tmp_path,
                           seed_rng=np.random.default_rng(0), save_dng=False)
     result = sess.capture()
-    assert not list(result.parr.parent.glob("*.dng"))
+    assert not list(result.pifilm.parent.glob("*.dng"))
     assert "dng" not in result.record
     assert result.original.name.endswith("_original.jpg")
 
@@ -1242,10 +1242,10 @@ def test_capture_skips_dng_when_disabled(tmp_path):
 def test_v4l2_style_frame_without_metadata_is_unchanged(tmp_path):
     import numpy as np
 
-    from parr.artifacts import Artifacts
-    from parr.capture.app import CaptureSession
-    from parr.capture.camera import Frame, StreamInfo
-    from parr.pipeline import Pipeline
+    from pifilm.artifacts import Artifacts
+    from pifilm.capture.app import CaptureSession
+    from pifilm.capture.camera import Frame, StreamInfo
+    from pifilm.pipeline import Pipeline
 
     class Usb:
         stream_info = StreamInfo(1920, 1080, 30.0, "MJPG", True)

@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from parr import color
-from parr.normalize import (
+from pifilm import color
+from pifilm.normalize import (
     Gains,
     NormalizeParams,
     apply_gains_float,

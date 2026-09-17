@@ -3,7 +3,7 @@ import re
 import numpy as np
 import pytest
 
-from parr.lut import LUT3D, CubeError, read_cube, sha1_hex, write_cube
+from pifilm.lut import LUT3D, CubeError, read_cube, sha1_hex, write_cube
 
 
 def _smooth_test_lut(n=17):

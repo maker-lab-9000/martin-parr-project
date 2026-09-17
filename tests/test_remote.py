@@ -12,14 +12,14 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from parr.capture.controller import CaptureController
-from parr.capture.power import PowerStatus
-from parr.capture.remote import RemoteCaptureServer
+from pifilm.capture.controller import CaptureController
+from pifilm.capture.power import PowerStatus
+from pifilm.capture.remote import RemoteCaptureServer
 
 
 @dataclass
 class SavedCapture:
-    parr: object
+    pifilm: object
 
 
 class BlockingSession:

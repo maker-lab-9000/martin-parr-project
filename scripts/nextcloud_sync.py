@@ -1,7 +1,7 @@
 """Push captured photos from the Pi to a Nextcloud folder over WebDAV.
 
 Run this ON THE PI, driven by the same ``.env`` the other scripts read. It
-mirrors ``~/Pictures/parr`` into one Nextcloud folder with rclone's WebDAV
+mirrors ``~/Pictures/pifilm`` into one Nextcloud folder with rclone's WebDAV
 backend -- the closest thing to rsync that a Nextcloud HTTP endpoint speaks.
 ``rclone copy`` only ever adds or updates; it never deletes a remote file, so
 cleaning the SD card cannot erase the cloud archive.
@@ -36,7 +36,7 @@ from firmware.sticks3.scripts.generate_config import parse_env_file
 
 REMOTE_NAME = "nextcloud"
 DEFAULT_TARGET_DIR = "MartinParr"
-DEFAULT_SOURCE_DIR = "~/Pictures/parr"
+DEFAULT_SOURCE_DIR = "~/Pictures/pifilm"
 DEFAULT_IFACE = "eth0"
 DEFAULT_MIN_AGE = "30s"
 

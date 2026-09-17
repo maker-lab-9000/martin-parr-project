@@ -1,6 +1,6 @@
 # Nextcloud photo sync
 
-Push every capture under `~/Pictures/parr` to a folder on your Nextcloud over
+Push every capture under `~/Pictures/pifilm` to a folder on your Nextcloud over
 WebDAV, from the Pi, whenever it is on the wired home LAN. This is an optional
 off-device archive; it changes nothing about capture or grading.
 
@@ -21,8 +21,8 @@ Nextcloud folder. Design choices, each deliberate:
   obscured with `rclone obscure` (plaintext on stdin), and handed to rclone
   through `RCLONE_CONFIG_*` environment variables. It never appears in an argv,
   a process listing, or an rclone config file on disk.
-- **Whole folder, incrementally.** Everything under `~/Pictures/parr` is
-  synced — the `_original`/`_ungraded` JPEGs, the graded `_parr.jpg`, the `.dng`
+- **Whole folder, incrementally.** Everything under `~/Pictures/pifilm` is
+  synced — the `_original`/`_ungraded` JPEGs, the graded `_graded.jpg`, the `.dng`
   raws, and `captures.jsonl`. rclone skips files already uploaded, so repeated
   runs only transfer what is new. `--min-age 30s` avoids grabbing a file that a
   capture is still writing.
@@ -57,14 +57,14 @@ NEXTCLOUD_URL=http://192.168.178.241:8083/
 NEXTCLOUD_USER=george
 NEXTCLOUD_PASSWORD=the-app-password-from-above
 NEXTCLOUD_TARGET_DIR=MartinParr
-NEXTCLOUD_SOURCE_DIR=/home/george/Pictures/parr
+NEXTCLOUD_SOURCE_DIR=/home/george/Pictures/pifilm
 ```
 
 - `NEXTCLOUD_URL` is the base URL; the script appends
   `/remote.php/dav/files/<user>/` itself.
 - `NEXTCLOUD_TARGET_DIR` is the folder created on Nextcloud; the `YYYY-MM-DD/`
-  day folders are mirrored under it (e.g. `MartinParr/2026-09-14/181541_parr.jpg`).
-- `NEXTCLOUD_SOURCE_DIR` defaults to `~/Pictures/parr` if left blank.
+  day folders are mirrored under it (e.g. `MartinParr/2026-09-14/181541_graded.jpg`).
+- `NEXTCLOUD_SOURCE_DIR` defaults to `~/Pictures/pifilm` if left blank.
 
 ## Test with a dry run
 
@@ -72,7 +72,7 @@ Run it by hand first. Without `--apply` it does everything except transfer
 files, so you can confirm the gate passes and the file list looks right:
 
 ```bash
-cd ~/repos/martin-parr-project
+cd ~/repos/pi-film-reversal
 .venv/bin/python scripts/nextcloud_sync.py --env .env          # dry run
 .venv/bin/python scripts/nextcloud_sync.py --env .env --apply  # real copy
 ```
@@ -88,18 +88,18 @@ timer. The service is `oneshot` and is triggered by the timer, not enabled on
 its own.
 
 ```bash
-sudo cp deploy/parr-nextcloud-sync.service.example /etc/systemd/system/parr-nextcloud-sync.service
-sudo cp deploy/parr-nextcloud-sync.timer.example   /etc/systemd/system/parr-nextcloud-sync.timer
+sudo cp deploy/pifilm-nextcloud-sync.service.example /etc/systemd/system/pifilm-nextcloud-sync.service
+sudo cp deploy/pifilm-nextcloud-sync.timer.example   /etc/systemd/system/pifilm-nextcloud-sync.timer
 sudo systemctl daemon-reload
-sudo systemctl enable --now parr-nextcloud-sync.timer
+sudo systemctl enable --now pifilm-nextcloud-sync.timer
 ```
 
 Verify and watch it work:
 
 ```bash
-systemctl list-timers parr-nextcloud-sync.timer     # next/last run
-systemctl start parr-nextcloud-sync.service         # force one run now
-journalctl -u parr-nextcloud-sync.service -n 30     # the run's summary line
+systemctl list-timers pifilm-nextcloud-sync.timer     # next/last run
+systemctl start pifilm-nextcloud-sync.service         # force one run now
+journalctl -u pifilm-nextcloud-sync.service -n 30     # the run's summary line
 ```
 
 The service runs as `george` with the repo as its working directory, so it

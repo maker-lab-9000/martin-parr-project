@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from parr.capture.thumbnail import ThumbnailError, fitted_jpeg
+from pifilm.capture.thumbnail import ThumbnailError, fitted_jpeg
 
 
 def _decode(data: bytes) -> np.ndarray:

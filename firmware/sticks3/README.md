@@ -1,7 +1,7 @@
 # StickS3 remote capture firmware
 
 This PlatformIO project turns an M5StickS3 into the authenticated remote
-capture button for the local `parr` API. It displays local TV colour bars
+capture button for the local `pifilm` API. It displays local TV colour bars
 while ready, then a state screen and elapsed timer while a request is active.
 The most recent successfully decoded 240×135 JPEG remains on screen until a
 later complete image replaces it.
@@ -17,7 +17,7 @@ The pre-build script reads the repository-root `.env`; see the
 safe empty defaults and the device cannot join a network. Only Wi-Fi settings,
 API URL and API token enter the firmware; the SSH password stays on the host.
 In the deployed topology the Pi runs its own hotspot, so `WIFI_SSID` and
-`WIFI_PASSWORD` are that hotspot's credentials and `PARR_REMOTE_URL` is
+`WIFI_PASSWORD` are that hotspot's credentials and `PIFILM_REMOTE_URL` is
 `http://10.42.0.1:8765`, the hotspot address.
 Build outputs contain device credentials. Keep them private and avoid verbose
 compiler logs when using real settings.
@@ -122,7 +122,7 @@ prefixed with the uptime in milliseconds. A healthy capture looks like this:
 Where the sequence stops tells you which side to look at:
 
 - No `status: HTTP 200` line: Wi-Fi or the API URL/token. Check the Pi's
-  `parr-capture` service and the `.env` values baked into this build.
+  `pifilm-capture` service and the `.env` values baked into this build.
 - `submit` returns 409: the Pi is already busy with a capture.
 - `download` returns 409: the job is not complete yet; the state machine retries.
 - `download rejected`: the JPEG arrived truncated or exceeded the 64 KiB buffer.
@@ -138,21 +138,21 @@ quiet apart from Wi-Fi events.
 ### Confirming the photo is the graded one
 
 The log proves a JPEG arrived and was drawn, not which file it came from. The
-server builds the thumbnail from the job's `*_parr.jpg` and the thumbnail
+server builds the thumbnail from the job's `*_graded.jpg` and the thumbnail
 generator is deterministic on one Pillow build, so regenerating thumbnails on
 the Pi from both saved files and hashing them settles it. Fetch what the Stick
 received (the last completed job ID comes from `/v1/status`), then on the Pi:
 
 ```sh
-cd ~/repos/martin-parr-project
+cd ~/repos/pi-film-reversal
 .venv/bin/python - <<'PY'
 import hashlib, json
 from datetime import date
 from pathlib import Path
-from parr.capture.thumbnail import fitted_jpeg
-day = Path.home() / 'Pictures' / 'parr' / date.today().isoformat()
+from pifilm.capture.thumbnail import fitted_jpeg
+day = Path.home() / 'Pictures' / 'pifilm' / date.today().isoformat()
 rec = json.loads((day / 'captures.jsonl').read_text().splitlines()[-1])
-for label in ('parr', 'original'):
+for label in ('pifilm', 'original'):
     data = fitted_jpeg(day / rec[label])
     print(label, len(data), hashlib.sha256(data).hexdigest()[:16])
 print('lut_sha1 used:', rec['lut_sha1'])
@@ -160,7 +160,7 @@ PY
 ```
 
 Exactly one hash matches `sha256sum` of the downloaded image; it must be the
-`parr` one. The `lut_sha1` line tells you which look graded it: compare it with
+`pifilm` one. The `lut_sha1` line tells you which look graded it: compare it with
 `lut_sha1` in the `params.json` of the artifact you intended the service to
 load. The bundled starter and a trained artifact have different hashes.
 
