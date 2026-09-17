@@ -201,6 +201,54 @@ compresses out-of-gamut chroma, and adds subtle grain (`0.004`). Rebuild it with
 Pass `--highlights 0.6` to hold coloured highlights back from clipping; `0`
 (the default) is the current look.
 
+## Archiving photos to Nextcloud
+
+Optionally, the Pi pushes every capture under `~/Pictures/parr` to a folder on a
+Nextcloud server, so there is an off-device archive. `scripts/nextcloud_sync.py`
+runs `rclone copy` over Nextcloud's WebDAV endpoint — the rsync-equivalent that a
+Nextcloud HTTP server actually speaks (plain `rsync` cannot). Its behaviour is
+deliberate:
+
+- **Copy, never mirror.** It only ever adds or updates files on Nextcloud, so
+  deleting a photo on the Pi (an SD-card cleanup) never removes the cloud copy.
+- **A quiet no-op off the wired LAN.** Each run first checks that `eth0` holds a
+  real home-LAN IPv4 (not a `169.254.x` link-local address) and that Nextcloud
+  answers a TCP connect; otherwise it logs one line and exits. A frequent
+  schedule is therefore cheap and does nothing until the Pi is plugged into the
+  home network.
+- **The password never touches a command line.** It is read from `.env`,
+  obscured with `rclone obscure` (plaintext on stdin), and passed to rclone
+  through `RCLONE_CONFIG_*` environment variables — never an argv, a process
+  listing, or an rclone config file on disk.
+- **Incremental.** Everything under `~/Pictures/parr` is synced — the
+  `_original`/`_ungraded` JPEGs, the graded `_parr.jpg`, the `.dng` raws, and
+  `captures.jsonl` — and rclone skips files already uploaded.
+
+**Scheduling is a systemd timer, not cron.** Two example units live in `deploy/`:
+`parr-nextcloud-sync.timer` fires the `parr-nextcloud-sync.service` oneshot a few
+minutes after boot and then every 15 minutes (`OnUnitActiveSec=15min`,
+`Persistent=true`). Nothing runs on a schedule until you install and enable them.
+
+Setup, on the Pi: `sudo apt install rclone`, fill the `NEXTCLOUD_*` keys in
+`.env` (use a Nextcloud **app password**, not your login), test by hand, then
+enable the timer:
+
+```bash
+# test first: a dry run does everything except transfer, then --apply copies
+.venv/bin/python scripts/nextcloud_sync.py --env .env
+.venv/bin/python scripts/nextcloud_sync.py --env .env --apply
+
+# then schedule it (drops the .example suffix in the destination names)
+sudo cp deploy/parr-nextcloud-sync.service.example /etc/systemd/system/parr-nextcloud-sync.service
+sudo cp deploy/parr-nextcloud-sync.timer.example   /etc/systemd/system/parr-nextcloud-sync.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now parr-nextcloud-sync.timer
+systemctl list-timers parr-nextcloud-sync.timer   # confirm NEXT / LAST
+```
+
+Full steps — the app-password setup, every `.env` key, and troubleshooting — are
+in [the Nextcloud sync guide](docs/nextcloud-sync.md).
+
 ## Training a reference-derived look
 
 Training is optional; the camera works with the bundled starter.
