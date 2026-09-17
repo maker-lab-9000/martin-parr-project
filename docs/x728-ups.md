@@ -208,6 +208,30 @@ this script can be retired in favour of one owner of the shutdown decision.
 - **Auto power on** is a jumper choice. With it set, the camera boots whenever
   a charger is connected; without it, the button is the only power-on.
 
+### Interpreting the reading
+
+The MAX17040 is a **voltage-based** gauge ("ModelGauge"): it infers percent from
+cell voltage against a single-18650 curve, not by counting charge in and out.
+That has consequences worth knowing before trusting the number:
+
+- **The percent and the shield's LED bar disagree by design.** The LEDs are a
+  separate, coarse voltage/charge indicator; all of them lit means "high or
+  charging", not a calibrated 100%. They are not reading the gauge.
+- **The middle of the Li-ion curve is flat** (≈90 % to ≈30 % SOC spans only
+  ≈4.0 V to ≈3.6 V), so voltage→percent is imprecise there and sags further
+  under the Pi's load. Expect the percent to read conservatively.
+- **The X728-C1 case (four cells, 1S4P) doubles capacity but not voltage.** The
+  MAX17040 has no capacity/design register — it only reports where the pack
+  voltage sits on a single-cell curve, so it cannot credit the extra cells, and
+  its factory rate-compensation under-reads until a full charge/discharge cycle
+  lets ModelGauge converge. Four cells also take roughly twice as long to charge,
+  so a pack that looks "full" on the LEDs may simply not be full yet.
+- **Trust the voltage.** Rested, ~4.1–4.2 V is genuinely full and ~3.6 V is
+  nearly empty; `parr-battery` prints the voltage next to the percent for exactly
+  this reason. Measured 2026-09-17 on the C1 four-cell pack: 3.99 V read as 58 %
+  while the shield's LEDs showed full — a normal voltage-gauge disagreement, not
+  a fault.
+
 ## 8. Verification checklist
 
 Run these on the Pi after sections 4 and 5, with the cells fitted and the
