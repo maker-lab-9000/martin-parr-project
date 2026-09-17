@@ -5,7 +5,7 @@ LUT was fitted against, the grain settings, and training provenance. Three
 concerns live here.
 
 **Where the default comes from.** The shipped look is package data at
-``parr/data/``, found with ``importlib.resources``. That makes every
+``pifilm/data/``, found with ``importlib.resources``. That makes every
 command work from any working directory and puts the look inside a built
 wheel. ``--artifacts DIR`` overrides it with a directory on disk.
 
@@ -39,7 +39,7 @@ from .lut import LUT3D, CubeError, read_cube, sha1_hex, write_cube
 from .normalize import NormalizeParams
 
 PARAMS_VERSION = 2
-DEFAULT_LUT_FILE = "parr.cube"
+DEFAULT_LUT_FILE = "pifilm.cube"
 
 
 class ArtifactsError(Exception):
@@ -67,7 +67,7 @@ class Artifacts:
         params_path = path / "params.json"
         if not params_path.is_file():
             raise ArtifactsError(
-                f"{params_path} not found. Run parr-train, pass --artifacts DIR, "
+                f"{params_path} not found. Run pifilm-train, pass --artifacts DIR, "
                 "or reinstall the package to restore the bundled default."
             )
         try:
@@ -154,16 +154,16 @@ class Artifacts:
     def default(cls) -> Artifacts:
         """The artifact shipped inside the package.
 
-        Resolved as a sub-path of ``parr`` rather than as the package
-        ``parr.data``. ``parr/data`` has no ``__init__.py``, so
-        ``resources.files("parr.data")`` yields a ``MultiplexedPath``,
+        Resolved as a sub-path of ``pifilm`` rather than as the package
+        ``pifilm.data``. ``pifilm/data`` has no ``__init__.py``, so
+        ``resources.files("pifilm.data")`` yields a ``MultiplexedPath``,
         and ``as_file`` on one of those materialises a *temporary* copy that
         is deleted when the context exits — leaving ``Artifacts.path``
         pointing at a directory that no longer exists, and copying the
         950 KB table on every startup. A sub-path of a real package is a real
         directory, so it survives and costs nothing.
         """
-        data_dir = Path(str(resources.files("parr") / "data"))
+        data_dir = Path(str(resources.files("pifilm") / "data"))
         if not data_dir.is_dir():
             raise ArtifactsError(
                 f"packaged artifact directory {data_dir} is missing; reinstall the package"
@@ -186,7 +186,7 @@ def write_artifact(
     """Write a complete artifact into ``dir_path`` (creating it) and return the directory."""
     path = Path(dir_path)
     path.mkdir(parents=True, exist_ok=True)
-    write_cube(lut, path / lut_file, title="parr")
+    write_cube(lut, path / lut_file, title="pifilm")
     # Hash what will actually be read back, not the in-memory table. The .cube
     # format stores six decimals, so a fitted LUT loses about 5e-7 per value on
     # the way to disk. Recording the pre-write hash would make every non-identity

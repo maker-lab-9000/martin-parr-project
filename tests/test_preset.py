@@ -1,13 +1,13 @@
 import numpy as np
 import pytest
 
-from parr.artifacts import Artifacts
-from parr.color import srgb_to_oklab
-from parr.highlight import protect_highlights
-from parr.lut import read_cube, write_cube
-from parr.preset import main as preset_main
-from parr.preset import starter_lut, write_starter
-from parr.train.fit import build_parser
+from pifilm.artifacts import Artifacts
+from pifilm.color import srgb_to_oklab
+from pifilm.highlight import protect_highlights
+from pifilm.lut import read_cube, write_cube
+from pifilm.preset import main as preset_main
+from pifilm.preset import starter_lut, write_starter
+from pifilm.train.fit import build_parser
 
 
 def test_starter_keeps_neutrals_neutral_and_tone_monotonic():
@@ -55,8 +55,8 @@ def test_write_starter_default_preserves_the_unprotected_cube_exactly(tmp_path):
 
     plain = Artifacts.load(plain_path)
     assert plain.training["highlights"] == 0.0
-    assert (plain_path / "parr.cube").read_bytes() == expected_path.read_bytes()
-    assert (plain_path / "parr.cube").read_bytes() == (explicit_path / "parr.cube").read_bytes()
+    assert (plain_path / "pifilm.cube").read_bytes() == expected_path.read_bytes()
+    assert (plain_path / "pifilm.cube").read_bytes() == (explicit_path / "pifilm.cube").read_bytes()
 
 
 def test_preset_cli_accepts_highlights(tmp_path):

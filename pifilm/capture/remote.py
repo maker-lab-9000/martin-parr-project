@@ -84,7 +84,7 @@ class RemoteCaptureServer:
             return
         self._thread = threading.Thread(
             target=self._httpd.serve_forever,
-            name="parr-remote-http",
+            name="pifilm-remote-http",
             daemon=True,
         )
         self._thread.start()
@@ -256,7 +256,7 @@ class RemoteCaptureServer:
         if job.state != "complete":
             self._send_json(handler, HTTPStatus.CONFLICT, {"error": "capture_not_complete"})
             return
-        source = getattr(job.result, "parr", None)
+        source = getattr(job.result, "pifilm", None)
         if source is None:
             self._send_json(
                 handler, HTTPStatus.UNPROCESSABLE_ENTITY, {"error": "image_unavailable"},
@@ -276,7 +276,7 @@ class RemoteCaptureServer:
 
     def _job_payload(self, job: JobSnapshot) -> dict[str, Any]:
         payload: dict[str, Any] = {"id": job.request_id, "state": job.state}
-        if job.state == "complete" and getattr(job.result, "parr", None) is not None:
+        if job.state == "complete" and getattr(job.result, "pifilm", None) is not None:
             payload["image_url"] = f"/v1/captures/{job.request_id}/image.jpg"
         if job.error_code is not None:
             payload["error_code"] = job.error_code

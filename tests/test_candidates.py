@@ -1,17 +1,17 @@
 import numpy as np
 import pytest
 
-from parr.color import srgb_to_oklab
-from parr.preset import starter_lut
+from pifilm.color import srgb_to_oklab
+from pifilm.preset import starter_lut
 
 
 def test_zero_controls_reproduce_existing_starter():
-    from parr.experiments.candidates import candidate_lut
+    from pifilm.experiments.candidates import candidate_lut
     np.testing.assert_array_equal(candidate_lut().table, starter_lut().table)
 
 
 def test_candidate_preserves_neutrals_and_valid_range():
-    from parr.experiments.candidates import candidate_lut
+    from pifilm.experiments.candidates import candidate_lut
     lut = candidate_lut(colour=0.25, highlights=0.6, shadows=0.6)
     grey = np.repeat(np.linspace(0, 1, 1024)[:, None], 3, axis=1)
     output = lut.apply_numpy(grey)
@@ -22,7 +22,7 @@ def test_candidate_preserves_neutrals_and_valid_range():
 
 
 def test_colour_control_increases_restrained_colour_without_hue_collapse():
-    from parr.experiments.candidates import candidate_lut
+    from pifilm.experiments.candidates import candidate_lut
     rgb = np.array([[0.60, 0.42, 0.40], [0.62, 0.48, 0.38],
                     [0.40, 0.52, 0.43], [0.40, 0.48, 0.60]], dtype=np.float32)
     before = srgb_to_oklab(starter_lut().apply_numpy(rgb))
@@ -34,7 +34,7 @@ def test_colour_control_increases_restrained_colour_without_hue_collapse():
 
 
 def test_highlights_retain_more_colour_and_shaded_skin_stays_readable():
-    from parr.experiments.candidates import candidate_lut
+    from pifilm.experiments.candidates import candidate_lut
     highlights = np.array([[0.98, 0.72, 0.46], [0.94, 0.78, 0.64]], np.float32)
     starter = srgb_to_oklab(starter_lut().apply_numpy(highlights))
     changed = srgb_to_oklab(candidate_lut(highlights=0.6).apply_numpy(highlights))
@@ -49,6 +49,6 @@ def test_highlights_retain_more_colour_and_shaded_skin_stays_readable():
 
 @pytest.mark.parametrize('value', [-1, float('nan'), float('inf'), 2])
 def test_invalid_controls_are_rejected(value):
-    from parr.experiments.candidates import candidate_lut
+    from pifilm.experiments.candidates import candidate_lut
     with pytest.raises(ValueError):
         candidate_lut(colour=value)

@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from parr.color import lch_to_oklab
-from parr.train.transport import (
+from pifilm.color import lch_to_oklab
+from pifilm.train.transport import (
     hue_bin_index,
     hue_histogram,
     hue_weights,

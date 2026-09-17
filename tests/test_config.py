@@ -17,7 +17,7 @@ def test_platformio_quotes_each_setting_with_its_macro_encoder(tmp_path, monkeyp
     env_file = tmp_path / ".env"
     env_file.write_text(
         'PI_HOST=192.0.2.1\nWIFI_SSID=studio wifi\n'
-        'WIFI_PASSWORD=a\\b"c\nPARR_REMOTE_TOKEN=test-token\n'
+        'WIFI_PASSWORD=a\\b"c\nPIFILM_REMOTE_TOKEN=test-token\n'
     )
 
     class BuildEnv:
@@ -53,7 +53,7 @@ def test_parse_env_file_treats_shell_syntax_as_plain_data(tmp_path):
         "PI_SSH_PASSWORD=$(touch " + str(marker) + ")\n"
         "WIFI_SSID='studio wifi'\n"
         "WIFI_PASSWORD=literal#password\n"
-        "PARR_REMOTE_TOKEN=token-value\n"
+        "PIFILM_REMOTE_TOKEN=token-value\n"
     )
 
     values = parse_env_file(env_file)
@@ -71,7 +71,7 @@ def test_firmware_defines_include_only_device_credentials_and_api_values():
                 "PI_SSH_PASSWORD": "ssh-password-must-not-reach-device",
                 "WIFI_SSID": "studio-wifi",
                 "WIFI_PASSWORD": "wifi-password",
-                "PARR_REMOTE_TOKEN": "remote-token",
+                "PIFILM_REMOTE_TOKEN": "remote-token",
             }
         )
     )

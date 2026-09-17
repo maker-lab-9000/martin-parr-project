@@ -76,9 +76,9 @@ default. Both CLIs still default to `0.0`.
 | 7: grain | Post-LUT effect; not a prerequisite for fitting the colour LUT. Validate the final grain setting for delivery. |
 | 8 / 9 runtime / 10 | Statistics are a dependency for adaptive control, not for the existing baked operation or the first retrain. Avoid accidentally applying the baked correction a second time at runtime. |
 
-**Training-tool gap to plan in Phase 5.** `parr-train` exposes `--highlights`,
+**Training-tool gap to plan in Phase 5.** `pifilm-train` exposes `--highlights`,
 but its automatic split is by image, not scene. The explicit scene-partition
-runner in `parr/experiments/train.py` already passes `FitConfig` to the shared
+runner in `pifilm/experiments/train.py` already passes `FitConfig` to the shared
 fitter and records it; its CLI currently exposes only `--neutral-cap`.
 Before the IMX708 production run, provide a reproducible scene-grouped route
 that accepts the chosen highlight value and frozen normalisation. Either extend
@@ -113,7 +113,7 @@ repeated `HHMMSS` filenames cannot overwrite each other. Supply `_original.jpg`
 files, the matching `captures.jsonl`, a scene-ID and lighting-mode manifest, and
 DNGs where enabled. Record the actual sensor/ISP mode, tuning-file identity
 (preferably content hash), capture controls and software versions. Keep graded
-`_parr.jpg` files out of the source corpus. DNGs are useful archives; the current
+`_graded.jpg` files out of the source corpus. DNGs are useful archives; the current
 trainer consumes rendered images, so raw development is not a prerequisite.
 
 **Freeze and refit rules.**
@@ -136,7 +136,7 @@ trainer consumes rendered images, so raw development is not a prerequisite.
 
 ## Phase 1: Picamera2 with native 4608 × 2592 capture
 
-**Design.** A new `Picamera2Camera` in `parr/capture/camera.py` implementing
+**Design.** A new `Picamera2Camera` in `pifilm/capture/camera.py` implementing
 the existing `Camera` protocol (`stream_info`, `read() -> Frame`, `close()`),
 alongside `V4L2Camera` and `FakeCamera`, selected by a `--camera {v4l2,picamera2}`
 flag with `picamera2` the default when the module imports. Nothing above the
@@ -147,8 +147,8 @@ protocol changes in this phase.
 - `StreamInfo` gains `sensor_mode`, `bit_depth` and `tuning_file` fields, still serialised into every capture record.
 - Tuning: load `imx708_wide.json` explicitly via `Picamera2.load_tuning_file`, so a system default change never silently alters the colour science the LUT was trained on. Record the file name.
 
-**Acceptance.** `parr-capture --camera picamera2 --no-preview` saves a
-4608 × 2592 `_ungraded.jpg` and `_parr.jpg`; `captures.jsonl` records the
+**Acceptance.** `pifilm-capture --camera picamera2 --no-preview` saves a
+4608 × 2592 `_ungraded.jpg` and `_graded.jpg`; `captures.jsonl` records the
 sensor mode and tuning file; the Stick still receives its 240 × 135 thumbnail.
 
 **Memory.** One RGB frame is 36 MB and the pipeline's float32 intermediates
@@ -191,7 +191,7 @@ its raw array plus metadata) and give `CaptureSession.capture()` a third file:
 `HHMMSS_original.jpg` (encoded by the ISP path from the same request via
 `request.save("main", path)`, so it is the camera's own rendering),
 `HHMMSS.dng` (via `request.save_dng(path)`, sensor-native Bayer with the metadata
-needed to develop it later), and `HHMMSS_parr.jpg` as now. Record the DNG
+needed to develop it later), and `HHMMSS_graded.jpg` as now. Record the DNG
 name and size. The `_ungraded.jpg` fallback disappears for this camera since
 the original is always available.
 
@@ -211,7 +211,7 @@ provide identical pixels. The Phase 3 implementation plan must choose and test
 that boundary and retain the request until all request-dependent saves finish.
 
 **Acceptance.** Three files per shot, the DNG opens in darktable or
-RawTherapee with correct colours, and `parr-process` on the original
+RawTherapee with correct colours, and `pifilm-process` on the original
 reproduces the graded file bit-for-bit given the recorded grain seed, artifact,
 processing settings and matching encoder/software versions.
 
@@ -268,7 +268,7 @@ every artifact's `params.json`: `levels_max_stretch`, `levels_gamma_min` and
 `_max`, `wb_gain_min` and `_max`, `exposure_target_median`,
 `stats_lum_min` and `_max`. Add a single `strength` in [0, 1] that blends
 each computed gain toward 1.0 (and the gamma toward 1.0), so "gentler" is one
-number rather than five. Expose the fields as `parr-train` and `parr-preset`
+number rather than five. Expose the fields as `pifilm-train` and `pifilm-preset`
 flags so a look carries its own normalisation, and print the applied gains in
 `captures.jsonl` as today.
 
@@ -331,7 +331,7 @@ alike when viewed at the same size; the timing from Phase 4 improves.
 
 ## Phase 8: scene statistics
 
-**Design.** A `parr/scene.py` computing, on a 512-px downscale in Oklab: mean
+**Design.** A `pifilm/scene.py` computing, on a 512-px downscale in Oklab: mean
 and median lightness, lightness standard deviation, chroma percentiles (50,
 95), fraction of pixels above 0.05 chroma, clipped fraction per channel,
 dominant hue bins, and an estimated cast from the white-balance gains. Merge
@@ -351,9 +351,9 @@ plots them for a day's shoot; one adaptive rule implemented behind a flag.
 
 **Baked path complete; adaptive runtime path optional.**
 
-1. **Bake it into the LUT — implemented.** `parr/highlight.py` reduces positive
-   Oklab lightness lift using the 0.55–0.90 smoothstep window. Both `parr-preset`
-   and `parr-train` accept `--highlights` in [0, 1] and record it in provenance;
+1. **Bake it into the LUT — implemented.** `pifilm/highlight.py` reduces positive
+   Oklab lightness lift using the 0.55–0.90 smoothstep window. Both `pifilm-preset`
+   and `pifilm-train` accept `--highlights` in [0, 1] and record it in provenance;
    the trainer reimposes monotonicity after protection. Zero leaves the LUT
    unchanged. Oklab chroma is preserved before conversion; sRGB clipping and
    the trainer's projections can change the stored colour. The finished LUT

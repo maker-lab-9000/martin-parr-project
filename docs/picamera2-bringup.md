@@ -19,7 +19,7 @@ uname -a
 rpicam-hello --list-cameras
 /usr/bin/python3 -c 'from importlib.metadata import version; print("Picamera2", version("picamera2"))'
 dpkg-query -W 'python3-picamera2' 'python3-libcamera' 'libcamera*' 'rpicam-apps*'
-systemctl is-active parr-capture.service
+systemctl is-active pifilm-capture.service
 ```
 
 If `rpicam-hello` is unavailable, inspect installed camera packages first; an
@@ -54,15 +54,15 @@ After the new backend is installed on the identified Pi, run from its checkout.
 This example assumes the Wide variant has been confirmed:
 
 ```sh
-.venv/bin/parr-capture --camera picamera2 --tuning-file imx708_wide.json \
-  --no-preview --out ~/Pictures/parr-imx708-bringup
+.venv/bin/pifilm-capture --camera picamera2 --tuning-file imx708_wide.json \
+  --no-preview --out ~/Pictures/pifilm-imx708-bringup
 ```
 
 Use a terminal, press SPACE to capture, and Q to quit. Take a frame containing
 red, green and blue objects plus a neutral patch; repeat several captures to
 check that requests are returned and the camera does not stall. Confirm:
 
-- `_original.jpg` (plus `.dng`) and `_parr.jpg` both have 4608 × 2592 pixels.
+- `_original.jpg` (plus `.dng`) and `_graded.jpg` both have 4608 × 2592 pixels.
 - Red and blue are not swapped. Picamera2 calls the BGR byte layout `RGB888`;
   the backend must convert it to the pipeline's RGB convention.
 - `captures.jsonl` records the actual raw sensor mode, bit depth and tuning
@@ -76,7 +76,7 @@ check that requests are returned and the camera does not stall. Confirm:
 Phase 1 originally produced `_ungraded.jpg`, not an original JPEG/DNG pair,
 before autofocus control, per-shot exposure/AWB metadata and retained request
 saves landed in Phases 2–3 below; this same command now produces the Phase 2/3
-output described in Section 4 (`_original.jpg` + `.dng` + `_parr.jpg`). Do not
+output described in Section 4 (`_original.jpg` + `.dng` + `_graded.jpg`). Do not
 label these files as the production training corpus before the capture
 pipeline and source/runtime input boundary are fixed.
 
@@ -90,8 +90,8 @@ exposure/AWB (there is no flash mode, so both stay auto unless a controlled
 shoot needs otherwise), and every capture writes three files instead of one:
 
 ```sh
-.venv/bin/parr-capture --camera picamera2 --tuning-file imx708_wide.json \
-  --no-preview --out ~/Pictures/parr-imx708-phase23
+.venv/bin/pifilm-capture --camera picamera2 --tuning-file imx708_wide.json \
+  --no-preview --out ~/Pictures/pifilm-imx708-phase23
 ```
 
 - `_original.jpg`: the ISP's own 8-bit rendering, always saved under this name
@@ -102,7 +102,7 @@ shoot needs otherwise), and every capture writes three files instead of one:
   (about 18 MB DNG at 4608 × 2592 10-bit raw, roughly 28 MB per shot in total
   once the two JPEGs are added). `--no-dng` only omits this sidecar; it does
   not change the original's name.
-- `_parr.jpg`: the graded output, as before.
+- `_graded.jpg`: the graded output, as before.
 
 `captures.jsonl` gains two keys when the frame carries them: `camera_metadata`
 (a filtered, JSON-serialisable subset of the request's metadata — for

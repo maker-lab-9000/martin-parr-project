@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from parr.train.fetch import (
+from pifilm.train.fetch import (
     API_URL,
     FetchError,
     FileInfo,
@@ -58,7 +58,7 @@ class FakeSession:
 
     def get(self, url, params=None, headers=None, timeout=None):
         self.calls.append((url, params))
-        assert headers and "martin-parr-project" in headers["User-Agent"]
+        assert headers and "pi-film-reversal" in headers["User-Agent"]
         if url == API_URL:
             return FakeResponse(payload=self.handler(params))
         if url in self.fail_urls:
@@ -319,7 +319,7 @@ def test_resume_revalidates_against_the_manifest_hash(tmp_path):
 def test_main_enforces_min_files(tmp_path, monkeypatch, capsys):
     files = {f"https://upload/thumb/{i}.jpg": _photo_bytes(seed=i) for i in range(3)}
     monkeypatch.setattr(
-        "parr.train.fetch.make_session", lambda: FakeSession(_handler, files=files)
+        "pifilm.train.fetch.make_session", lambda: FakeSession(_handler, files=files)
     )
     assert main(["--out", str(tmp_path), "--category", CAT, "--min-files", "5"]) == 1
     assert "fewer than 5" in capsys.readouterr().err
@@ -381,7 +381,7 @@ def test_a_file_reachable_through_two_categories_is_listed_once(monkeypatch):
         "Category:S": [{"ns": 6, "title": "File:A.jpg"}, {"ns": 6, "title": "File:B.jpg"}],
     }
     monkeypatch.setattr(
-        "parr.train.fetch.api_get",
+        "pifilm.train.fetch.api_get",
         lambda session, params: {"query": {"categorymembers": tree[params["cmtitle"]]}},
     )
     titles = [m["title"] for m in iter_category_members(None, "Category:P")]

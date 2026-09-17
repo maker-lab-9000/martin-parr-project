@@ -53,12 +53,12 @@ def _required(values: Mapping[str, str], key: str) -> str:
 def firmware_defines(values: Mapping[str, str]) -> list[tuple[str, str]]:
     """Return exactly the credentials and API values the firmware consumes."""
     host = _required(values, "PI_HOST")
-    api_base = values.get("PARR_REMOTE_URL") or f"http://{host}:8765"
+    api_base = values.get("PIFILM_REMOTE_URL") or f"http://{host}:8765"
     defines = {
         "STICKS3_WIFI_SSID": _required(values, "WIFI_SSID"),
         "STICKS3_WIFI_PASSWORD": _required(values, "WIFI_PASSWORD"),
         "STICKS3_API_BASE": api_base,
-        "STICKS3_API_TOKEN": _required(values, "PARR_REMOTE_TOKEN"),
+        "STICKS3_API_TOKEN": _required(values, "PIFILM_REMOTE_TOKEN"),
     }
     return [(key, defines[key]) for key in _FIRMWARE_KEYS]
 

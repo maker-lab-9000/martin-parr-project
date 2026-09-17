@@ -11,10 +11,10 @@ from scripts.deploy_remote import (
 REQUIRED_ENV = {
     "PI_HOST": "parr.local",
     "PI_USER": "george",
-    "PI_PROJECT_DIR": "/home/george/repos/martin-parr-project",
+    "PI_PROJECT_DIR": "/home/george/repos/pi-film-reversal",
     "PI_SSH_PASSWORD": "ssh-secret",
-    "PARR_REMOTE_TOKEN": "remote-secret",
-    "PI_ARTIFACT_DIR": "/home/george/repos/martin-parr-project/artifacts/personal-v1",
+    "PIFILM_REMOTE_TOKEN": "remote-secret",
+    "PI_ARTIFACT_DIR": "/home/george/repos/pi-film-reversal/artifacts/personal-v1",
 }
 
 
@@ -28,7 +28,7 @@ def test_listen_address_defaults_to_all_interfaces_when_env_omits_it():
 
 
 def test_listen_address_is_read_from_env_when_present():
-    config = deployment_config({**REQUIRED_ENV, "PARR_LISTEN": "10.42.0.1:8765"})
+    config = deployment_config({**REQUIRED_ENV, "PIFILM_LISTEN": "10.42.0.1:8765"})
 
     assert config.listen == "10.42.0.1:8765"
 
@@ -81,9 +81,9 @@ def test_capture_command_uses_verified_artifact_directory_and_never_includes_tok
     config = DeploymentConfig(
         host="parr.local",
         user="george",
-        project_dir="/home/george/repos/martin-parr-project",
+        project_dir="/home/george/repos/pi-film-reversal",
         ssh_password="ssh-secret",
-        artifact_dir="/home/george/parr artifacts/personal-v1",
+        artifact_dir="/home/george/pifilm artifacts/personal-v1",
         remote_token="remote-secret",
         listen="0.0.0.0:8765",
     )
@@ -91,9 +91,9 @@ def test_capture_command_uses_verified_artifact_directory_and_never_includes_tok
     command = build_capture_command(config, show_captures=True)
 
     assert command == (
-        "/home/george/repos/martin-parr-project/.venv/bin/parr-capture --no-preview "
+        "/home/george/repos/pi-film-reversal/.venv/bin/pifilm-capture --no-preview "
         "--show-captures --remote-listen 0.0.0.0:8765 --artifacts "
-        "'/home/george/parr artifacts/personal-v1'"
+        "'/home/george/pifilm artifacts/personal-v1'"
     )
     assert "parr.local" not in command
     assert "remote-secret" not in command
@@ -104,7 +104,7 @@ def test_open_ssh_client_rejects_unknown_host_keys_before_password_connection():
     config = DeploymentConfig(
         host="192.168.178.56",
         user="george",
-        project_dir="/home/george/repos/martin-parr-project",
+        project_dir="/home/george/repos/pi-film-reversal",
         ssh_password="ssh-secret",
         artifact_dir="/home/george/artifacts/personal-v1",
         remote_token="remote-secret",
@@ -134,17 +134,17 @@ def test_restart_stops_the_current_service_before_rechecking_its_camera_owner():
     restart_headless_service(
         client,
         {
-            "camera owners": "1234  /home/george/.venv/bin/parr-capture",
-            "capture process": "1234 parr-capture",
+            "camera owners": "1234  /home/george/.venv/bin/pifilm-capture",
+            "capture process": "1234 pifilm-capture",
             "service pid": "1234",
         },
     )
 
     assert client.commands == [
-        "sudo -n systemctl stop parr-capture.service",
+        "sudo -n systemctl stop pifilm-capture.service",
         "pgrep -af '[p]arr-capture' || true",
         "fuser -v /dev/video* 2>/dev/null || true",
-        "sudo -n systemctl start parr-capture.service",
+        "sudo -n systemctl start pifilm-capture.service",
     ]
 
 

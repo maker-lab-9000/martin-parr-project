@@ -2,34 +2,34 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a general "highlight protection" operation that reduces how much any 3D LUT lifts the lightness of bright inputs, and expose it as a `--highlights` control on both `parr-preset` and `parr-train`, so coloured highlights keep more colour and clip less.
+**Goal:** Add a general "highlight protection" operation that reduces how much any 3D LUT lifts the lightness of bright inputs, and expose it as a `--highlights` control on both `pifilm-preset` and `pifilm-train`, so coloured highlights keep more colour and clip less.
 
-**Architecture:** A new pure module `parr/highlight.py` transforms a finished `LUT3D` into a highlight-protected `LUT3D` by working in Oklab: for each node it reduces the amount by which the LUT raises the node's lightness, weighted by a smoothstep over the bright end of the input range, leaving chroma and hue untouched. `parr/preset.py` applies it when building the starter; `parr/train/fit.py` applies it after `fit_lut` and re-imposes monotonicity with the trainer's existing projection helpers. The control is recorded in `params.json` so every artifact carries the value it was built with.
+**Architecture:** A new pure module `pifilm/highlight.py` transforms a finished `LUT3D` into a highlight-protected `LUT3D` by working in Oklab: for each node it reduces the amount by which the LUT raises the node's lightness, weighted by a smoothstep over the bright end of the input range, leaving chroma and hue untouched. `pifilm/preset.py` applies it when building the starter; `pifilm/train/fit.py` applies it after `fit_lut` and re-imposes monotonicity with the trainer's existing projection helpers. The control is recorded in `params.json` so every artifact carries the value it was built with.
 
-**Tech Stack:** Python 3.11+, NumPy, the project's Oklab helpers in `parr/color.py`, `LUT3D` in `parr/lut.py`, pytest, ruff.
+**Tech Stack:** Python 3.11+, NumPy, the project's Oklab helpers in `pifilm/color.py`, `LUT3D` in `pifilm/lut.py`, pytest, ruff.
 
-**Spec:** `docs/superpowers/plans/2026-09-11-rpi4-imx708-roadmap.md`, Phase 9 ("Highlight-protected LUT blending"), path 1 (bake it into the LUT). This plan implements only path 1; the optional runtime blend in that phase is out of scope. The technique and its measured effect come from the September 7 experiment (`docs/experiments/2026-09-07-parr-refinement.md`), where the `highlights` control in `parr/experiments/candidates.py` was the most promising single change.
+**Spec:** `docs/superpowers/plans/2026-09-11-rpi4-imx708-roadmap.md`, Phase 9 ("Highlight-protected LUT blending"), path 1 (bake it into the LUT). This plan implements only path 1; the optional runtime blend in that phase is out of scope. The technique and its measured effect come from the September 7 experiment (`docs/experiments/2026-09-07-pifilm-refinement.md`), where the `highlights` control in `pifilm/experiments/candidates.py` was the most promising single change.
 
 ## Global Constraints
 
-- No new runtime or dev dependency; the module uses only NumPy and the existing `parr.color` / `parr.lut`.
-- Ruff clean, rules `E, F, I, B, UP`, line length 100. Run `.venv/bin/ruff check parr tests`.
+- No new runtime or dev dependency; the module uses only NumPy and the existing `pifilm.color` / `pifilm.lut`.
+- Ruff clean, rules `E, F, I, B, UP`, line length 100. Run `.venv/bin/ruff check pifilm tests`.
 - The highlight window and shape match the existing control exactly: a smoothstep ramp over input lightness from `0.55` to `0.90`, so a value of `1.0` fully removes the tone lift at the top and `0.0` changes nothing. These constants are `HIGHLIGHT_LOW = 0.55` and `HIGHLIGHT_HIGH = 0.90` in the new module.
-- `strength` (the `--highlights` value) is validated to be finite and in `[0, 1]`, matching `candidate_lut`'s validation in `parr/experiments/candidates.py:23-25`.
+- `strength` (the `--highlights` value) is validated to be finite and in `[0, 1]`, matching `candidate_lut`'s validation in `pifilm/experiments/candidates.py:23-25`.
 - `strength == 0.0` must return a LUT whose table is bit-for-bit identical to the input, so existing artifacts and tests are unchanged by default.
-- Highlight protection only lowers lightness lift; it never raises it. The grey axis stays neutral (chroma untouched on neutral nodes). In the trainer, monotonicity is re-imposed after protection with `enforce_monotone(enforce_grey_axis(enforce_monotone(...)))`, the same idiom `fit_lut` already uses at `parr/train/lutfit.py:181-182`.
-- Provenance: the applied value is recorded in `params.json`. For the preset it is a `highlights` key in the training dict; for the trainer it is a field of `FitConfig`, already serialised into `training["fit"]` via `asdict(cfg)` at `parr/train/fit.py:264`.
+- Highlight protection only lowers lightness lift; it never raises it. The grey axis stays neutral (chroma untouched on neutral nodes). In the trainer, monotonicity is re-imposed after protection with `enforce_monotone(enforce_grey_axis(enforce_monotone(...)))`, the same idiom `fit_lut` already uses at `pifilm/train/lutfit.py:181-182`.
+- Provenance: the applied value is recorded in `params.json`. For the preset it is a `highlights` key in the training dict; for the trainer it is a field of `FitConfig`, already serialised into `training["fit"]` via `asdict(cfg)` at `pifilm/train/fit.py:264`.
 
 ---
 
 ### Task 1: The highlight-protection operation
 
 **Files:**
-- Create: `parr/highlight.py`
+- Create: `pifilm/highlight.py`
 - Test: `tests/test_highlight.py`
 
 **Interfaces:**
-- Consumes: `LUT3D` (`parr/lut.py`); `srgb_to_oklab`, `oklab_to_srgb` (`parr/color.py`).
+- Consumes: `LUT3D` (`pifilm/lut.py`); `srgb_to_oklab`, `oklab_to_srgb` (`pifilm/color.py`).
 - Produces: `HIGHLIGHT_LOW = 0.55`, `HIGHLIGHT_HIGH = 0.90`; `protect_highlights(lut: LUT3D, strength: float, low: float = HIGHLIGHT_LOW, high: float = HIGHLIGHT_HIGH) -> LUT3D`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -41,11 +41,11 @@
 import numpy as np
 import pytest
 
-from parr.color import srgb_to_oklab
-from parr.highlight import protect_highlights
-from parr.lut import LUT3D
-from parr.train.evaluate import clipped_volume_fraction
-from parr.preset import starter_lut
+from pifilm.color import srgb_to_oklab
+from pifilm.highlight import protect_highlights
+from pifilm.lut import LUT3D
+from pifilm.train.evaluate import clipped_volume_fraction
+from pifilm.preset import starter_lut
 
 
 def _lightness(table: np.ndarray) -> np.ndarray:
@@ -114,12 +114,12 @@ def test_a_bad_window_is_rejected():
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `.venv/bin/pytest -q tests/test_highlight.py`
-Expected: `ModuleNotFoundError: No module named 'parr.highlight'`
+Expected: `ModuleNotFoundError: No module named 'pifilm.highlight'`
 
 - [ ] **Step 3: Write the minimal implementation**
 
 ```python
-# parr/highlight.py
+# pifilm/highlight.py
 """Reduce how much a LUT lifts the lightness of bright inputs.
 
 The saturated look this project targets pushes the top of the tone range up,
@@ -130,7 +130,7 @@ out. It works on any finished ``LUT3D`` -- the handcrafted starter or a trained
 fit -- so the same control shapes both looks.
 
 The mechanism is deliberately the one measured in the September 7 experiment
-(``parr/experiments/candidates.py``): a smoothstep over input lightness from
+(``pifilm/experiments/candidates.py``): a smoothstep over input lightness from
 0.55 to 0.90 scales down the lightness the LUT added, leaving chroma and hue
 untouched. It never raises lightness, so it cannot brighten a highlight; at
 most it holds it where the input was.
@@ -184,39 +184,39 @@ def protect_highlights(
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `.venv/bin/pytest -q tests/test_highlight.py && .venv/bin/ruff check parr tests`
+Run: `.venv/bin/pytest -q tests/test_highlight.py && .venv/bin/ruff check pifilm tests`
 Expected: `8 passed`, `All checks passed!`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add parr/highlight.py tests/test_highlight.py
+git add pifilm/highlight.py tests/test_highlight.py
 git commit -m "Add highlight protection: reduce a LUT's lightness lift in bright inputs"
 ```
 
 ---
 
-### Task 2: `--highlights` on `parr-preset`
+### Task 2: `--highlights` on `pifilm-preset`
 
 **Files:**
-- Modify: `parr/preset.py` (`write_starter` at lines 47-57; `main` at lines 60-67)
+- Modify: `pifilm/preset.py` (`write_starter` at lines 47-57; `main` at lines 60-67)
 - Modify: `docs/training.md` (the "Try the starter look" area in the README is separate; this touches the training guide's flag table only if present — see Step 5)
 - Test: `tests/test_preset.py`
 
 **Interfaces:**
 - Consumes: `protect_highlights` from Task 1.
-- Produces: `write_starter(out: str | Path, highlights: float = 0.0) -> Path`; `parr-preset --highlights FLOAT` (default 0.0).
+- Produces: `write_starter(out: str | Path, highlights: float = 0.0) -> Path`; `pifilm-preset --highlights FLOAT` (default 0.0).
 
 - [ ] **Step 1: Write the failing tests**
 
 ```python
 # add to tests/test_preset.py
-from parr.highlight import protect_highlights
-from parr.preset import main as preset_main
+from pifilm.highlight import protect_highlights
+from pifilm.preset import main as preset_main
 
 
 def test_write_starter_applies_highlight_protection_and_records_it(tmp_path):
-    from parr.artifacts import Artifacts
+    from pifilm.artifacts import Artifacts
 
     art = Artifacts.load(write_starter(tmp_path / "protected", highlights=0.6))
     assert art.training["highlights"] == 0.6
@@ -225,7 +225,7 @@ def test_write_starter_applies_highlight_protection_and_records_it(tmp_path):
 
 
 def test_write_starter_default_is_the_unprotected_starter(tmp_path):
-    from parr.artifacts import Artifacts
+    from pifilm.artifacts import Artifacts
 
     art = Artifacts.load(write_starter(tmp_path / "plain"))
     assert art.training["highlights"] == 0.0
@@ -233,7 +233,7 @@ def test_write_starter_default_is_the_unprotected_starter(tmp_path):
 
 
 def test_preset_cli_accepts_highlights(tmp_path):
-    from parr.artifacts import Artifacts
+    from pifilm.artifacts import Artifacts
 
     code = preset_main(["--out", str(tmp_path / "cli"), "--highlights", "0.5"])
     assert code == 0
@@ -247,7 +247,7 @@ Expected: FAIL — `write_starter() got an unexpected keyword argument 'highligh
 
 - [ ] **Step 3: Write the minimal implementation**
 
-In `parr/preset.py`, add the import and rewrite `write_starter` and `main`:
+In `pifilm/preset.py`, add the import and rewrite `write_starter` and `main`:
 
 ```python
 from .highlight import protect_highlights
@@ -271,7 +271,7 @@ def write_starter(out: str | Path, highlights: float = 0.0) -> Path:
 
 ```python
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, prog="parr-preset")
+    parser = argparse.ArgumentParser(description=__doc__, prog="pifilm-preset")
     parser.add_argument("--out", type=Path, default=Path("artifacts/starter"))
     parser.add_argument(
         "--highlights", type=float, default=0.0,
@@ -288,31 +288,31 @@ def main(argv: list[str] | None = None) -> int:
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `.venv/bin/pytest -q tests/test_preset.py && .venv/bin/ruff check parr tests`
+Run: `.venv/bin/pytest -q tests/test_preset.py && .venv/bin/ruff check pifilm tests`
 Expected: all pass, including the three new tests and the pre-existing starter tests; ruff clean.
 
 - [ ] **Step 5: Update the README's starter section**
 
-In `README.md`, the "Using the tools directly" section documents `parr-preset --out artifacts/starter-v1`. Add one sentence after that command: "Pass `--highlights 0.6` to hold coloured highlights back from clipping; `0` (the default) is the current look." (If this branch does not contain that README section because it was cut from `main`, add the sentence to the `parr-preset` paragraph wherever the command appears; do not create a new section.)
+In `README.md`, the "Using the tools directly" section documents `pifilm-preset --out artifacts/starter-v1`. Add one sentence after that command: "Pass `--highlights 0.6` to hold coloured highlights back from clipping; `0` (the default) is the current look." (If this branch does not contain that README section because it was cut from `main`, add the sentence to the `pifilm-preset` paragraph wherever the command appears; do not create a new section.)
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add parr/preset.py tests/test_preset.py README.md
-git commit -m "parr-preset: --highlights control, recorded in the artifact"
+git add pifilm/preset.py tests/test_preset.py README.md
+git commit -m "pifilm-preset: --highlights control, recorded in the artifact"
 ```
 
 ---
 
-### Task 3: `--highlights` on `parr-train`
+### Task 3: `--highlights` on `pifilm-train`
 
 **Files:**
-- Modify: `parr/train/fit.py` (`FitConfig` at lines with the dataclass fields; `fit()` after the `fit_lut` call; `build_parser` at lines 285-322)
+- Modify: `pifilm/train/fit.py` (`FitConfig` at lines with the dataclass fields; `fit()` after the `fit_lut` call; `build_parser` at lines 285-322)
 - Test: `tests/test_fit.py`
 
 **Interfaces:**
-- Consumes: `protect_highlights` from Task 1; `enforce_grey_axis`, `enforce_monotone` from `parr/train/lutfit.py`.
-- Produces: `FitConfig.highlights: float = 0.0`; `parr-train --highlights FLOAT` (default 0.0); the value recorded in `training["fit"]["highlights"]`.
+- Consumes: `protect_highlights` from Task 1; `enforce_grey_axis`, `enforce_monotone` from `pifilm/train/lutfit.py`.
+- Produces: `FitConfig.highlights: float = 0.0`; `pifilm-train --highlights FLOAT` (default 0.0); the value recorded in `training["fit"]["highlights"]`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -320,11 +320,11 @@ git commit -m "parr-preset: --highlights control, recorded in the artifact"
 # add to tests/test_fit.py
 import numpy as np
 
-from parr.train.evaluate import channels_are_monotone, grey_axis_is_monotone
-from parr.train.fit import FitConfig, build_parser
-from parr.train.lutfit import enforce_grey_axis, enforce_monotone
-from parr.highlight import protect_highlights
-from parr.preset import starter_lut
+from pifilm.train.evaluate import channels_are_monotone, grey_axis_is_monotone
+from pifilm.train.fit import FitConfig, build_parser
+from pifilm.train.lutfit import enforce_grey_axis, enforce_monotone
+from pifilm.highlight import protect_highlights
+from pifilm.preset import starter_lut
 
 
 def test_fitconfig_has_a_highlights_field_defaulting_to_zero():
@@ -351,7 +351,7 @@ Also assert `fit()` applies protection. Add a fast, corpus-free test that drives
 
 ```python
 def test_fit_applies_highlight_protection_to_the_result():
-    from parr.train.dataset import PixelPool
+    from pifilm.train.dataset import PixelPool
 
     rng = np.random.default_rng(0)
     srgb = rng.random((400, 3)).astype(np.float32)
@@ -365,7 +365,7 @@ def test_fit_applies_highlight_protection_to_the_result():
     assert not np.array_equal(plain.table, protected.table)
 ```
 
-Before writing that last test, read `parr/train/dataset.py` for the real `PixelPool` constructor: it takes `srgb` and derives `lab`; confirm the exact required fields and adapt `pool = PixelPool(...)`. Add a small helper `_fit_lut_of(pool, highlights)` in the test that builds a `FitConfig(iterations=2, lut_size=9, highlights=highlights)` and calls `fit(pool, pool, cfg)` (source and target the same pool is fine for a mechanism test), returning `result.lut`. Keep `lut_size` small so the test is fast. If `fit()` with identical source and target and tiny size is unstable, use two independently sampled pools of the same shape.
+Before writing that last test, read `pifilm/train/dataset.py` for the real `PixelPool` constructor: it takes `srgb` and derives `lab`; confirm the exact required fields and adapt `pool = PixelPool(...)`. Add a small helper `_fit_lut_of(pool, highlights)` in the test that builds a `FitConfig(iterations=2, lut_size=9, highlights=highlights)` and calls `fit(pool, pool, cfg)` (source and target the same pool is fine for a mechanism test), returning `result.lut`. Keep `lut_size` small so the test is fast. If `fit()` with identical source and target and tiny size is unstable, use two independently sampled pools of the same shape.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -374,7 +374,7 @@ Expected: FAIL — `FitConfig` has no `highlights` field; `build_parser` has no 
 
 - [ ] **Step 3: Write the minimal implementation**
 
-In `parr/train/fit.py`:
+In `pifilm/train/fit.py`:
 
 Add the field to `FitConfig` (after `neutral_axis_cap`), with validation in `__post_init__` mirroring the existing checks:
 
@@ -413,16 +413,16 @@ In `build_parser`, add next to `--neutral-axis-cap` (using the `fd = FitConfig()
                         help="protect coloured highlights: 0 = off, up to 1 removes the top tone lift")
 ```
 
-In `main()`, the `FitConfig(...)` construction must pass the new arg. Find the `cfg = FitConfig(` call and add `highlights=args.highlights,` to it. The value is then recorded automatically: `training["fit"]` is `{**asdict(cfg), ...}` at `parr/train/fit.py:264`.
+In `main()`, the `FitConfig(...)` construction must pass the new arg. Find the `cfg = FitConfig(` call and add `highlights=args.highlights,` to it. The value is then recorded automatically: `training["fit"]` is `{**asdict(cfg), ...}` at `pifilm/train/fit.py:264`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `.venv/bin/pytest -q tests/test_fit.py && .venv/bin/ruff check parr tests`
+Run: `.venv/bin/pytest -q tests/test_fit.py && .venv/bin/ruff check pifilm tests`
 Expected: all pass; ruff clean.
 
 - [ ] **Step 5: Update the training guide**
 
-In `docs/training.md`, section 7 has a table of `parr-train` flags. Add a row:
+In `docs/training.md`, section 7 has a table of `pifilm-train` flags. Add a row:
 
 ```
 | `--highlights` | 0.0 | Protects coloured highlights by reducing the LUT's tone lift at the top of the range; 0 is off. Applied after the fit and before the final monotone projection. |
@@ -433,8 +433,8 @@ If the exact table wording differs, match its column layout. Also add one line t
 - [ ] **Step 6: Commit**
 
 ```bash
-git add parr/train/fit.py tests/test_fit.py docs/training.md
-git commit -m "parr-train: --highlights control, applied after the fit and recorded"
+git add pifilm/train/fit.py tests/test_fit.py docs/training.md
+git commit -m "pifilm-train: --highlights control, applied after the fit and recorded"
 ```
 
 ---
@@ -444,17 +444,17 @@ git commit -m "parr-train: --highlights control, applied after the fit and recor
 The unit tests prove the mechanism (lift reduced in highlights, chroma preserved, boundary occupancy down, monotonicity held). The quality claim from the roadmap needs the frozen regression set, which is gitignored and absent from a clone. When that data is on the training machine, run the September 7 comparison to confirm the numbers move the right way:
 
 ```sh
-.venv/bin/parr-preset --out artifacts/starter-hi --highlights 0.6
-.venv/bin/python -m parr.experiments.evaluate \
+.venv/bin/pifilm-preset --out artifacts/starter-hi --highlights 0.6
+.venv/bin/python -m pifilm.experiments.evaluate \
   --snapshot data/refinement-2026-09-07/regression \
   --artifacts artifacts/starter-hi \
   --out data/refinement-2026-09-07/highlight-comparison
 ```
 
-Expected, per `docs/experiments/2026-09-07-parr-refinement.md`: in the coloured-highlight mask, mean chroma rises and channel-boundary occupancy falls, while shaded skin does not warm. Record it in a dated `docs/experiments/` note before promoting a value into the shipped starter or a trained look.
+Expected, per `docs/experiments/2026-09-07-pifilm-refinement.md`: in the coloured-highlight mask, mean chroma rises and channel-boundary occupancy falls, while shaded skin does not warm. Record it in a dated `docs/experiments/` note before promoting a value into the shipped starter or a trained look.
 
 ## Self-review
 
-- **Spec coverage.** Phase 9 path 1 (bake into the LUT, promote the `candidates.py` highlights control into `parr-preset` and `parr-train`): Task 1 is the general operation, Task 2 the preset, Task 3 the trainer. Path 2 (runtime blend) is explicitly out of scope in the header. The "zero runtime cost, ships inside the `.cube`" property holds: protection happens at build/fit time, not in `Pipeline.process`.
+- **Spec coverage.** Phase 9 path 1 (bake into the LUT, promote the `candidates.py` highlights control into `pifilm-preset` and `pifilm-train`): Task 1 is the general operation, Task 2 the preset, Task 3 the trainer. Path 2 (runtime blend) is explicitly out of scope in the header. The "zero runtime cost, ships inside the `.cube`" property holds: protection happens at build/fit time, not in `Pipeline.process`.
 - **Placeholder scan.** Every code step has real code. The one place that says "read the real `PixelPool` constructor" (Task 3, Step 1) is a genuine instruction to confirm a signature this plan does not own, not a placeholder for logic; the surrounding test is concrete.
-- **Type consistency.** `protect_highlights(lut, strength, low, high) -> LUT3D` is defined in Task 1 and called with those names in Tasks 2 and 3. `write_starter(out, highlights=0.0)` is defined and called consistently. `FitConfig.highlights` is added in Task 3 and read in the same task. `HIGHLIGHT_LOW`/`HIGHLIGHT_HIGH` are defined once in Task 1 and not redefined. The re-projection idiom matches `parr/train/lutfit.py:181-182` verbatim.
+- **Type consistency.** `protect_highlights(lut, strength, low, high) -> LUT3D` is defined in Task 1 and called with those names in Tasks 2 and 3. `write_starter(out, highlights=0.0)` is defined and called consistently. `FitConfig.highlights` is added in Task 3 and read in the same task. `HIGHLIGHT_LOW`/`HIGHLIGHT_HIGH` are defined once in Task 1 and not redefined. The re-projection idiom matches `pifilm/train/lutfit.py:181-182` verbatim.

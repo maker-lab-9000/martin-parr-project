@@ -1,4 +1,4 @@
-"""``parr-fetch``: download a chosen reference category from Wikimedia Commons.
+"""``pifilm-fetch``: download a chosen reference category from Wikimedia Commons.
 
 Why Commons and not loc.gov
 ---------------------------
@@ -46,7 +46,7 @@ import numpy as np
 from PIL import Image
 
 API_URL = "https://commons.wikimedia.org/w/api.php"
-USER_AGENT = "martin-parr-project/0.1 (local reference LUT trainer) python-requests"
+USER_AGENT = "pi-film-reversal/0.1 (local reference LUT trainer) python-requests"
 SKIP_WORDS = ("cropped", "restored", "retouched", "colorized", "colourized", "edit")
 MIN_LONG_SIDE = 800
 LICENCE_ALLOWLIST = {"public domain", "cc0", "pdm", "no restrictions"}
@@ -463,7 +463,7 @@ def write_attribution(manifest_path: str | Path, out_path: str | Path) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="parr-fetch",
+        prog="pifilm-fetch",
         description="Download a chosen Commons reference category with licence metadata.",
     )
     parser.add_argument("--out", type=Path, default=Path("data/references"))

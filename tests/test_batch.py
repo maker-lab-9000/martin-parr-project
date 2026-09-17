@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from parr.capture.batch import main, output_path, process_dir, select_inputs
-from parr.imageio import save_jpeg
+from pifilm.capture.batch import main, output_path, process_dir, select_inputs
+from pifilm.imageio import save_jpeg
 
 
 def _img(seed=0):
@@ -15,7 +15,7 @@ def _capture_dir(tmp_path):
     d.mkdir()
     for stem in ("120001", "120002"):
         save_jpeg(_img(1), d / f"{stem}_original.jpg")
-        save_jpeg(_img(2), d / f"{stem}_parr.jpg")
+        save_jpeg(_img(2), d / f"{stem}_graded.jpg")
     (d / "captures.jsonl").write_text("{}\n")
     return d
 
@@ -31,7 +31,7 @@ def test_select_inputs_all_still_skips_graded(tmp_path):
     save_jpeg(_img(3), d / "loose.jpg")
     chosen = [p.name for p in select_inputs(sorted(d.glob("*.jpg")), all_files=True)]
     assert "loose.jpg" in chosen
-    assert not any("_parr" in n for n in chosen)
+    assert not any("_graded" in n for n in chosen)
 
 
 def test_plain_folder_processes_everything(tmp_path):
@@ -46,8 +46,8 @@ def test_capture_dir_is_not_double_graded(tmp_path):
     d = _capture_dir(tmp_path)
     result = process_dir(d, tmp_path / "out")
     assert [p.name for p in result.written] == [
-        "120001_original_parr.jpg",
-        "120002_original_parr.jpg",
+        "120001_original_graded.jpg",
+        "120002_original_graded.jpg",
     ]
     assert result.skipped_graded == 2
 
@@ -60,14 +60,14 @@ def test_same_stem_different_extensions_do_not_collide(tmp_path):
 
     Image.fromarray(_img(2)).save(d / "a.png")
     written = {p.name for p in process_dir(d, tmp_path / "out").written}
-    assert written == {"a_jpg_parr.jpg", "a_png_parr.jpg"}
+    assert written == {"a_jpg_graded.jpg", "a_png_graded.jpg"}
 
 
 def test_output_path_without_disambiguation():
     from pathlib import Path
 
-    assert output_path(Path("x/a.jpg"), Path("out"), False).name == "a_parr.jpg"
-    assert output_path(Path("x/a.jpg"), Path("out"), True).name == "a_jpg_parr.jpg"
+    assert output_path(Path("x/a.jpg"), Path("out"), False).name == "a_graded.jpg"
+    assert output_path(Path("x/a.jpg"), Path("out"), True).name == "a_jpg_graded.jpg"
 
 
 def test_existing_outputs_are_skipped_then_overwritten(tmp_path):

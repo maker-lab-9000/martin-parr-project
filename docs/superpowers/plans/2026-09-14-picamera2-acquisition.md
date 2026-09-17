@@ -4,7 +4,7 @@
 
 **Goal:** Capture native 4608 × 2592 IMX708 RGB frames through the existing camera protocol, preserving USB/fake capture and recording negotiated stream information.
 
-**Architecture:** Keep `Frame` and `Camera` unchanged. Add a lazily imported Picamera2 backend in its own module, with request ownership entirely inside `read()`. Extend `StreamInfo` with optional sensor fields and integrate backend selection into the existing CLI. The existing session saves `_ungraded.jpg` and `_parr.jpg`; original JPEG/DNG ownership belongs to Phase 3.
+**Architecture:** Keep `Frame` and `Camera` unchanged. Add a lazily imported Picamera2 backend in its own module, with request ownership entirely inside `read()`. Extend `StreamInfo` with optional sensor fields and integrate backend selection into the existing CLI. The existing session saves `_ungraded.jpg` and `_graded.jpg`; original JPEG/DNG ownership belongs to Phase 3.
 
 **Tech Stack:** Python, NumPy, pytest, Ruff; Picamera2/libcamera supplied by Raspberry Pi OS apt packages, never added to pip dependencies.
 
@@ -32,7 +32,7 @@ Checked 2026-09-14 against upstream; hardware acceptance must also record the in
 
 ## Task 1: backend and stream metadata
 
-**Files:** create `parr/capture/picamera.py`, `tests/test_picamera.py`; modify `parr/capture/camera.py` and `tests/test_camera.py`.
+**Files:** create `pifilm/capture/picamera.py`, `tests/test_picamera.py`; modify `pifilm/capture/camera.py` and `tests/test_camera.py`.
 
 **Interfaces:**
 
@@ -42,7 +42,7 @@ sensor_mode: str | None = None
 bit_depth: int | None = None
 tuning_file: str | None = None
 
-# parr.capture.picamera
+# pifilm.capture.picamera
 DEFAULT_TUNING_FILE = "imx708_wide.json"
 class Picamera2Camera:
     def __init__(self, tuning_file: str = DEFAULT_TUNING_FILE): ...
@@ -97,12 +97,12 @@ finally:
     request.release()
 ```
 
-- [ ] Run focused tests and `.venv/bin/ruff check parr tests`. Report RED/GREEN and exact changes; controller reviews before Task 2.
+- [ ] Run focused tests and `.venv/bin/ruff check pifilm tests`. Report RED/GREEN and exact changes; controller reviews before Task 2.
 - [ ] Controller commit: `Add native Picamera2 acquisition backend` after review (may batch Git approval with Task 2).
 
 ## Task 2: CLI selection, end-to-end fake acceptance and setup
 
-**Files:** modify `parr/capture/app.py`, `tests/test_app.py`, `tests/test_picamera.py`, `docs/setup.md`, `README.md`. Reuse the backend fake fixture in `tests/test_picamera.py` for the native session/thumbnail integration test rather than duplicating it in app tests.
+**Files:** modify `pifilm/capture/app.py`, `tests/test_app.py`, `tests/test_picamera.py`, `docs/setup.md`, `README.md`. Reuse the backend fake fixture in `tests/test_picamera.py` for the native session/thumbnail integration test rather than duplicating it in app tests.
 
 **Interfaces:** `--camera {v4l2,picamera2}` and `--tuning-file NAME_OR_PATH`. Existing `--device` remains V4L2-specific. Preserve `--fake` as a hardware bypass.
 
@@ -116,13 +116,13 @@ parser.add_argument("--tuning-file", help="Picamera2 tuning filename or absolute
 
 - [ ] Run `.venv/bin/python -m pytest tests/test_app.py -q` and observe the new selection tests fail before wiring.
 - [ ] Wire selection into the current camera-construction try/except and keep cleanup/controller ownership unchanged. Rename USB-only parser description. Do not change the existing capture/remote loops.
-- [ ] Add a fake-backed CaptureSession test in `tests/test_picamera.py` exercising the real new backend: load a tiny LUT, capture native RGB, assert saved `_ungraded.jpg` and `_parr.jpg` have native dimensions and JSONL contains actual sensor fields; verify a 240 × 135 bounded thumbnail through the existing thumbnail function. No JPEG/DNG claims in Phase 1.
+- [ ] Add a fake-backed CaptureSession test in `tests/test_picamera.py` exercising the real new backend: load a tiny LUT, capture native RGB, assert saved `_ungraded.jpg` and `_graded.jpg` have native dimensions and JSONL contains actual sensor fields; verify a 240 × 135 bounded thumbnail through the existing thumbnail function. No JPEG/DNG claims in Phase 1.
 - [ ] Update setup and README with a concise link to `docs/picamera2-bringup.md` and apt Picamera2, system-site-packages venv, explicit backend/tuning command, `rpicam-hello --list-cameras`, coloured-patch check, saved dimensions/metadata verification, and USB/fake commands. Warn that an installed Picamera2 changes default selection; the USB service should explicitly use `--camera v4l2` until migrated. No deployment or service edits on a remote host without knowing the correct host and hardware.
 - [ ] Run camera/app/thumbnail/controller focused tests and Ruff. Controller runs full suite once, reviews, updates separate progress and commits `Select Picamera2 capture from CLI and document bring-up`.
 
 ## Hardware acceptance gate
 
-On the identified Pi 4, first inspect OS, model, installed Picamera2/libcamera versions and camera enumeration. Confirm the delivered lens/tuning variant. Once setup and service ownership are understood, use `parr-capture --camera picamera2 --no-preview` with explicit tuning and a new output directory. Take coloured-patch and ordinary frames; verify native dimensions, correct RGB order, recorded mode/bit depth/tuning, no repeated buffer exhaustion, and remote thumbnail behaviour. Record measured outcomes in progress; tests using fakes do not complete this gate.
+On the identified Pi 4, first inspect OS, model, installed Picamera2/libcamera versions and camera enumeration. Confirm the delivered lens/tuning variant. Once setup and service ownership are understood, use `pifilm-capture --camera picamera2 --no-preview` with explicit tuning and a new output directory. Take coloured-patch and ordinary frames; verify native dimensions, correct RGB order, recorded mode/bit depth/tuning, no repeated buffer exhaustion, and remote thumbnail behaviour. Record measured outcomes in progress; tests using fakes do not complete this gate.
 
 ## Self-review
 

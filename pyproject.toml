@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "martin-parr-project"
+name = "pi-film-reversal"
 version = "0.1.0"
 description = "Saturated color-negative grading and reference-trained 3D LUTs for USB cameras"
 readme = "README.md"
@@ -20,18 +20,18 @@ deploy = ["paramiko>=3.4"]
 dev = ["opencv-python>=4.8", "pytest>=7.4", "ruff>=0.4", "build>=1.0"]
 
 [project.scripts]
-parr-fetch = "parr.train.fetch:main"
-parr-train = "parr.train.fit:main"
-parr-capture = "parr.capture.app:main"
-parr-process = "parr.capture.batch:main"
-parr-preset = "parr.preset:main"
-parr-battery = "parr.capture.power:main"
+pifilm-fetch = "pifilm.train.fetch:main"
+pifilm-train = "pifilm.train.fit:main"
+pifilm-capture = "pifilm.capture.app:main"
+pifilm-process = "pifilm.capture.batch:main"
+pifilm-preset = "pifilm.preset:main"
+pifilm-battery = "pifilm.capture.power:main"
 
 [tool.setuptools.packages.find]
-include = ["parr*"]
+include = ["pifilm*"]
 
 [tool.setuptools.package-data]
-parr = ["data/*.cube", "data/*.json"]
+pifilm = ["data/*.cube", "data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

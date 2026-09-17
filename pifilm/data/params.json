@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "lut_file": "parr.cube",
+  "lut_file": "pifilm.cube",
   "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
   "normalize": {
     "white_balance": true,

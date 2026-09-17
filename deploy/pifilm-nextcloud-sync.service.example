@@ -1,5 +1,5 @@
 [Unit]
-Description=Sync Martin Parr photos to Nextcloud over WebDAV
+Description=Sync pi-film-reversal photos to Nextcloud over WebDAV
 # The script gates on eth0 anyway, so it is safe to run before the LAN is up;
 # these hints just avoid firing during early boot.
 After=network-online.target
@@ -8,7 +8,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=george
-WorkingDirectory=/home/george/repos/martin-parr-project
+WorkingDirectory=/home/george/repos/pi-film-reversal
 # Without this, Python block-buffers stdout when it isn't a tty and the run's
 # summary line never reaches the journal.
 Environment=PYTHONUNBUFFERED=1
@@ -17,6 +17,6 @@ Environment=PYTHONUNBUFFERED=1
 # connect, so the timer can fire it on any boot. rclone copy only ever adds or
 # updates; it never deletes a remote file. The password is obscured and passed
 # to rclone via RCLONE_CONFIG_* env vars, never on the command line.
-ExecStart=/home/george/repos/martin-parr-project/.venv/bin/python /home/george/repos/martin-parr-project/scripts/nextcloud_sync.py --apply --env /home/george/repos/martin-parr-project/.env
+ExecStart=/home/george/repos/pi-film-reversal/.venv/bin/python /home/george/repos/pi-film-reversal/scripts/nextcloud_sync.py --apply --env /home/george/repos/pi-film-reversal/.env
 
-# Triggered by parr-nextcloud-sync.timer; no [Install] section (not enabled on its own).
+# Triggered by pifilm-nextcloud-sync.timer; no [Install] section (not enabled on its own).

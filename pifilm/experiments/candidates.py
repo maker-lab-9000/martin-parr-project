@@ -87,7 +87,7 @@ def write_candidates(out, baseline):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, required=True)
-    parser.add_argument('--baseline', type=Path, default=Path('parr/data'))
+    parser.add_argument('--baseline', type=Path, default=Path('pifilm/data'))
     args = parser.parse_args()
     write_candidates(args.out, args.baseline)
 

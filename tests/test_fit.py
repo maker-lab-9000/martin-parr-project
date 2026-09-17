@@ -3,17 +3,17 @@ import json
 import numpy as np
 import pytest
 
-from parr.artifacts import Artifacts
-from parr.color import lch_to_oklab, oklab_to_lch, oklab_to_srgb, srgb_to_oklab
-from parr.grain import GrainParams
-from parr.highlight import protect_highlights
-from parr.imageio import save_jpeg
-from parr.lut import LUT3D
-from parr.preset import starter_lut
-from parr.train.dataset import PixelPool, SampleConfig
-from parr.train.evaluate import channels_are_monotone, grey_axis_is_monotone
-from parr.train.fit import FitConfig, build_parser, fit, main, train
-from parr.train.lutfit import enforce_grey_axis, enforce_monotone
+from pifilm.artifacts import Artifacts
+from pifilm.color import lch_to_oklab, oklab_to_lch, oklab_to_srgb, srgb_to_oklab
+from pifilm.grain import GrainParams
+from pifilm.highlight import protect_highlights
+from pifilm.imageio import save_jpeg
+from pifilm.lut import LUT3D
+from pifilm.preset import starter_lut
+from pifilm.train.dataset import PixelPool, SampleConfig
+from pifilm.train.evaluate import channels_are_monotone, grey_axis_is_monotone
+from pifilm.train.fit import FitConfig, build_parser, fit, main, train
+from pifilm.train.lutfit import enforce_grey_axis, enforce_monotone
 
 
 def _curve_and_rotation(lab, gamma=1.15, chroma=1.25, degrees=10.0):
@@ -155,7 +155,7 @@ def test_train_leaves_the_previous_artifact_intact_if_publication_fails(tmp_path
     good = (out / "params.json").read_text()
 
     monkeypatch.setattr(
-        "parr.train.fit.publish", lambda *a, **k: (_ for _ in ()).throw(OSError("disk full"))
+        "pifilm.train.fit.publish", lambda *a, **k: (_ for _ in ()).throw(OSError("disk full"))
     )
     with pytest.raises(OSError):
         train(tmp_path / "src", tmp_path / "tgt", out, cfg, sample, None, allow_small=True)
@@ -164,7 +164,7 @@ def test_train_leaves_the_previous_artifact_intact_if_publication_fails(tmp_path
     # assertion the whole try/finally can be deleted and the test stays green:
     # the mocked publish raises before touching out_dir, so the params check
     # above passes either way.
-    leftover = list(out.parent.glob(".parr-staging-*"))
+    leftover = list(out.parent.glob(".pifilm-staging-*"))
     assert leftover == [], f"staging directory left behind: {leftover}"
 
 
@@ -207,8 +207,8 @@ def test_main_refuses_a_small_corpus_then_accepts_the_flag(tmp_path, capsys):
 def test_main_reports_a_failed_gate_with_exit_code_3(tmp_path, monkeypatch, capsys):
     _image_dir(tmp_path / "src", 8, 0)
     _image_dir(tmp_path / "tgt", 8, 1, transform=lambda im: im**1.3)
-    from parr.train import fit as fit_module
-    from parr.train.evaluate import Gate
+    from pifilm.train import fit as fit_module
+    from pifilm.train.evaluate import Gate
 
     monkeypatch.setattr(
         fit_module, "check_gates",

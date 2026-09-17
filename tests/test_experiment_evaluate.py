@@ -4,17 +4,17 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from parr.experiments.regression import freeze_regression
-from parr.preset import write_starter
+from pifilm.experiments.regression import freeze_regression
+from pifilm.preset import write_starter
 
 
 def test_paired_evaluation_is_deterministic_and_refuses_overwrite(tmp_path):
-    from parr.experiments.evaluate import evaluate_candidates
+    from pifilm.experiments.evaluate import evaluate_candidates
     source, v3 = tmp_path / 'source', tmp_path / 'v3'
     source.mkdir()
     v3.mkdir()
     rgb = np.random.default_rng(4).integers(30, 220, (32, 40, 3), dtype=np.uint8)
-    for path in [source / 'a_ungraded.jpg', source / 'a_parr.jpg', v3 / 'a_ungraded_parr.jpg']:
+    for path in [source / 'a_ungraded.jpg', source / 'a_graded.jpg', v3 / 'a_ungraded_graded.jpg']:
         Image.fromarray(rgb).save(path)
     (source / 'captures.jsonl').write_text(json.dumps(
         {'original': 'a_ungraded.jpg', 'grain_seed': 20, 'lut_sha1': 'fixture'}))
@@ -35,7 +35,7 @@ def test_paired_evaluation_is_deterministic_and_refuses_overwrite(tmp_path):
 
 
 def test_empty_region_is_reported_as_empty_not_nan():
-    from parr.experiments.evaluate import image_metrics
+    from pifilm.experiments.evaluate import image_metrics
     result = image_metrics(np.zeros((10, 10, 3), dtype=np.uint8),
                            np.zeros((10, 10, 3), dtype=np.uint8))
     assert result['regions']['coloured_highlights'] == {'pixels': 0}

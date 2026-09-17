@@ -3,11 +3,11 @@
 import numpy as np
 import pytest
 
-from parr.color import oklab_to_linear, srgb_to_oklab
-from parr.highlight import protect_highlights
-from parr.lut import LUT3D
-from parr.preset import starter_lut
-from parr.train.evaluate import clipped_volume_fraction
+from pifilm.color import oklab_to_linear, srgb_to_oklab
+from pifilm.highlight import protect_highlights
+from pifilm.lut import LUT3D
+from pifilm.preset import starter_lut
+from pifilm.train.evaluate import clipped_volume_fraction
 
 
 def _lightness(table: np.ndarray) -> np.ndarray:

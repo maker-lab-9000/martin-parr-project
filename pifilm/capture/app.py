@@ -1,4 +1,4 @@
-"""``parr-capture``: live preview, press SPACE, get two JPEGs.
+"""``pifilm-capture``: live preview, press SPACE, get two JPEGs.
 
 Structure
 ---------
@@ -31,7 +31,7 @@ For the USB camera (V4L2) it is the camera's own JPEG bytes, written verbatim.
 For Picamera2, which has no separate camera JPEG, it is a single JPEG encode of
 the ISP's RGB frame; that frame is always the camera's own full-quality
 rendering, so it is named ``_original.jpg`` whether or not a DNG sidecar is
-also saved. ``HHMMSS_parr.jpg`` is the graded version. ``_ungraded.jpg`` is
+also saved. ``HHMMSS_graded.jpg`` is the graded version. ``_ungraded.jpg`` is
 used only for the V4L2 fallback, when there is no camera JPEG to save
 verbatim (raw mode unsupported, or a captured buffer failed validation). When
 the backend supplies a raw frame and DNG saving is enabled, a ``<stem>.dng``
@@ -79,7 +79,7 @@ from .remote import RemoteCaptureServer
 
 cv2 = require_cv2()
 
-DEFAULT_OUT = Path("~/Pictures/parr")
+DEFAULT_OUT = Path("~/Pictures/pifilm")
 WINDOW_NAME = "Parr  [SPACE capture | P toggle grade | Q quit]"
 CAPTURE_WINDOW_NAME = "Parr captures  [SPACE capture | Q quit]"
 
@@ -87,7 +87,7 @@ CAPTURE_WINDOW_NAME = "Parr captures  [SPACE capture | Q quit]"
 @dataclass
 class CaptureResult:
     original: Path
-    parr: Path
+    pifilm: Path
     record: dict
 
 
@@ -143,13 +143,13 @@ class CaptureSession:
             dng_path = day_dir / f"{stem}.dng"
             dng_path.write_bytes(frame.dng)
             dng_name = dng_path.name
-        parr = save_jpeg(graded, day_dir / f"{stem}_parr.jpg")
+        pifilm = save_jpeg(graded, day_dir / f"{stem}_graded.jpg")
         shutter_to_saved_ms = (time.perf_counter() - shutter) * 1000.0
 
         record = {
             "timestamp": t.isoformat(timespec="seconds"),
             "original": original.name,
-            "parr": parr.name,
+            "pifilm": pifilm.name,
             "frame_source": frame.source,
             **info,
             "grain_seed": seed,
@@ -163,7 +163,7 @@ class CaptureSession:
         }
         with (day_dir / "captures.jsonl").open("a") as fh:
             fh.write(json.dumps(record) + "\n")
-        return CaptureResult(original, parr, record)
+        return CaptureResult(original, pifilm, record)
 
     def preview_frame(self, graded: bool = True, size: tuple[int, int] = (640, 360)) -> np.ndarray:
         # full=False: the live preview must not pay Picamera2's per-frame autofocus
@@ -179,7 +179,7 @@ def _announce(result: CaptureResult, out: Callable[[str], None]) -> None:
     clamps = [k for k, v in r["clamped"].items() if v]
     note = f" (clamped: {', '.join(clamps)})" if clamps else ""
     out(
-        f"Saved {result.parr.name} + {result.original.name} in "
+        f"Saved {result.pifilm.name} + {result.original.name} in "
         f"{r['shutter_to_saved_ms']:.0f} ms; wb={r['wb_gains']} "
         + (f"levels gamma={r['levels']['gamma']} stretch={r['levels']['stretch']}"
            if r.get("levels") else f"exposure={r['exposure_gain']}")
@@ -368,7 +368,7 @@ def run_preview_loop(
                         assert job is not None
                         assert isinstance(job.result, CaptureResult)
                         _announce(job.result, print)
-                        frame, _ = load_rgb(job.result.parr)
+                        frame, _ = load_rgb(job.result.pifilm)
                         captured_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
                         displayed_frame = _fit_display(captured_frame, display_size)
                         cv2.imshow(window_name, displayed_frame)
@@ -520,7 +520,7 @@ def _reject_picamera2_only_flags(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="parr-capture",
+        prog="pifilm-capture",
         description="Capture Parr-graded photos from a supported camera.",
     )
     parser.add_argument("--camera", choices=("v4l2", "picamera2"))
@@ -570,7 +570,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, default=None, help="seed the grain seed generator")
     parser.add_argument(
         "--remote-listen", type=_remote_listen, metavar="HOST:PORT",
-        help="serve the authenticated remote capture API (requires PARR_REMOTE_TOKEN)",
+        help="serve the authenticated remote capture API (requires PIFILM_REMOTE_TOKEN)",
     )
     parser.add_argument(
         "--ups", choices=UPS_CHOICES, default="none",
@@ -586,9 +586,9 @@ def main(argv: list[str] | None = None) -> int:
     autofocus = args.autofocus or "continuous"
     af_range = args.af_range or "normal"
 
-    remote_token = os.environ.get("PARR_REMOTE_TOKEN") if args.remote_listen else None
+    remote_token = os.environ.get("PIFILM_REMOTE_TOKEN") if args.remote_listen else None
     if args.remote_listen and not remote_token:
-        print("error: --remote-listen requires PARR_REMOTE_TOKEN", file=sys.stderr)
+        print("error: --remote-listen requires PIFILM_REMOTE_TOKEN", file=sys.stderr)
         return 2
 
     power = None
@@ -702,7 +702,7 @@ def main(argv: list[str] | None = None) -> int:
         if not sys.stdin.isatty():
             print(
                 "error: stdin is not a terminal, so keys cannot be read. Run from a terminal, "
-                "or use parr-process for files.",
+                "or use pifilm-process for files.",
                 file=sys.stderr,
             )
             return 2

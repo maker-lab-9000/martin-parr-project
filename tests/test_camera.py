@@ -5,8 +5,8 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from parr.capture import camera as camera_module
-from parr.capture.camera import (
+from pifilm.capture import camera as camera_module
+from pifilm.capture.camera import (
     CameraError,
     FakeCamera,
     Frame,

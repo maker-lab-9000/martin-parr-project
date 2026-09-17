@@ -1,13 +1,13 @@
 import numpy as np
 import pytest
 
-from parr.lut import LUT3D
-from parr.train.evaluate import (
+from pifilm.lut import LUT3D
+from pifilm.train.evaluate import (
     channels_are_monotone,
     grey_axis_is_monotone,
     neutral_axis_max_chroma,
 )
-from parr.train.lutfit import (
+from pifilm.train.lutfit import (
     cap_neutral_axis,
     enforce_grey_axis,
     enforce_monotone,
@@ -165,7 +165,7 @@ def test_fit_lut_returns_a_monotone_lut_by_default():
 
 def _tinted_lut(n=17, a=0.0, b=0.03):
     """Identity with a uniform Oklab shift: every input, grey or not, gains (a, b)."""
-    from parr.color import oklab_to_srgb, srgb_to_oklab
+    from pifilm.color import oklab_to_srgb, srgb_to_oklab
     lab = srgb_to_oklab(LUT3D.identity(n).table.reshape(-1, 3))
     lab[:, 1] += a
     lab[:, 2] += b
@@ -179,7 +179,7 @@ def test_cap_neutral_axis_limits_grey_tint_and_leaves_colour_alone():
     capping, greys carry at most the cap and a saturated red node is
     unchanged, because the correction tapers to zero for colourful input.
     """
-    from parr.color import srgb_to_oklab
+    from pifilm.color import srgb_to_oklab
     lut = _tinted_lut()
     assert neutral_axis_max_chroma(lut) > 0.025
     capped = cap_neutral_axis(lut, 0.01)

@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from PIL import Image, ImageCms
 
-from parr.imageio import ImageMeta, list_images, load_rgb, save_jpeg, srgb_profile
+from pifilm.imageio import ImageMeta, list_images, load_rgb, save_jpeg, srgb_profile
 
 
 def test_save_and_load_roundtrip(tmp_path):

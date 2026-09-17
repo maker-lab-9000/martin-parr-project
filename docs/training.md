@@ -114,8 +114,8 @@ frames cannot be normalised back. After training, `diagnostics.png` shows the
 white-balance gains the corpus needed; centred near 1.0 with a low clamp rate
 means the shoot was well behaved.
 
-**Shoot.** Use the Stick, or on the Pi `parr-capture --no-preview`. Frames land
-in `~/Pictures/parr/YYYY-MM-DD/` as `*_original.jpg` (the camera's own bytes)
+**Shoot.** Use the Stick, or on the Pi `pifilm-capture --no-preview`. Frames land
+in `~/Pictures/pifilm/YYYY-MM-DD/` as `*_original.jpg` (the camera's own bytes)
 or `*_ungraded.jpg` (re-encoded when raw MJPEG was unavailable). Either is
 usable; prefer `_original` when both exist for a frame.
 
@@ -123,7 +123,7 @@ usable; prefer `_original` when both exist for a frame.
 
 ```sh
 rsync -av --include='*/' --include='*_original.jpg' --include='*_ungraded.jpg' --exclude='*' \
-  george@parr.local:Pictures/parr/ data/source-raw/
+  george@parr.local:Pictures/pifilm/ data/source-raw/
 mkdir -p data/source data/test-scenes
 ```
 
@@ -172,7 +172,7 @@ the artifact's `params.json`:
 }
 ```
 
-`parr-fetch --category 'Category:...'` downloads a Wikimedia Commons category
+`pifilm-fetch --category 'Category:...'` downloads a Wikimedia Commons category
 with a per-file licence allowlist, validation and a manifest. It is a generic
 corpus tool; it does not produce a reference set for this look.
 
@@ -184,7 +184,7 @@ Count, and confirm the files load with the profiles you expect:
 ls data/source | wc -l; ls data/references | wc -l
 .venv/bin/python - <<'PY'
 from pathlib import Path
-from parr.imageio import list_images, load_rgb
+from pifilm.imageio import list_images, load_rgb
 for folder in ("data/source", "data/references"):
     paths = list_images(Path(folder))
     seen = {}
@@ -206,11 +206,11 @@ hold images back.
 Run from this repository's own virtual environment, so the git revision is
 recorded in `params.json` (earlier runs from a sibling environment show
 `"code_revision": "unknown"`). Use a fresh, dated `--out` for every run: if the
-directory already exists, `parr-train` replaces it atomically and the previous
+directory already exists, `pifilm-train` replaces it atomically and the previous
 artifact and report are gone.
 
 ```sh
-.venv/bin/parr-train --source data/source --target data/references --out artifacts/parr-2026-09-v1
+.venv/bin/pifilm-train --source data/source --target data/references --out artifacts/pifilm-2026-09-v1
 ```
 
 Progress lines, in order: `source: N train, M validation images`,
@@ -223,8 +223,8 @@ the seed spread, and one `[PASS]` or `[FAIL]` line per gate.
 Output:
 
 ```text
-artifacts/parr-2026-09-v1/
-  parr.cube            the 33³ LUT, hashed into params.json
+artifacts/pifilm-2026-09-v1/
+  pifilm.cube            the 33³ LUT, hashed into params.json
   params.json          normalisation, grain, provenance, corpus hashes, metrics
   report/
     summary.txt        headline numbers and the gates in plain language
@@ -308,7 +308,7 @@ The knobs:
 
 **Scene-grouped validation.** The production trainer splits by image, so two
 frames of the same room can sit on both sides of the split and inflate the
-held-out score. `parr.experiments.train` uses explicit, checksum-verified
+held-out score. `pifilm.experiments.train` uses explicit, checksum-verified
 partitions grouped by scene instead. Prepare an inputs directory:
 
 ```text
@@ -316,7 +316,7 @@ inputs/
   camera.json        {"records": [{"file": "camera/x.jpg", "sha256": "...", "role": "train", "group": "kitchen"}, ...]}
   references.json    same shape; roles train or validation; group = series or scene
   exclusions.json    {"regression_sha256": [ ...hashes that must never be trained on... ]}
-  baseline/          an artifact directory (params.json + parr.cube) whose normalisation is reused
+  baseline/          an artifact directory (params.json + pifilm.cube) whose normalisation is reused
   camera/ references/   the image files named in the manifests
 ```
 
@@ -325,14 +325,14 @@ on both sides, no hash may appear twice, and every train file is checked against
 the exclusions. Then:
 
 ```sh
-.venv/bin/python -m parr.experiments.train --inputs inputs --out artifacts/candidate-a --neutral-cap 0.005
+.venv/bin/python -m pifilm.experiments.train --inputs inputs --out artifacts/candidate-a --neutral-cap 0.005
 ```
 
 `docs/experiments/*.json` are real examples of the manifests, and
 `scripts/prepare_refinement.py` is a dated recipe that builds such a directory
-from a capture folder and a reference manifest. `parr.experiments.regression`
+from a capture folder and a reference manifest. `pifilm.experiments.regression`
 freezes a checksum-verified snapshot of ungraded/graded pairs, and
-`parr.experiments.evaluate` renders paired comparison sheets and per-region
+`pifilm.experiments.evaluate` renders paired comparison sheets and per-region
 colour metrics for several candidates against that snapshot; the September 7
 refinement report in `docs/experiments/` shows all of them in use.
 
@@ -340,8 +340,8 @@ refinement report in `docs/experiments/` shows all of them in use.
 and look at them side by side, ideally without knowing which is which:
 
 ```sh
-.venv/bin/parr-process data/test-scenes out/starter
-.venv/bin/parr-process data/test-scenes out/candidate --artifacts artifacts/parr-2026-09-v1
+.venv/bin/pifilm-process data/test-scenes out/starter
+.venv/bin/pifilm-process data/test-scenes out/candidate --artifacts artifacts/pifilm-2026-09-v1
 ```
 
 ## 8. Step 7: deploy to the Pi and verify
@@ -349,26 +349,26 @@ and look at them side by side, ideally without knowing which is which:
 Only for a candidate with exit code 0 that also won the visual comparison.
 
 ```sh
-rsync -av artifacts/parr-2026-09-v1/ george@parr.local:repos/martin-parr-project/artifacts/parr-2026-09-v1/
+rsync -av artifacts/pifilm-2026-09-v1/ george@parr.local:repos/pi-film-reversal/artifacts/pifilm-2026-09-v1/
 ```
 
 On the Pi, point the service at it and restart:
 
 ```sh
-sudo sed -i 's#--artifacts [^ ]*#--artifacts /home/george/repos/martin-parr-project/artifacts/parr-2026-09-v1#' /etc/systemd/system/parr-capture.service
+sudo sed -i 's#--artifacts [^ ]*#--artifacts /home/george/repos/pi-film-reversal/artifacts/pifilm-2026-09-v1#' /etc/systemd/system/pifilm-capture.service
 sudo systemctl daemon-reload
-sudo systemctl restart parr-capture.service
+sudo systemctl restart pifilm-capture.service
 ```
 
 Take one capture and confirm the record names the new LUT:
 
 ```sh
-tail -1 ~/Pictures/parr/$(date +%F)/captures.jsonl | python3 -c 'import json,sys; print(json.load(sys.stdin)["lut_sha1"])'
-grep lut_sha1 ~/repos/martin-parr-project/artifacts/parr-2026-09-v1/params.json
+tail -1 ~/Pictures/pifilm/$(date +%F)/captures.jsonl | python3 -c 'import json,sys; print(json.load(sys.stdin)["lut_sha1"])'
+grep lut_sha1 ~/repos/pi-film-reversal/artifacts/pifilm-2026-09-v1/params.json
 ```
 
 Update `PI_ARTIFACT_DIR` in `.env` on the Mac to match. Rollback is the same
-edit pointing back at `parr/data`.
+edit pointing back at `pifilm/data`.
 
 ## 9. Step 8: write it down
 
@@ -386,8 +386,8 @@ clear reason is worth as much as a passing one.
   target): add images, or use `--allow-small` for an exploratory run only.
 - **`source and target are the same folder`**: the two paths resolve to one
   directory.
-- **A previous run's report has vanished**: you reused its `--out`. `parr-train`
-  replaces an existing artifact directory in one atomic move; only `parr-preset`
+- **A previous run's report has vanished**: you reused its `--out`. `pifilm-train`
+  replaces an existing artifact directory in one atomic move; only `pifilm-preset`
   and the experiments modules refuse to overwrite. Use a new name per run.
 - **`WARNING: no held-out images for the ... corpus`** and `held_out_eval:
   false` in `params.json`: the corpus is smaller than `1 / val_fraction`
@@ -399,7 +399,7 @@ clear reason is worth as much as a passing one.
   material; the loader converts them. A profile listed with an error was
   treated as sRGB; check that file.
 - **Exit code 3**: the artifact exists and can be inspected with
-  `parr-process --artifacts`, but a gate failed. See the table in section 6.
+  `pifilm-process --artifacts`, but a gate failed. See the table in section 6.
 - **A run that passes every gate but looks wrong**: gates are safety checks,
   not taste. The visual comparison in section 7 decides.
 

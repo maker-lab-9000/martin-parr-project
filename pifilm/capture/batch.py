@@ -1,11 +1,11 @@
-"""``parr-process``: regrade a folder of images with the current artifact.
+"""``pifilm-process``: regrade a folder of images with the current artifact.
 
 Two hazards make this more than a loop, and both come from the shape of a
 real capture folder, which holds ``<time>_original.jpg`` next to
-``<time>_parr.jpg``:
+``<time>_graded.jpg``:
 
 * **Double grading.** Feeding that folder to a naive globber grades the
-  already-graded files a second time. Files matching ``*_parr.*`` are
+  already-graded files a second time. Files matching ``*_graded.*`` are
   therefore always skipped, and when a folder contains any ``_original`` or
   ``_ungraded`` files, only those are processed unless ``--all`` is given.
 * **Clobbering.** ``a.jpg`` and ``a.png`` would produce the same output
@@ -28,7 +28,7 @@ from ..artifacts import Artifacts, ArtifactsError
 from ..imageio import list_images, load_rgb, save_jpeg
 from ..pipeline import Pipeline
 
-GRADED_SUFFIXES = ("_parr",)
+GRADED_SUFFIXES = ("_graded",)
 SOURCE_SUFFIXES = ("_original", "_ungraded")
 
 
@@ -58,7 +58,7 @@ def select_inputs(paths: Sequence[Path], all_files: bool = False) -> list[Path]:
 
 def output_path(src: Path, out_dir: Path, disambiguate: bool) -> Path:
     stem = f"{src.stem}_{src.suffix.lstrip('.').lower()}" if disambiguate else src.stem
-    return Path(out_dir) / f"{stem}_parr.jpg"
+    return Path(out_dir) / f"{stem}_graded.jpg"
 
 
 def _check_directories(in_dir: Path, out_dir: Path) -> None:
@@ -101,7 +101,7 @@ def process_dir(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="parr-process",
+        prog="pifilm-process",
         description="Regrade a folder of images with the Parr LUT.",
     )
     parser.add_argument("in_dir", type=Path)

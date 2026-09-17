@@ -188,17 +188,17 @@ also prints every 2 s; add `StandardOutput=null` to the unit if the journal
 fills. When the capture service later reads the gauge itself (see the plan),
 this script can be retired in favour of one owner of the shutdown decision.
 
-## 7. How the shield interacts with `parr-capture`
+## 7. How the shield interacts with `pifilm-capture`
 
 - **Shutdown ordering** is handled by systemd: `poweroff` stops
-  `parr-capture.service` before halting, and the shield cuts power only after
+  `pifilm-capture.service` before halting, and the shield cuts power only after
   pin 12 falls. A capture in flight at that moment loses at most its own files;
   `captures.jsonl` is appended one line per completed capture.
 - **Two readers of one gauge** are fine: the low-battery script and the capture
   service both do single-word I2C reads through the kernel's bus lock.
-- **Read the level anytime** with `parr-battery`, which does one gauge read and
+- **Read the level anytime** with `pifilm-battery`, which does one gauge read and
   prints e.g. `Battery: 64%  3.85 V  on battery` — the same maths the Stick
-  shows. `parr-battery --ups none` is a no-op for a Pi without the shield.
+  shows. `pifilm-battery --ups none` is a no-op for a Pi without the shield.
 - **Pin 6 and the gauge are read by user `george`**, who is in `gpio` and
   `i2c`. Pins 5, 12 and 26 are root-only through Geekworm's service; the
   capture service never touches them.
@@ -227,7 +227,7 @@ That has consequences worth knowing before trusting the number:
   lets ModelGauge converge. Four cells also take roughly twice as long to charge,
   so a pack that looks "full" on the LEDs may simply not be full yet.
 - **Trust the voltage.** Rested, ~4.1–4.2 V is genuinely full and ~3.6 V is
-  nearly empty; `parr-battery` prints the voltage next to the percent for exactly
+  nearly empty; `pifilm-battery` prints the voltage next to the percent for exactly
   this reason. Measured 2026-09-17 on the C1 four-cell pack: 3.99 V read as 58 %
   while the shield's LEDs showed full — a normal voltage-gauge disagreement, not
   a fault.
@@ -250,7 +250,7 @@ PY
 gpioget --numeric -c 0 6                            # 0 with charger connected, 1 without
 ```
 
-While `parr-capture --ups x728` is running it holds BCM 6, so `gpioget` reports the
+While `pifilm-capture --ups x728` is running it holds BCM 6, so `gpioget` reports the
 line busy; stop the service first or read `external_power` from `/v1/status` instead.
 
 ```sh
@@ -262,7 +262,7 @@ Then the physical tests, one at a time: unplug the charger and confirm `gpioget`
 returns 1 and the Pi keeps running; hold the button 1 to 2 s and confirm a
 clean reboot; hold it 3 to 7 s and confirm a clean power-off after which the
 shield's LEDs go out; power on with a short press and confirm the hotspot and
-`parr-capture` return unattended.
+`pifilm-capture` return unattended.
 
 ## 9. Rollback
 

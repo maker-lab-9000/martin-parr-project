@@ -87,13 +87,13 @@ def render_contact_sheet(
         norm_u8 = _to_u8(prepared)
         normalised.append(_thumb(norm_u8, thumb))
         graded.append(_thumb(lut.apply_pillow(norm_u8, filt), thumb))
-    parr = [
+    pifilm = [
         _thumb(_to_u8(prepare_image(load_rgb(p)[0], target_normalize, cfg)[0]), thumb)
         for p in pick(target_paths)
     ]
 
     pad, label_h = 8, 18
-    cols = max(len(normalised), len(parr), 1)
+    cols = max(len(normalised), len(pifilm), 1)
     sheet = Image.new(
         "RGB",
         (pad + cols * (thumb + pad), 3 * (label_h + thumb + pad) + pad),
@@ -105,7 +105,7 @@ def render_contact_sheet(
     rows = [
         (f"{origin} source, normalised", normalised),
         (f"{origin} source, graded with the fitted LUT", graded),
-        (f"Reference photographs ({target_step}-normalised)", parr),
+        (f"Reference photographs ({target_step}-normalised)", pifilm),
     ]
     for r, (label, images) in enumerate(rows):
         y = pad + r * (label_h + thumb + pad)

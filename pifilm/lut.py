@@ -118,7 +118,7 @@ def sha1_hex(lut: LUT3D) -> str:
     return hashlib.sha1(np.ascontiguousarray(lut.to_flat(), dtype=np.float32).tobytes()).hexdigest()
 
 
-def write_cube(lut: LUT3D, path: str | Path, title: str = "parr") -> None:
+def write_cube(lut: LUT3D, path: str | Path, title: str = "pifilm") -> None:
     lines = [
         f'TITLE "{title}"',
         f"LUT_3D_SIZE {lut.size}",
