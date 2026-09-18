@@ -228,31 +228,18 @@ Full guide (app password, every key, troubleshooting): [docs/nextcloud-sync.md](
 
 ## Training a reference-derived look
 
-Training is optional; the camera works with the bundled starter.
-[The training guide](docs/training.md) is the step-by-step procedure: how a run
-works, collecting camera frames, curating references, training, reading the
-report gate by gate, iterating without fooling yourself, deploying to the Pi and
-writing the run down. [The setup guide, section 6](docs/setup.md#6-training-a-look-optional)
-has the short outline. The policy that applies to every reference photograph:
+Training is optional — the camera works with the bundled starter. Point
+`pifilm-train` at two local image folders (source frames, and reference photos
+you have the rights to use); it fits a 33³ `.cube` LUT by colour-distribution
+transfer and regularised least squares, evaluates on held-out images, and writes
+a report with quality gates. A LUT only shifts global colour and tone — not
+subjects, composition or lighting.
 
-Use photographs credited to Martin Parr from the supplied Magnum and Aperture
-sources, his official site, Foundation and publishers. Fan-submission Flickr
-groups are excluded. See [the reference guide](docs/reference-sources.md) for
-additional sources, curation notes and the difference between visual research
-and training files. Use reference files you have permission to use. The project
-takes local image folders; it does not scrape Parr's website or assume that
-photos *of* Parr are photos *by* him. The optional `pifilm-fetch --category
-'Category:...'` command downloads an explicitly chosen Wikimedia Commons
-category, retaining licence metadata; that is a generic corpus utility, not a
-ready-made Parr reference set.
-
-Training fits a 33³ RGB lookup table via color-distribution transfer and smooth
-least squares. It splits by image, evaluates held-out data, and produces
-`pifilm.cube`, `params.json`, and a report with contact sheets, tone ramps, metrics
-and quality gates. A LUT models global color and tone, not subjects,
-composition, focus or lighting geometry. The dated reports in `docs/` record
-what past runs produced; `todo.md` section 1 records what is needed for better
-results.
+- **How to train, gate by gate:** [the training guide](docs/training.md) (short
+  outline in [setup §6](docs/setup.md#6-training-a-look-optional)).
+- **Which reference photos are allowed:** [the reference guide](docs/reference-sources.md)
+  — credited Martin Parr sources only, fan-submission groups excluded; `pifilm-fetch`
+  is a generic Wikimedia Commons utility, not a ready-made Parr set.
 
 ## How the colour model works
 
