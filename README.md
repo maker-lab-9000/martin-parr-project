@@ -402,6 +402,13 @@ invent colour: an unlit grey room comes out grey through every LUT, as measured
 in `todo.md` section 1. Those limits, and the roadmap for better fits, are the
 subject of the next section and of the training guide.
 
+## Known issues
+
+Understood-but-unfixed limitations are tracked in
+[docs/known-issues.md](docs/known-issues.md) — currently a full-resolution
+(12 MP) capture that times out on the second shot on the Pi 3B, deferred to the
+Pi 4.
+
 ## The look and its limits
 
 Parr's [own FAQ](https://martinparr.com/faq/) describes consumer films including
