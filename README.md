@@ -76,67 +76,49 @@ source file, or commit; `.env` is gitignored for that reason.
 
 ## From button press to displayed photo
 
-The Raspberry Pi does the capture, grading and storage. The M5Stack StickS3 is
-the wireless shutter button and **last-capture display**, not a live viewfinder.
-The Pi runs its own Wi-Fi hotspot and the Stick joins it directly, so no home
-network is needed in the field; the two talk over a token-authenticated HTTP API.
-SSH over an Ethernet cable is used for deployment/administration and photo
-transfer, not for each shutter press. No cloud service is involved.
+The Pi captures, grades and stores. The M5Stack StickS3 is the wireless shutter
+and **last-capture display** — not a live viewfinder. It joins the Pi's own
+Wi-Fi hotspot and they talk over a token-authenticated HTTP API, so no home
+network or cloud is needed in the field. Ethernet/SSH is only for admin and
+photo transfer, never the shutter.
 
 ```text
-Stick joins the Pi's hotspot → checks Pi readiness → displays READY
-    ↓ primary button press
-Capture request → Pi accepts → Stick sounds shutter acknowledgement
-    ↓ TV colour bars while waiting
-Pi acquires one camera frame → normalizes → applies LUT → adds grain
+Stick joins hotspot → checks readiness → shows READY
+    ↓ button press
+POST /v1/captures → Pi accepts (one at a time) → Stick sounds shutter
+    ↓ colour bars while waiting
+Pi grabs one frame → normalize → LUT → grain
     ↓
-Pi saves original + graded JPEG + capture log → marks job complete
-    ├─ Optional Pi screen displays the saved graded photo
-    └─ Stick polls completion → downloads graded thumbnail → decodes → displays
+Pi saves original + graded JPEG + captures.jsonl → job complete
+    └─ Stick polls, downloads the graded thumbnail, displays it
 ```
 
-1. **Connect and become ready.** The Pi capture app must be running with its
-   remote listener enabled. The Stick joins the Pi's hotspot and checks the
-   Pi's status before showing that it is ready for another capture.
-2. **Request one snapshot.** A debounced primary-button press creates a unique
-   request ID and sends `POST /v1/captures`. The Pi accepts only one active
-   capture at a time; additional requests can be rejected as busy. The Stick's
-   shutter tone acknowledges an accepted request—it does not mean grading or
-   saving has finished.
-3. **Show processing feedback.** The Stick shows TV colour bars while submitting,
-   processing and downloading. It polls `GET /v1/captures/{id}` for that same
-   capture, rather than taking another photo while waiting. In two-screen mode,
-   the Pi also shows processing colour bars during capture and grading.
-4. **Capture and grade on the Pi.** One newly acquired USB-camera frame supplies
-   both the original and the graded output. The pipeline applies configured
-   white-balance and exposure/levels normalization, the selected 3D LUT, then
-   optional fine grain. The bundled starter is the default; `--artifacts DIR`
-   explicitly selects another LUT and its associated normalization/grain settings.
-5. **Save locally before declaring completion.** By default, the Pi writes to
-   `~/Pictures/pifilm/YYYY-MM-DD/`: the original camera JPEG as `*_original.jpg`
-   when available, otherwise an encoded `*_ungraded.jpg`; the full-resolution
-   graded `*_graded.jpg`; and an entry in `captures.jsonl`. The log records file
-   names, timestamp, LUT hash, normalization gains, grain seed, camera stream
-   settings and processing timings. The job is marked complete after these writes
-   succeed.
-6. **Transfer a graded preview to the Stick.** After completion, the Stick requests
-   `GET /v1/captures/{id}/image.jpg`. The Pi reads that job's saved **`*_graded.jpg`**
-   and generates an aspect-preserving **240 × 135 JPEG**, with black padding if
-   needed and a **64 KiB** transfer limit. This is a download initiated by the
-   Stick, not a push/upload of the full-resolution file. Grading is not repeated
-   on the Stick, and the ungraded file is not used for this endpoint.
-7. **Display until the next snapshot.** The Stick decodes the JPEG and displays
-   it from memory. In normal operation it stays visible until the next capture
-   starts. The full-resolution files remain on the Pi; the Stick display is not
-   the photo archive. Network or capture failures show a status/error instead of
-   being treated as a successful new photo.
+- **Ready** — the Pi app runs with its remote listener; the Stick joins the
+  hotspot and polls `GET /v1/status` before showing READY.
+- **Shutter** — a debounced press sends `POST /v1/captures` with a unique ID. The
+  Pi runs one capture at a time (extra requests get a busy `409`); the shutter
+  tone means "accepted", not "saved".
+- **Feedback** — the Stick shows colour bars and polls `GET /v1/captures/{id}`
+  while it works (two-screen mode shows the same bars on the Pi).
+- **Capture + grade** — one frame becomes both outputs: normalize → chosen 3D LUT
+  → grain. `--artifacts DIR` picks a different look.
+- **Save** — to `~/Pictures/pifilm/YYYY-MM-DD/`: `*_original.jpg` (or
+  `*_ungraded.jpg`), the full-res `*_graded.jpg`, and a `captures.jsonl` line (LUT
+  hash, gains, grain seed, timings). The job completes only after these writes.
+- **Preview to Stick** — the Stick fetches `GET /v1/captures/{id}/image.jpg`; the
+  Pi returns a 240×135, ≤64 KiB letterboxed JPEG of the graded file. No
+  re-grading on the Stick.
+- **Display** — shown until the next capture. Full-res stays on the Pi (the Stick
+  isn't the archive); failures show an error, not a fake success.
 
-For battery-powered **headless use**, the systemd service runs with
-`--no-preview` and the remote listener and no `--show-captures`. The Stick
-still receives the graded preview; the Pi needs no monitor. For **two-screen
-use**, add `--show-captures` in a working Pi desktop session. See the
-[deployment guide](docs/sticks3-remote.md) for the complete configuration and
-service commands.
+**Running modes:**
+
+| Mode | Command | Notes |
+| --- | --- | --- |
+| Headless (field) | `pifilm-capture --no-preview --remote-listen 0.0.0.0:8765` | battery, no monitor; the Stick still gets the preview |
+| Two-screen | `pifilm-capture --show-captures` | run in a Pi desktop session; the Pi also shows colour bars + the graded photo |
+
+Full config and rollback: the [deployment guide](docs/sticks3-remote.md).
 
 ## Using the tools directly
 
@@ -206,51 +188,43 @@ Pass `--highlights 0.6` to hold coloured highlights back from clipping; `0`
 
 ## Archiving photos to Nextcloud
 
-Optionally, the Pi pushes every capture under `~/Pictures/pifilm` to a folder on a
-Nextcloud server, so there is an off-device archive. `scripts/nextcloud_sync.py`
-runs `rclone copy` over Nextcloud's WebDAV endpoint — the rsync-equivalent that a
-Nextcloud HTTP server actually speaks (plain `rsync` cannot). Its behaviour is
-deliberate:
+Optional off-device backup: the Pi pushes everything under `~/Pictures/pifilm`
+to a Nextcloud folder with `rclone copy` over WebDAV (the rsync-equivalent for
+Nextcloud — plain `rsync` can't talk to it).
 
-- **Copy, never mirror.** It only ever adds or updates files on Nextcloud, so
-  deleting a photo on the Pi (an SD-card cleanup) never removes the cloud copy.
-- **A quiet no-op off the wired LAN.** Each run first checks that `eth0` holds a
-  real home-LAN IPv4 (not a `169.254.x` link-local address) and that Nextcloud
-  answers a TCP connect; otherwise it logs one line and exits. A frequent
-  schedule is therefore cheap and does nothing until the Pi is plugged into the
-  home network.
-- **The password never touches a command line.** It is read from `.env`,
-  obscured with `rclone obscure` (plaintext on stdin), and passed to rclone
-  through `RCLONE_CONFIG_*` environment variables — never an argv, a process
-  listing, or an rclone config file on disk.
-- **Incremental.** Everything under `~/Pictures/pifilm` is synced — the
-  `_original`/`_ungraded` JPEGs, the graded `_graded.jpg`, the `.dng` raws, and
-  `captures.jsonl` — and rclone skips files already uploaded.
+How it behaves:
 
-**Scheduling is a systemd timer, not cron.** Two example units live in `deploy/`:
-`pifilm-nextcloud-sync.timer` fires the `pifilm-nextcloud-sync.service` oneshot a few
-minutes after boot and then every 15 minutes (`OnUnitActiveSec=15min`,
-`Persistent=true`). Nothing runs on a schedule until you install and enable them.
+- **Copy, never delete** — only adds/updates on Nextcloud, so cleaning the Pi's
+  SD card never removes the cloud copies.
+- **No-op off the wired LAN** — each run exits at once unless `eth0` has a
+  home-LAN IP and Nextcloud answers a TCP connect, so a frequent timer is cheap.
+- **Password never in argv** — read from `.env`, obscured with `rclone obscure`,
+  passed via `RCLONE_CONFIG_*` env vars (never a command line or a config file).
+- **Incremental** — syncs the originals, `_graded.jpg`, `.dng` raws and
+  `captures.jsonl`, skipping anything already uploaded.
 
-Setup, on the Pi: `sudo apt install rclone`, fill the `NEXTCLOUD_*` keys in
-`.env` (use a Nextcloud **app password**, not your login), test by hand, then
-enable the timer:
+Scheduling is a **systemd timer, not cron**: `pifilm-nextcloud-sync.timer` runs
+the oneshot a few minutes after boot, then every 15 min (`OnUnitActiveSec=15min`,
+`Persistent=true`). Nothing runs until you install and enable it.
+
+Setup, on the Pi:
 
 ```bash
-# test first: a dry run does everything except transfer, then --apply copies
-.venv/bin/python scripts/nextcloud_sync.py --env .env
-.venv/bin/python scripts/nextcloud_sync.py --env .env --apply
+sudo apt install rclone                                # one-time
+# then fill NEXTCLOUD_* in .env — use a Nextcloud app password, not your login
 
-# then schedule it (drops the .example suffix in the destination names)
+.venv/bin/python scripts/nextcloud_sync.py --env .env          # dry run (no transfer)
+.venv/bin/python scripts/nextcloud_sync.py --env .env --apply  # real copy
+
+# enable the 15-minute timer (drops the .example suffix)
 sudo cp deploy/pifilm-nextcloud-sync.service.example /etc/systemd/system/pifilm-nextcloud-sync.service
 sudo cp deploy/pifilm-nextcloud-sync.timer.example   /etc/systemd/system/pifilm-nextcloud-sync.timer
 sudo systemctl daemon-reload
 sudo systemctl enable --now pifilm-nextcloud-sync.timer
-systemctl list-timers pifilm-nextcloud-sync.timer   # confirm NEXT / LAST
+systemctl list-timers pifilm-nextcloud-sync.timer      # confirm NEXT / LAST
 ```
 
-Full steps — the app-password setup, every `.env` key, and troubleshooting — are
-in [the Nextcloud sync guide](docs/nextcloud-sync.md).
+Full guide (app password, every key, troubleshooting): [docs/nextcloud-sync.md](docs/nextcloud-sync.md).
 
 ## Training a reference-derived look
 
