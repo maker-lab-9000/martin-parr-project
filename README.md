@@ -13,8 +13,8 @@ a set of reference photographs, then applies it on-device at capture time.
 The bundled look is a **handcrafted, untrained starter preset**; no reference
 photographs were used to train that preset. Separately, the local
 `artifacts/personal-collection-01-v1/` model was trained on 150 curated references
-and passed all five numerical validation gates. See the
-[personal-collection training report](docs/training-personal-collection-01-v1.md).
+and passed all five numerical validation gates. See
+[the training guide](docs/training.md) for how a run works and what the gates mean.
 It remains experimental and proxy-trained, not calibrated to the Raspberry Pi
 camera. Artifacts and training data are gitignored and are not included in a clone.
 
@@ -49,30 +49,28 @@ the ungraded original on the left and the graded `_graded.jpg` on the right.
 
 ## Getting started
 
-Follow [the setup guide](docs/setup.md). It is ordered by dependency and says,
-for every step, which machine it runs on and why:
+Full walkthrough: **[the setup guide](docs/setup.md)** — ordered by dependency,
+and it names the machine for every step. In brief:
 
-1. **Mac** — clone, venv, `pip install -e '.[train,dev,deploy]'`, PlatformIO, tests.
-2. **The one `.env` file** — every credential and address, read by the deploy
-   script, the hotspot script and the firmware build.
-3. **Pi, OS and network** — Trixie, hostname `pifilm`, Ethernet administration,
-   then the Pi's own Wi-Fi hotspot that the Stick joins.
-4. **Pi, application and service** — venv with system OpenCV, choice of look,
-   token file, systemd unit, reboot test.
-5. **Stick** — build and flash with the credentials baked in, read the serial log.
-6. **Training, optional** — only if you want to replace the bundled starter.
+| # | Machine | Step |
+| --- | --- | --- |
+| 1 | Mac | clone, venv, `pip install -e '.[train,dev,deploy]'`, PlatformIO, tests |
+| 2 | — | fill the one `.env` (all credentials/addresses; used by deploy, hotspot and firmware) |
+| 3 | Pi | OS (Trixie), hostname, Ethernet admin, then the Pi's own Wi-Fi hotspot |
+| 4 | Pi | app + service: venv with system OpenCV, choose a look, token file, systemd unit |
+| 5 | Stick | build + flash with credentials baked in, read the serial log |
+| 6 | Mac (opt) | training — only to replace the bundled starter |
 
-Two supporting documents go deeper: [the network and deployment guide](docs/sticks3-remote.md)
-for the hotspot, Ethernet, service and rollback details, and
-[the firmware README](firmware/sticks3/README.md) for the Stick's build, its
-serial debug log and how to prove the displayed photo is the graded one.
+More detail lives in the docs: the [network & deployment guide](docs/sticks3-remote.md)
+(hotspot, Ethernet, service, rollback) and the [firmware README](firmware/sticks3/README.md)
+(Stick build, serial log, proving the displayed photo is the graded one).
 
-| Last captured photo | Ready to capture |
+| Ready to capture | Last captured photo |
 | --- | --- |
 | <img src="docs/images/sticks3-ready.jpg" alt="M5Stack StickS3 showing TV colour bars and the READY prompt" height="280"> | <img src="docs/images/sticks3-captured-photo.jpg" alt="M5Stack StickS3 displaying a captured room photo" height="280"> |
 
-Never put a real token, Wi-Fi password, or Pi SSH password in a command,
-source file, or commit; `.env` is gitignored for that reason.
+> **Never** put a real token, Wi-Fi password, or Pi SSH password in a command,
+> source file, or commit — `.env` is gitignored for that reason.
 
 ## From button press to displayed photo
 
@@ -123,21 +121,23 @@ Full config and rollback: the [deployment guide](docs/sticks3-remote.md).
 ## Using the tools directly
 
 ```bash
-.venv/bin/pifilm-process /path/to/originals /path/to/pifilm-results
-.venv/bin/pifilm-capture --no-preview --show-captures
+pifilm-process /path/to/originals /path/to/results   # batch re-grade a folder
+pifilm-capture --no-preview --show-captures          # capture on the Pi
 ```
 
-`SPACE` shows TV color bars while a snapshot is captured and processed, then
-displays the graded photo until the next capture. `Q` or Escape exits. Fullscreen
-display fits the image without cropping or stretching. Plain `--no-preview`
-uses terminal controls without a window; `--fake` uses synthetic camera frames.
+Capture modes:
 
-Captures go to `~/Pictures/pifilm/YYYY-MM-DD/`: the camera JPEG is saved verbatim
-as `*_original.jpg` when available, otherwise `*_ungraded.jpg`, alongside
-`*_graded.jpg` and `captures.jsonl`. These commands and outputs are separate from
-the Kodachrome project. The default USB path requests a 1920 × 1080 MJPEG stream
-at 30 fps; display resolution does not change capture resolution. Use `--device`
-to select a USB camera.
+| Flag | Behaviour |
+| --- | --- |
+| `--show-captures` | fullscreen window; `SPACE` grades a shot (colour bars while it works) and shows it until the next; `Q`/Esc quits |
+| `--no-preview` | terminal controls, no window |
+| `--fake` | synthetic frames, no camera (for testing) |
+| `--device /dev/videoN` | select a specific USB camera |
+
+Output lands in `~/Pictures/pifilm/YYYY-MM-DD/`: `*_original.jpg` (or
+`*_ungraded.jpg`), `*_graded.jpg`, and a `captures.jsonl` line. The USB (V4L2)
+path captures a 1920×1080 MJPEG stream at 30 fps; window size does not change
+capture resolution.
 
 ### Camera backends
 
