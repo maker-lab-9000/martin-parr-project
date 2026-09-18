@@ -15,7 +15,10 @@ Forked from the user's `kodachrome-film` project (see `ORIGIN.md`). Package is `
 Pi network, Pi service, Stick, optional training) and says which machine each step runs on and why;
 `docs/sticks3-remote.md` holds the network and service detail; `firmware/sticks3/README.md` the Stick;
 `docs/training.md` is the step-by-step training procedure and explains every report gate;
-`docs/x728-ups.md` covers the Geekworm X728 UPS shield (pins, I2C, services, shutdown policy, RTC). The bundled LUT in `pifilm/data/` is a handcrafted,
+`docs/x728-ups.md` covers the Geekworm X728 UPS shield (pins, I2C, services, shutdown policy, RTC);
+`docs/how-it-works.md` explains the colour model (capture pipeline, training steps, libraries, dependency-by-role table);
+`docs/nextcloud-sync.md` the optional Pi→Nextcloud photo archive; and `docs/known-issues.md` tracks
+understood-but-unfixed defects. The bundled LUT in `pifilm/data/` is a handcrafted,
 untrained starter preset (`trained: false`). Trained artifacts, training data, `data/`, `artifacts/`,
 `ektar100/`, `velvia/` are all gitignored and not in a clone.
 
