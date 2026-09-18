@@ -1,20 +1,14 @@
 # Introduction
 This entire idea took shape from trying to find a kid friendly camera for my son, which is a little more than potato quality, is made of decent plastic, modular and cheap.
 
-The prototype is still in progress but I'm aiming at a handheld point and shoot with the M5Stack Stick S3 used as the viewfinder along the Raspberry Pi3 and the Innomaker low light camera module for start.
-
-Once the prototype is working as expected, additional parts would include a proper 3D printed case, and potential upgrade to the Raspi high quality camera module and external battery HAT.
+The prototype phase is still in progress, the repo is super messy hence I'm experimenting with various hardware, software, and photo grading techniques.
 
 
 # Pi Film Reversal
 
-An experiment in pushing the Raspberry Pi camera to recreate film and
+One experiment in pushing the Raspberry Pi camera to recreate film and
 photographic looks with machine learning: it learns a 3D-LUT colour grade from
-a set of reference photographs, then applies it on-device at capture time. The
-first target is Martin Parr's saturated, flash-lit colour-negative look — vivid
-reds, yellows and blues, crisp contrast, neutral whites, and fine grain — with
-more film stocks and looks to follow. Runs on a Mac for training and a Raspberry
-Pi for capture, using the learned 3D-LUT approach from `kodachrome-film`.
+a set of reference photographs, then applies it on-device at capture time.
 
 The bundled look is a **handcrafted, untrained starter preset**; no reference
 photographs were used to train that preset. Separately, the local
@@ -44,11 +38,14 @@ the ungraded original on the left and the graded `_graded.jpg` on the right.
 | <img src="docs/images/imx708-interior-original.jpg" alt="Sunlit interior with plants, ungraded" height="220"> | <img src="docs/images/imx708-interior-graded.jpg" alt="Same interior with the Martin Parr grade" height="220"> |
 
 ## Hardware
-- Raspberry Pi 3B, 1GB RAM
+- Raspberry Pi 3B, 1GB RAM (too slow for 12 MP post process)
+- Raspberry Pi 4, 4GB RAM (In testing)
 - M5Stack StickS3 (display, trigger)
-- x728 UPS Shield
+- Waveshare 2.8 inch LCD Display Module (In testing)
+- x728 UPS Shield + Geekworm X728-C1 Metal Case (Using it for outdoor photos)
 - 64GB SD Card
-- Innomaker 1080P USB2.0 UVC Camera, 121° Lens, PS5268 Sensor
+- Arducam 8-50mm C-Mount Zoom Lens for IMX477 (In testing)
+- Raspberry Pi Camera Module 3, Wide, IMX708 sensor (default mount for now)
 
 ## Getting started
 
@@ -162,37 +159,40 @@ to select a USB camera.
 
 ### Camera backends
 
-`--camera` chooses the backend: `v4l2` for the USB camera, or `picamera2` for a
-Raspberry Pi camera such as the Camera Module 3 (IMX708) at its native
-4608 × 2592. With neither flag, a `--device` implies V4L2, and otherwise
-Picamera2 is used when its package imports, falling back to V4L2. Picamera2 and
-libcamera come from Raspberry Pi OS apt packages, never pip, so the venv is made
-with `--system-site-packages`. Select the tuning file for the exact module with
-`--tuning-file` (for example `imx708_wide.json`):
+`--camera` picks the backend. With no flag, `--device` implies `v4l2`; otherwise
+Picamera2 is used when it imports, falling back to V4L2. Picamera2 and libcamera
+come from Raspberry Pi OS apt (never pip), so the venv uses `--system-site-packages`.
 
-```bash
-.venv/bin/pifilm-capture --camera picamera2 --tuning-file imx708_wide.json --no-preview
-```
+| Command | What it captures |
+| --- | --- |
+| `pifilm-capture --camera v4l2 --device /dev/video0` | USB (UVC) camera at 1920×1080 |
+| `pifilm-capture --camera picamera2 --tuning-file imx708_wide.json` | Pi Camera Module 3 (IMX708) at native 4608×2592 |
 
-First-time hardware bring-up, including `rpicam-hello --list-cameras`, a
-red/green/blue patch check, and verifying the saved 4608 × 2592 dimensions and
-metadata, is in [the Picamera2 bring-up checklist](docs/picamera2-bringup.md).
-An installed Picamera2 changes the default backend, so a Pi still on the USB
-camera should pass `--camera v4l2` explicitly until it is migrated.
+> Once Picamera2 is installed it becomes the default, so a Pi still on the USB
+> camera must pass `--camera v4l2` until it is migrated. First-time bring-up
+> (`rpicam-hello --list-cameras`, an RGB patch check, dimensions and metadata) is
+> in [the Picamera2 bring-up checklist](docs/picamera2-bringup.md).
 
-On Picamera2, a capture saves three files instead of two: `_original.jpg` (the
-ISP's own rendering — a Picamera2 frame is always a full-quality original,
-named `_original.jpg` whether or not a DNG is also saved), a `<stem>.dng` raw
-sidecar from the same request (on by default — about 18 MB DNG, roughly 28 MB
-per shot in total; skip it with `--no-dng` for long sessions, which omits only
-the `.dng` sidecar and never renames the original), and the usual `_graded.jpg`.
-`captures.jsonl` adds `camera_metadata` (a filtered, JSON-safe subset such as
-`ExposureTime`, `AnalogueGain`, `Lux`, `LensPosition`, `AfState`) and `dng`
-(the sidecar filename) when present. Autofocus defaults to continuous AF at
-normal range (`--autofocus {continuous,auto,manual}`, `--af-range
-{normal,macro,full}`); since there is no flash, exposure and white balance
-stay auto by default too — `--ae-lock`, `--awb-lock` and `--colour-gains R,B`
-are for optional controlled, reference-matching shoots only.
+**Picamera2 saves three files** per shot (two on V4L2):
+
+- `*_original.jpg` — the ISP's own full-quality render (always this name).
+- `<stem>.dng` — raw sidecar from the same frame (~18 MB; ~28 MB/shot total).
+- `*_graded.jpg` — the graded result.
+
+`captures.jsonl` also records `camera_metadata` (`ExposureTime`, `AnalogueGain`,
+`Lux`, `LensPosition`, `AfState`, …) and the `dng` filename when present.
+
+Capture flags:
+
+| Flag | Action |
+| --- | --- |
+| `--autofocus {continuous,auto,manual}` | autofocus mode (default `continuous`) |
+| `--af-range {normal,macro,full}` | autofocus range (default `normal`) |
+| `--no-dng` | skip the raw sidecar for long sessions (keeps `_original.jpg`) |
+| `--ae-lock` / `--awb-lock` / `--colour-gains R,B` | lock exposure / white balance for controlled reference shoots |
+
+There is no flash, so exposure and white balance stay auto by default; the lock
+flags are only for controlled, reference-matching shoots.
 
 The preset increases midtone color and contrast with a smooth tone curve,
 compresses out-of-gamut chroma, and adds subtle grain (`0.004`). Rebuild it with:
@@ -285,10 +285,10 @@ results.
 There is no neural network in this project. The "model" is a 33 × 33 × 33
 colour lookup table, the same `.cube` format that DaVinci Resolve or Photoshop
 would open, fitted with classical colour statistics: distribution matching,
-regularised least squares and a handful of safety checks. That choice is
-deliberate. The training data is a few hundred images with no pairs between
+regularised least squares and a handful of safety checks. The training data is a
+few hundred images with no pairs between
 camera frames and reference photographs, and the result has to run on a
-Raspberry Pi 3B with no machine-learning runtime installed.
+Raspberry Pi 4 with no machine-learning runtime installed.
 
 ### At capture time, on the Pi
 
