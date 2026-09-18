@@ -1,26 +1,20 @@
 # Introduction
 This entire idea took shape from trying to find a kid friendly camera for my son, which is a little more than potato quality, is made of decent plastic, modular and cheap.
 
-The prototype is still in progress but I'm aiming at a handheld point and shoot with the M5Stack Stick S3 used as the viewfinder along the Raspberry Pi3 and the Innomaker low light camera module for start.
-
-Once the prototype is working as expected, additional parts would include a proper 3D printed case, and potential upgrade to the Raspi high quality camera module and external battery HAT.
+The prototype phase is still in progress, the repo is super messy hence I'm experimenting with various hardware, software, and photo grading techniques.
 
 
 # Pi Film Reversal
 
-An experiment in pushing the Raspberry Pi camera to recreate film and
+One experiment in pushing the Raspberry Pi camera to recreate film and
 photographic looks with machine learning: it learns a 3D-LUT colour grade from
-a set of reference photographs, then applies it on-device at capture time. The
-first target is Martin Parr's saturated, flash-lit colour-negative look — vivid
-reds, yellows and blues, crisp contrast, neutral whites, and fine grain — with
-more film stocks and looks to follow. Runs on a Mac for training and a Raspberry
-Pi for capture, using the learned 3D-LUT approach from `kodachrome-film`.
+a set of reference photographs, then applies it on-device at capture time.
 
 The bundled look is a **handcrafted, untrained starter preset**; no reference
 photographs were used to train that preset. Separately, the local
 `artifacts/personal-collection-01-v1/` model was trained on 150 curated references
-and passed all five numerical validation gates. See the
-[personal-collection training report](docs/training-personal-collection-01-v1.md).
+and passed all five numerical validation gates. See
+[the training guide](docs/training.md) for how a run works and what the gates mean.
 It remains experimental and proxy-trained, not calibrated to the Raspberry Pi
 camera. Artifacts and training data are gitignored and are not included in a clone.
 
@@ -44,155 +38,143 @@ the ungraded original on the left and the graded `_graded.jpg` on the right.
 | <img src="docs/images/imx708-interior-original.jpg" alt="Sunlit interior with plants, ungraded" height="220"> | <img src="docs/images/imx708-interior-graded.jpg" alt="Same interior with the Martin Parr grade" height="220"> |
 
 ## Hardware
-- Raspberry Pi 3B, 1GB RAM
+- Raspberry Pi 3B, 1GB RAM (too slow for 12 MP post process)
+- Raspberry Pi 4, 4GB RAM (In testing)
 - M5Stack StickS3 (display, trigger)
-- x728 UPS Shield
+- Waveshare 2.8 inch LCD Display Module (In testing)
+- x728 UPS Shield + Geekworm X728-C1 Metal Case (Using it for outdoor photos)
 - 64GB SD Card
-- Innomaker 1080P USB2.0 UVC Camera, 121° Lens, PS5268 Sensor
+- Arducam 8-50mm C-Mount Zoom Lens for IMX477 (In testing)
+- Raspberry Pi Camera Module 3, Wide, IMX708 sensor (default mount for now)
 
 ## Getting started
 
-Follow [the setup guide](docs/setup.md). It is ordered by dependency and says,
-for every step, which machine it runs on and why:
+Full walkthrough: **[the setup guide](docs/setup.md)** — ordered by dependency,
+and it names the machine for every step. In brief:
 
-1. **Mac** — clone, venv, `pip install -e '.[train,dev,deploy]'`, PlatformIO, tests.
-2. **The one `.env` file** — every credential and address, read by the deploy
-   script, the hotspot script and the firmware build.
-3. **Pi, OS and network** — Trixie, hostname `pifilm`, Ethernet administration,
-   then the Pi's own Wi-Fi hotspot that the Stick joins.
-4. **Pi, application and service** — venv with system OpenCV, choice of look,
-   token file, systemd unit, reboot test.
-5. **Stick** — build and flash with the credentials baked in, read the serial log.
-6. **Training, optional** — only if you want to replace the bundled starter.
+| # | Machine | Step |
+| --- | --- | --- |
+| 1 | Mac | clone, venv, `pip install -e '.[train,dev,deploy]'`, PlatformIO, tests |
+| 2 | — | fill the one `.env` (all credentials/addresses; used by deploy, hotspot and firmware) |
+| 3 | Pi | OS (Trixie), hostname, Ethernet admin, then the Pi's own Wi-Fi hotspot |
+| 4 | Pi | app + service: venv with system OpenCV, choose a look, token file, systemd unit |
+| 5 | Stick | build + flash with credentials baked in, read the serial log |
+| 6 | Mac (opt) | training — only to replace the bundled starter |
 
-Two supporting documents go deeper: [the network and deployment guide](docs/sticks3-remote.md)
-for the hotspot, Ethernet, service and rollback details, and
-[the firmware README](firmware/sticks3/README.md) for the Stick's build, its
-serial debug log and how to prove the displayed photo is the graded one.
+More detail lives in the docs: the [network & deployment guide](docs/sticks3-remote.md)
+(hotspot, Ethernet, service, rollback) and the [firmware README](firmware/sticks3/README.md)
+(Stick build, serial log, proving the displayed photo is the graded one).
 
-| Last captured photo | Ready to capture |
+| Ready to capture | Last captured photo |
 | --- | --- |
 | <img src="docs/images/sticks3-ready.jpg" alt="M5Stack StickS3 showing TV colour bars and the READY prompt" height="280"> | <img src="docs/images/sticks3-captured-photo.jpg" alt="M5Stack StickS3 displaying a captured room photo" height="280"> |
 
-Never put a real token, Wi-Fi password, or Pi SSH password in a command,
-source file, or commit; `.env` is gitignored for that reason.
+> **Never** put a real token, Wi-Fi password, or Pi SSH password in a command,
+> source file, or commit — `.env` is gitignored for that reason.
 
 ## From button press to displayed photo
 
-The Raspberry Pi does the capture, grading and storage. The M5Stack StickS3 is
-the wireless shutter button and **last-capture display**, not a live viewfinder.
-The Pi runs its own Wi-Fi hotspot and the Stick joins it directly, so no home
-network is needed in the field; the two talk over a token-authenticated HTTP API.
-SSH over an Ethernet cable is used for deployment/administration and photo
-transfer, not for each shutter press. No cloud service is involved.
+The Pi captures, grades and stores. The M5Stack StickS3 is the wireless shutter
+and **last-capture display** — not a live viewfinder. It joins the Pi's own
+Wi-Fi hotspot and they talk over a token-authenticated HTTP API, so no home
+network or cloud is needed in the field. Ethernet/SSH is only for admin and
+photo transfer, never the shutter.
 
 ```text
-Stick joins the Pi's hotspot → checks Pi readiness → displays READY
-    ↓ primary button press
-Capture request → Pi accepts → Stick sounds shutter acknowledgement
-    ↓ TV colour bars while waiting
-Pi acquires one camera frame → normalizes → applies LUT → adds grain
+Stick joins hotspot → checks readiness → shows READY
+    ↓ button press
+POST /v1/captures → Pi accepts (one at a time) → Stick sounds shutter
+    ↓ colour bars while waiting
+Pi grabs one frame → normalize → LUT → grain
     ↓
-Pi saves original + graded JPEG + capture log → marks job complete
-    ├─ Optional Pi screen displays the saved graded photo
-    └─ Stick polls completion → downloads graded thumbnail → decodes → displays
+Pi saves original + graded JPEG + captures.jsonl → job complete
+    └─ Stick polls, downloads the graded thumbnail, displays it
 ```
 
-1. **Connect and become ready.** The Pi capture app must be running with its
-   remote listener enabled. The Stick joins the Pi's hotspot and checks the
-   Pi's status before showing that it is ready for another capture.
-2. **Request one snapshot.** A debounced primary-button press creates a unique
-   request ID and sends `POST /v1/captures`. The Pi accepts only one active
-   capture at a time; additional requests can be rejected as busy. The Stick's
-   shutter tone acknowledges an accepted request—it does not mean grading or
-   saving has finished.
-3. **Show processing feedback.** The Stick shows TV colour bars while submitting,
-   processing and downloading. It polls `GET /v1/captures/{id}` for that same
-   capture, rather than taking another photo while waiting. In two-screen mode,
-   the Pi also shows processing colour bars during capture and grading.
-4. **Capture and grade on the Pi.** One newly acquired USB-camera frame supplies
-   both the original and the graded output. The pipeline applies configured
-   white-balance and exposure/levels normalization, the selected 3D LUT, then
-   optional fine grain. The bundled starter is the default; `--artifacts DIR`
-   explicitly selects another LUT and its associated normalization/grain settings.
-5. **Save locally before declaring completion.** By default, the Pi writes to
-   `~/Pictures/pifilm/YYYY-MM-DD/`: the original camera JPEG as `*_original.jpg`
-   when available, otherwise an encoded `*_ungraded.jpg`; the full-resolution
-   graded `*_graded.jpg`; and an entry in `captures.jsonl`. The log records file
-   names, timestamp, LUT hash, normalization gains, grain seed, camera stream
-   settings and processing timings. The job is marked complete after these writes
-   succeed.
-6. **Transfer a graded preview to the Stick.** After completion, the Stick requests
-   `GET /v1/captures/{id}/image.jpg`. The Pi reads that job's saved **`*_graded.jpg`**
-   and generates an aspect-preserving **240 × 135 JPEG**, with black padding if
-   needed and a **64 KiB** transfer limit. This is a download initiated by the
-   Stick, not a push/upload of the full-resolution file. Grading is not repeated
-   on the Stick, and the ungraded file is not used for this endpoint.
-7. **Display until the next snapshot.** The Stick decodes the JPEG and displays
-   it from memory. In normal operation it stays visible until the next capture
-   starts. The full-resolution files remain on the Pi; the Stick display is not
-   the photo archive. Network or capture failures show a status/error instead of
-   being treated as a successful new photo.
+- **Ready** — the Pi app runs with its remote listener; the Stick joins the
+  hotspot and polls `GET /v1/status` before showing READY.
+- **Shutter** — a debounced press sends `POST /v1/captures` with a unique ID. The
+  Pi runs one capture at a time (extra requests get a busy `409`); the shutter
+  tone means "accepted", not "saved".
+- **Feedback** — the Stick shows colour bars and polls `GET /v1/captures/{id}`
+  while it works (two-screen mode shows the same bars on the Pi).
+- **Capture + grade** — one frame becomes both outputs: normalize → chosen 3D LUT
+  → grain. `--artifacts DIR` picks a different look.
+- **Save** — to `~/Pictures/pifilm/YYYY-MM-DD/`: `*_original.jpg` (or
+  `*_ungraded.jpg`), the full-res `*_graded.jpg`, and a `captures.jsonl` line (LUT
+  hash, gains, grain seed, timings). The job completes only after these writes.
+- **Preview to Stick** — the Stick fetches `GET /v1/captures/{id}/image.jpg`; the
+  Pi returns a 240×135, ≤64 KiB letterboxed JPEG of the graded file. No
+  re-grading on the Stick.
+- **Display** — shown until the next capture. Full-res stays on the Pi (the Stick
+  isn't the archive); failures show an error, not a fake success.
 
-For battery-powered **headless use**, the systemd service runs with
-`--no-preview` and the remote listener and no `--show-captures`. The Stick
-still receives the graded preview; the Pi needs no monitor. For **two-screen
-use**, add `--show-captures` in a working Pi desktop session. See the
-[deployment guide](docs/sticks3-remote.md) for the complete configuration and
-service commands.
+**Running modes:**
+
+| Mode | Command | Notes |
+| --- | --- | --- |
+| Headless (field) | `pifilm-capture --no-preview --remote-listen 0.0.0.0:8765` | battery, no monitor; the Stick still gets the preview |
+| Two-screen | `pifilm-capture --show-captures` | run in a Pi desktop session; the Pi also shows colour bars + the graded photo |
+
+Full config and rollback: the [deployment guide](docs/sticks3-remote.md).
 
 ## Using the tools directly
 
 ```bash
-.venv/bin/pifilm-process /path/to/originals /path/to/pifilm-results
-.venv/bin/pifilm-capture --no-preview --show-captures
+pifilm-process /path/to/originals /path/to/results   # batch re-grade a folder
+pifilm-capture --no-preview --show-captures          # capture on the Pi
 ```
 
-`SPACE` shows TV color bars while a snapshot is captured and processed, then
-displays the graded photo until the next capture. `Q` or Escape exits. Fullscreen
-display fits the image without cropping or stretching. Plain `--no-preview`
-uses terminal controls without a window; `--fake` uses synthetic camera frames.
+Capture modes:
 
-Captures go to `~/Pictures/pifilm/YYYY-MM-DD/`: the camera JPEG is saved verbatim
-as `*_original.jpg` when available, otherwise `*_ungraded.jpg`, alongside
-`*_graded.jpg` and `captures.jsonl`. These commands and outputs are separate from
-the Kodachrome project. The default USB path requests a 1920 × 1080 MJPEG stream
-at 30 fps; display resolution does not change capture resolution. Use `--device`
-to select a USB camera.
+| Flag | Behaviour |
+| --- | --- |
+| `--show-captures` | fullscreen window; `SPACE` grades a shot (colour bars while it works) and shows it until the next; `Q`/Esc quits |
+| `--no-preview` | terminal controls, no window |
+| `--fake` | synthetic frames, no camera (for testing) |
+| `--device /dev/videoN` | select a specific USB camera |
+
+Output lands in `~/Pictures/pifilm/YYYY-MM-DD/`: `*_original.jpg` (or
+`*_ungraded.jpg`), `*_graded.jpg`, and a `captures.jsonl` line. The USB (V4L2)
+path captures a 1920×1080 MJPEG stream at 30 fps; window size does not change
+capture resolution.
 
 ### Camera backends
 
-`--camera` chooses the backend: `v4l2` for the USB camera, or `picamera2` for a
-Raspberry Pi camera such as the Camera Module 3 (IMX708) at its native
-4608 × 2592. With neither flag, a `--device` implies V4L2, and otherwise
-Picamera2 is used when its package imports, falling back to V4L2. Picamera2 and
-libcamera come from Raspberry Pi OS apt packages, never pip, so the venv is made
-with `--system-site-packages`. Select the tuning file for the exact module with
-`--tuning-file` (for example `imx708_wide.json`):
+`--camera` picks the backend. With no flag, `--device` implies `v4l2`; otherwise
+Picamera2 is used when it imports, falling back to V4L2. Picamera2 and libcamera
+come from Raspberry Pi OS apt (never pip), so the venv uses `--system-site-packages`.
 
-```bash
-.venv/bin/pifilm-capture --camera picamera2 --tuning-file imx708_wide.json --no-preview
-```
+| Command | What it captures |
+| --- | --- |
+| `pifilm-capture --camera v4l2 --device /dev/video0` | USB (UVC) camera at 1920×1080 |
+| `pifilm-capture --camera picamera2 --tuning-file imx708_wide.json` | Pi Camera Module 3 (IMX708) at native 4608×2592 |
 
-First-time hardware bring-up, including `rpicam-hello --list-cameras`, a
-red/green/blue patch check, and verifying the saved 4608 × 2592 dimensions and
-metadata, is in [the Picamera2 bring-up checklist](docs/picamera2-bringup.md).
-An installed Picamera2 changes the default backend, so a Pi still on the USB
-camera should pass `--camera v4l2` explicitly until it is migrated.
+> Once Picamera2 is installed it becomes the default, so a Pi still on the USB
+> camera must pass `--camera v4l2` until it is migrated. First-time bring-up
+> (`rpicam-hello --list-cameras`, an RGB patch check, dimensions and metadata) is
+> in [the Picamera2 bring-up checklist](docs/picamera2-bringup.md).
 
-On Picamera2, a capture saves three files instead of two: `_original.jpg` (the
-ISP's own rendering — a Picamera2 frame is always a full-quality original,
-named `_original.jpg` whether or not a DNG is also saved), a `<stem>.dng` raw
-sidecar from the same request (on by default — about 18 MB DNG, roughly 28 MB
-per shot in total; skip it with `--no-dng` for long sessions, which omits only
-the `.dng` sidecar and never renames the original), and the usual `_graded.jpg`.
-`captures.jsonl` adds `camera_metadata` (a filtered, JSON-safe subset such as
-`ExposureTime`, `AnalogueGain`, `Lux`, `LensPosition`, `AfState`) and `dng`
-(the sidecar filename) when present. Autofocus defaults to continuous AF at
-normal range (`--autofocus {continuous,auto,manual}`, `--af-range
-{normal,macro,full}`); since there is no flash, exposure and white balance
-stay auto by default too — `--ae-lock`, `--awb-lock` and `--colour-gains R,B`
-are for optional controlled, reference-matching shoots only.
+**Picamera2 saves three files** per shot (two on V4L2):
+
+- `*_original.jpg` — the ISP's own full-quality render (always this name).
+- `<stem>.dng` — raw sidecar from the same frame (~18 MB; ~28 MB/shot total).
+- `*_graded.jpg` — the graded result.
+
+`captures.jsonl` also records `camera_metadata` (`ExposureTime`, `AnalogueGain`,
+`Lux`, `LensPosition`, `AfState`, …) and the `dng` filename when present.
+
+Capture flags:
+
+| Flag | Action |
+| --- | --- |
+| `--autofocus {continuous,auto,manual}` | autofocus mode (default `continuous`) |
+| `--af-range {normal,macro,full}` | autofocus range (default `normal`) |
+| `--no-dng` | skip the raw sidecar for long sessions (keeps `_original.jpg`) |
+| `--ae-lock` / `--awb-lock` / `--colour-gains R,B` | lock exposure / white balance for controlled reference shoots |
+
+There is no flash, so exposure and white balance stay auto by default; the lock
+flags are only for controlled, reference-matching shoots.
 
 The preset increases midtone color and contrast with a smooth tone curve,
 compresses out-of-gamut chroma, and adds subtle grain (`0.004`). Rebuild it with:
@@ -206,51 +188,43 @@ Pass `--highlights 0.6` to hold coloured highlights back from clipping; `0`
 
 ## Archiving photos to Nextcloud
 
-Optionally, the Pi pushes every capture under `~/Pictures/pifilm` to a folder on a
-Nextcloud server, so there is an off-device archive. `scripts/nextcloud_sync.py`
-runs `rclone copy` over Nextcloud's WebDAV endpoint — the rsync-equivalent that a
-Nextcloud HTTP server actually speaks (plain `rsync` cannot). Its behaviour is
-deliberate:
+Optional off-device backup: the Pi pushes everything under `~/Pictures/pifilm`
+to a Nextcloud folder with `rclone copy` over WebDAV (the rsync-equivalent for
+Nextcloud — plain `rsync` can't talk to it).
 
-- **Copy, never mirror.** It only ever adds or updates files on Nextcloud, so
-  deleting a photo on the Pi (an SD-card cleanup) never removes the cloud copy.
-- **A quiet no-op off the wired LAN.** Each run first checks that `eth0` holds a
-  real home-LAN IPv4 (not a `169.254.x` link-local address) and that Nextcloud
-  answers a TCP connect; otherwise it logs one line and exits. A frequent
-  schedule is therefore cheap and does nothing until the Pi is plugged into the
-  home network.
-- **The password never touches a command line.** It is read from `.env`,
-  obscured with `rclone obscure` (plaintext on stdin), and passed to rclone
-  through `RCLONE_CONFIG_*` environment variables — never an argv, a process
-  listing, or an rclone config file on disk.
-- **Incremental.** Everything under `~/Pictures/pifilm` is synced — the
-  `_original`/`_ungraded` JPEGs, the graded `_graded.jpg`, the `.dng` raws, and
-  `captures.jsonl` — and rclone skips files already uploaded.
+How it behaves:
 
-**Scheduling is a systemd timer, not cron.** Two example units live in `deploy/`:
-`pifilm-nextcloud-sync.timer` fires the `pifilm-nextcloud-sync.service` oneshot a few
-minutes after boot and then every 15 minutes (`OnUnitActiveSec=15min`,
-`Persistent=true`). Nothing runs on a schedule until you install and enable them.
+- **Copy, never delete** — only adds/updates on Nextcloud, so cleaning the Pi's
+  SD card never removes the cloud copies.
+- **No-op off the wired LAN** — each run exits at once unless `eth0` has a
+  home-LAN IP and Nextcloud answers a TCP connect, so a frequent timer is cheap.
+- **Password never in argv** — read from `.env`, obscured with `rclone obscure`,
+  passed via `RCLONE_CONFIG_*` env vars (never a command line or a config file).
+- **Incremental** — syncs the originals, `_graded.jpg`, `.dng` raws and
+  `captures.jsonl`, skipping anything already uploaded.
 
-Setup, on the Pi: `sudo apt install rclone`, fill the `NEXTCLOUD_*` keys in
-`.env` (use a Nextcloud **app password**, not your login), test by hand, then
-enable the timer:
+Scheduling is a **systemd timer, not cron**: `pifilm-nextcloud-sync.timer` runs
+the oneshot a few minutes after boot, then every 15 min (`OnUnitActiveSec=15min`,
+`Persistent=true`). Nothing runs until you install and enable it.
+
+Setup, on the Pi:
 
 ```bash
-# test first: a dry run does everything except transfer, then --apply copies
-.venv/bin/python scripts/nextcloud_sync.py --env .env
-.venv/bin/python scripts/nextcloud_sync.py --env .env --apply
+sudo apt install rclone                                # one-time
+# then fill NEXTCLOUD_* in .env — use a Nextcloud app password, not your login
 
-# then schedule it (drops the .example suffix in the destination names)
+.venv/bin/python scripts/nextcloud_sync.py --env .env          # dry run (no transfer)
+.venv/bin/python scripts/nextcloud_sync.py --env .env --apply  # real copy
+
+# enable the 15-minute timer (drops the .example suffix)
 sudo cp deploy/pifilm-nextcloud-sync.service.example /etc/systemd/system/pifilm-nextcloud-sync.service
 sudo cp deploy/pifilm-nextcloud-sync.timer.example   /etc/systemd/system/pifilm-nextcloud-sync.timer
 sudo systemctl daemon-reload
 sudo systemctl enable --now pifilm-nextcloud-sync.timer
-systemctl list-timers pifilm-nextcloud-sync.timer   # confirm NEXT / LAST
+systemctl list-timers pifilm-nextcloud-sync.timer      # confirm NEXT / LAST
 ```
 
-Full steps — the app-password setup, every `.env` key, and troubleshooting — are
-in [the Nextcloud sync guide](docs/nextcloud-sync.md).
+Full guide (app password, every key, troubleshooting): [docs/nextcloud-sync.md](docs/nextcloud-sync.md).
 
 ## Training a reference-derived look
 
@@ -285,10 +259,10 @@ results.
 There is no neural network in this project. The "model" is a 33 × 33 × 33
 colour lookup table, the same `.cube` format that DaVinci Resolve or Photoshop
 would open, fitted with classical colour statistics: distribution matching,
-regularised least squares and a handful of safety checks. That choice is
-deliberate. The training data is a few hundred images with no pairs between
+regularised least squares and a handful of safety checks. The training data is a
+few hundred images with no pairs between
 camera frames and reference photographs, and the result has to run on a
-Raspberry Pi 3B with no machine-learning runtime installed.
+Raspberry Pi 4 with no machine-learning runtime installed.
 
 ### At capture time, on the Pi
 
