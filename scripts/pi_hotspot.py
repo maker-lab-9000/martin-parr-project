@@ -17,6 +17,12 @@ The profile disables Protected Management Frames (``pmf=1``); the Pi 3B radio
 cannot install the AES-CMAC key that NetworkManager's "optional" default asks
 for, and the access point fails to start without this. Measured on
 Raspberry Pi OS Trixie, NetworkManager 1.52, brcmfmac firmware 7.45.98.
+
+It also disables Wi-Fi power save (``powersave=2``). The brcmfmac driver
+otherwise enables power management on ``wlan0`` (observed when eth0's carrier
+drops), which makes the hotspot drop clients: the Stick associates and gets a
+lease, then re-associates every few minutes and its API calls stall. Measured
+on a Pi 4 running the migrated SD, 2026-09-19.
 """
 
 from __future__ import annotations
@@ -95,6 +101,13 @@ def hotspot_keyfile(values: Mapping[str, str]) -> str:
         "mode=ap\n"
         f"ssid={ssid}\n"
         "band=bg\n"
+        # powersave=2 disables NetworkManager Wi-Fi power save on the AP. The
+        # brcmfmac driver otherwise enables power management on wlan0 (observed
+        # when eth0's carrier drops), which makes the hotspot drop clients: the
+        # Stick associates and gets a lease, then re-associates every few minutes
+        # and its API calls stall. Measured on a Pi 4 running the migrated SD,
+        # 2026-09-19; unplugging Ethernet made it obvious in the field.
+        "powersave=2\n"
         "\n"
         "[wifi-security]\n"
         "key-mgmt=wpa-psk\n"
