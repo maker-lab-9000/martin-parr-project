@@ -33,3 +33,6 @@ ektar100-attribution.md
 
 # OS
 .DS_Store
+
+# Sensor source photo folders (pilot / training originals); never committed
+source_*/

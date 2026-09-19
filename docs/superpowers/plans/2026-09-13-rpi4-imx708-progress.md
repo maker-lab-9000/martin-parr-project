@@ -13,8 +13,8 @@ Dependency review: 2026-09-13, following highlight-protection commits
 | 3: original / DNG / graded output | Implemented, merged; DNG written on hardware (15 MB) | One manual check left: open a `.dng` in darktable/RawTherapee and confirm colour. |
 | 4: benchmark | **Measured on the Pi 4, 2026-09-19** | Done: ~3.29 s to grade 12 MP, ~5.3 s shutter-to-saved, zero camera timeouts. Native 12 MP kept. |
 | F: lighting experiment | **Dropped** | Superseded by the no-flash decision of 2026-09-14. |
-| 6: gentler normalisation | Not implemented — **next** | Code can start now; freeze its parameters on IMX708 pilot photos before fitting Phase 5. |
-| 5: IMX708 retraining | Not performed | Stable capture/lighting policy, frozen normalisation, source corpus and scene-grouped training route. |
+| 6: gentler normalisation | **Done, frozen 2026-09-19** | Done: `levels_lift_highlight_ref=0.02`, `white_balance=False` in the bundled starter. |
+| 5: IMX708 retraining | Not performed | Normalisation frozen 2026-09-19 (white balance off, ref 0.02); collect the corpus. |
 | 7: grain | Not implemented | Phase 4 timing/resolution decision; independent of colour-LUT fitting. |
 | 8: scene statistics | Not implemented | Acquisition metadata for full integration; not a blocker for the first retrain. |
 | 9: baked highlight protection | Implemented and tested | Select the IMX708 value in Phase 5; current default remains zero. |
@@ -57,11 +57,51 @@ Dependency review: 2026-09-13, following highlight-protection commits
 
 ## Next implementation unit
 
-**Phase 6: gentler, configurable normalisation.** Phases 1–4 are done and the
-flash branch is dropped, so normalisation is the next code. The roadmap puts it
-deliberately before Phase 5: the LUT is fitted on normalised input, so changing
-normalisation after a fit invalidates it. Build it, choose its parameters on
-IMX708 pilot photos, freeze them, then fit once.
+**Phase 5: IMX708 retraining, starting with the source corpus.** Phase 6 is
+done and frozen (2026-09-19), so normalisation is stable and the LUT can be
+fitted once against it. Collect at least 100 usable originals across at least
+25 development scenes, plus 3–5 whole scenes reserved for the final held-out
+test, then run `pifilm-train` with `--no-source-white-balance
+--source-lift-highlight-ref 0.02` so the fit is trained on exactly the
+normalisation the Pi will apply.
+
+## 2026-09-19 — Phase 6 complete
+
+Frozen after the [normalisation write-up](../../experiments/2026-09-19-imx708-normalisation.md)
+and the design in
+[the Phase 6 spec](../specs/2026-09-19-phase6-normalisation-design.md): the
+108-shot IMX708 pilot showed the levels tone lift pushing already-clipped
+outdoor frames further into clipping (median gamma 0.577, 53 of 108 shots
+lifted while already at the ceiling) and a redundant grey-world white balance
+on top of the ISP's own AWB (up to 1.6x blue on foliage/yellow scenes).
+
+- **Clipping-aware lift** (`NormalizeParams.levels_lift_highlight_ref`):
+  damps the levels gamma lift by the fraction of pixels already at the
+  highlight ceiling; darkening is never damped. Single implementation in
+  `compute_gains()`, so the Pi and the trainer stay in parity.
+- **Frozen values**, bundled starter (`pifilm/preset.py` ->
+  `pifilm/data/params.json`): `white_balance=False`,
+  `levels_lift_highlight_ref=0.02`. LUT bytes and `lut_sha1` unchanged.
+- **Decision**: chose `ref=0.02` over `ref=0.05`. On the aggregate outdoor
+  medians the two are indistinguishable — both give median gamma 1.00 and
+  median clip 8.17%. They differ on the specific problem shots, those with a
+  moderate ceiling fraction, which `0.05` only partially damps and `0.02`
+  removes entirely: 172404 gamma 0.86 (`ref=0.05+nowb`) vs 1.00
+  (`ref=0.02+nowb`), 172258 0.83 vs 1.00, 171656 0.93 vs 1.00. The cost is
+  that `0.02` removes *more* of the indoor lift (indoor median gamma
+  0.764 -> 0.975) than `0.05` would (-> 0.856). The spec's proposed selection
+  rule (indoor gamma within 0.02 of current, outdoor clip down to the indoor
+  level) was not satisfiable by any candidate on this set, so the user chose on
+  the contact sheet, preferring the outdoor problem shots fully corrected over
+  keeping the indoor lift.
+- **Capture-side**: `pifilm-capture --ae-constraint {normal,highlight,shadows}`,
+  `--ae-metering {centre,spot,matrix}`, `--ev STOPS`, Picamera2-only, defaults
+  unchanged from today's behaviour. `highlight` targets exactly the kind of
+  in-camera clipping (a 171656-type shaded-foreground/bright-background scene)
+  that normalisation cannot fix after the fact; still needs one hardware shot
+  to accept (`docs/picamera2-bringup.md` section 4).
+- **Trainer**: `pifilm-train --no-source-white-balance
+  --source-lift-highlight-ref FRACTION`, recorded in `params.json`.
 
 **In parallel, start collecting the Phase 5 source corpus** — it is the long
 pole and needs no new code: at least 100 usable originals across at least 25
@@ -232,5 +272,6 @@ service.
 
 ### Next
 
-Phase 6 (gentler, configurable normalisation), then Phase 5 (retrain on IMX708
-frames). Start collecting the Phase 5 corpus in parallel.
+Phase 6 (gentler, configurable normalisation) is done and frozen — see the
+2026-09-19 entry above. Next: Phase 5, retrain on IMX708 frames, starting
+with the source corpus.

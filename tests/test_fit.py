@@ -145,6 +145,31 @@ def test_train_end_to_end_publishes_a_loadable_artifact(tmp_path):
     assert isinstance(gates, list) and gates
 
 
+def test_train_records_source_white_balance_and_lift_ref_in_the_artifact(tmp_path):
+    """The Pi applies whatever the artifact records, so the trainer must record both."""
+    _image_dir(tmp_path / "src", 8, 0)
+    _image_dir(tmp_path / "tgt", 8, 1, transform=lambda im: im**1.3)
+    out = tmp_path / "out"
+    cfg = FitConfig(lut_size=9, iterations=5)
+    sample = SampleConfig(crop_frac=0.0, max_side=64, pixels_per_image=500, val_fraction=0.25)
+    train(tmp_path / "src", tmp_path / "tgt", out, cfg, sample, None, allow_small=True,
+          source_white_balance=False, source_lift_highlight_ref=0.05)
+    normalize = Artifacts.load(out).normalize
+    assert normalize.white_balance is False
+    assert normalize.levels_lift_highlight_ref == 0.05
+    assert normalize.levels is True
+
+
+def test_cli_exposes_source_white_balance_and_lift_ref_flags():
+    args = build_parser().parse_args(["--source", "s", "--no-source-white-balance",
+                                      "--source-lift-highlight-ref", "0.05"])
+    assert args.source_white_balance is False
+    assert args.source_lift_highlight_ref == 0.05
+    defaults = build_parser().parse_args(["--source", "s"])
+    assert defaults.source_white_balance is True
+    assert defaults.source_lift_highlight_ref is None
+
+
 def test_train_leaves_the_previous_artifact_intact_if_publication_fails(tmp_path, monkeypatch):
     _image_dir(tmp_path / "src", 8, 0)
     _image_dir(tmp_path / "tgt", 8, 1, transform=lambda im: im**1.3)
@@ -186,6 +211,19 @@ def test_main_rejects_identical_and_missing_dirs(tmp_path, capsys):
     assert "same" in capsys.readouterr().err
     assert main(["--source", str(tmp_path / "missing"), "--target", str(tmp_path / "src"),
                  "--out", str(tmp_path / "o")]) == 1
+
+
+def test_main_reports_an_invalid_source_lift_highlight_ref_instead_of_a_traceback(
+    tmp_path, capsys
+):
+    """main() builds the source NormalizeParams in its own config block, so the
+    ValueError surfaces there and must be reported instead of a traceback."""
+    _image_dir(tmp_path / "src", 2, 0)
+    _image_dir(tmp_path / "tgt", 2, 1)
+    code = main(["--source", str(tmp_path / "src"), "--target", str(tmp_path / "tgt"),
+                 "--out", str(tmp_path / "o"), "--source-lift-highlight-ref", "1.5"])
+    assert code == 1
+    assert "levels_lift_highlight_ref" in capsys.readouterr().err
 
 
 def test_main_refuses_a_small_corpus_then_accepts_the_flag(tmp_path, capsys):

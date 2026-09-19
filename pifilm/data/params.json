@@ -3,7 +3,7 @@
   "lut_file": "pifilm.cube",
   "lut_sha1": "fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca",
   "normalize": {
-    "white_balance": true,
+    "white_balance": false,
     "wb_gain_min": 0.6,
     "wb_gain_max": 1.6,
     "exposure_target_median": 0.25,
@@ -18,7 +18,8 @@
     "levels_gamma_min": 0.5,
     "levels_gamma_max": 2.0,
     "levels_tone": "luma",
-    "levels_target_median": null
+    "levels_target_median": null,
+    "levels_lift_highlight_ref": 0.02
   },
   "grain": {
     "strength": 0.004,
@@ -29,6 +30,8 @@
     "kind": "handcrafted-preset",
     "trained": false,
     "preset_version": 1,
-    "note": "Untrained saturated color-negative starter. No Martin Parr images used. Not a calibrated film-stock or photographer emulation."
+    "highlights": 0.0,
+    "note": "Untrained saturated color-negative starter. No Martin Parr images used. Not a calibrated film-stock or photographer emulation.",
+    "normalisation_frozen": "2026-09-19 IMX708 pilot"
   }
 }

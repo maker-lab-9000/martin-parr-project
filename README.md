@@ -134,6 +134,10 @@ Capture modes:
 | `--fake` | synthetic frames, no camera (for testing) |
 | `--device /dev/videoN` | select a specific USB camera |
 
+With the default artifact, `pifilm-process` now grades any folder — including old USB
+captures — without white balance and with the damped highlight lift (see
+[Camera backends](#camera-backends)).
+
 Output lands in `~/Pictures/pifilm/YYYY-MM-DD/`: `*_original.jpg` (or
 `*_ungraded.jpg`), `*_graded.jpg`, and a `captures.jsonl` line. The USB (V4L2)
 path captures a 1920×1080 MJPEG stream at 30 fps; window size does not change
@@ -155,6 +159,11 @@ come from Raspberry Pi OS apt (never pip), so the venv uses `--system-site-packa
 > (`rpicam-hello --list-cameras`, an RGB patch check, dimensions and metadata) is
 > in [the Picamera2 bring-up checklist](docs/picamera2-bringup.md).
 
+The bundled starter now assumes the IMX708 ISP's AWB (white balance off, clipping-aware
+lift on), so a USB/V4L2 camera should point `--artifacts` at a copy with `"white_balance":
+true` in its `params.json` — redeploying the bundled starter to a USB Pi would otherwise
+drop white balance entirely ([how-it-works](docs/how-it-works.md#at-capture-time-on-the-pi)).
+
 **Picamera2 saves three files** per shot (two on V4L2):
 
 - `*_original.jpg` — the ISP's own full-quality render (always this name).
@@ -172,6 +181,9 @@ Capture flags:
 | `--af-range {normal,macro,full}` | autofocus range (default `normal`) |
 | `--no-dng` | skip the raw sidecar for long sessions (keeps `_original.jpg`) |
 | `--ae-lock` / `--awb-lock` / `--colour-gains R,B` | lock exposure / white balance for controlled reference shoots |
+| `--ae-constraint {normal,highlight,shadows}` | AE constraint mode (default `normal`); `highlight` protects bright regions from clipping |
+| `--ae-metering {centre,spot,matrix}` | AE metering mode (default `centre`) |
+| `--ev STOPS` | exposure compensation, -8 to 8 (default `0`) |
 
 There is no flash, so exposure and white balance stay auto by default; the lock
 flags are only for controlled, reference-matching shoots.
@@ -249,6 +261,10 @@ regularised least squares, safety gates) and run on the Pi with no ML runtime.
 
 - **At capture:** normalize → 3D LUT (trilinear) → film-like grain — a fixed
   pipeline in `pifilm/pipeline.py`.
+- Normalisation is defined per artifact, not per camera: the bundled starter
+  now targets the IMX708 (the default mount), with source white balance off
+  and a clipping-aware highlight lift — see
+  [the write-up](docs/experiments/2026-09-19-imx708-normalisation.md).
 - **At training:** `pifilm-train` samples two image corpora in Oklab, reweights
   hues, matches distributions (Pitié IDT), fits the LUT by regularised least
   squares, then passes five numerical gates before publishing.

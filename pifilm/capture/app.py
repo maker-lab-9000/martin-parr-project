@@ -39,9 +39,11 @@ sidecar is written alongside the original; ``--no-dng`` only omits that
 sidecar and never changes the original's name. One JSON line per capture
 lands in ``captures.jsonl``.
 
-That line is an audit record, not a status message. It carries the grain
-seed and the LUT hash, which together let anyone regenerate the graded file
-from the original; the negotiated stream format, so a camera that quietly
+That line is an audit record, not a status message. It carries the LUT hash,
+the normalisation hash and the grain seed, which together let anyone regenerate
+the graded file from the original — the LUT hash alone is not enough, because
+normalisation is a per-artifact setting that changes the grade under an
+unchanged LUT; the negotiated stream format, so a camera that quietly
 dropped to a different mode is visible; two timings, because the pipeline cost
 and the time from shutter to durable file are different numbers and only the
 second is what the user waits for; ``camera_metadata`` (per-shot camera metadata)
@@ -502,8 +504,11 @@ def _reject_picamera2_only_flags(
     """Refuse Picamera2-only options whenever no real Picamera2 will be opened,
     whether that is V4L2 (however it was chosen) or ``--fake``.
 
-    ``--device`` (which itself selects V4L2) and ``--no-dng`` (wired independently
-    into ``CaptureSession`` and meaningful on any backend) are deliberately excluded.
+    Covers ``--tuning-file``, ``--autofocus``, ``--af-range``, ``--ae-lock``,
+    ``--awb-lock``, ``--colour-gains``, ``--ae-constraint``, ``--ae-metering``
+    and ``--ev``. ``--device`` (which itself selects V4L2) and ``--no-dng``
+    (wired independently into ``CaptureSession`` and meaningful on any backend)
+    are deliberately excluded.
     """
     picamera_only = [
         ("--tuning-file", args.tuning_file is not None),
@@ -512,6 +517,9 @@ def _reject_picamera2_only_flags(
         ("--ae-lock", args.ae_lock),
         ("--awb-lock", args.awb_lock),
         ("--colour-gains", args.colour_gains is not None),
+        ("--ae-constraint", args.ae_constraint is not None),
+        ("--ae-metering", args.ae_metering is not None),
+        ("--ev", args.ev is not None),
     ]
     offenders = [name for name, given in picamera_only if given]
     if offenders:
@@ -553,6 +561,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--colour-gains", type=_colour_gains, default=None, metavar="R,B",
         help="Picamera2: fixed colour gains R,B; implies AWB disabled (controlled shoots)",
+    )
+    parser.add_argument(
+        "--ae-constraint", choices=("normal", "highlight", "shadows"), default=None,
+        help=(
+            "Picamera2 AE constraint: highlight protects bright regions from clipping "
+            "(default: normal)"
+        ),
+    )
+    parser.add_argument(
+        "--ae-metering", choices=("centre", "spot", "matrix"), default=None,
+        help="Picamera2 AE metering (default: centre-weighted)",
+    )
+    parser.add_argument(
+        "--ev", type=float, default=None, metavar="STOPS",
+        help="Picamera2 exposure compensation in stops, -8 to 8 (default: 0)",
     )
     parser.add_argument(
         "--no-dng", action="store_true", help="disable the Picamera2 DNG sidecar output",
@@ -621,6 +644,9 @@ def main(argv: list[str] | None = None) -> int:
                     ae_lock=args.ae_lock,
                     awb_lock=args.awb_lock,
                     colour_gains=args.colour_gains,
+                    ae_constraint=args.ae_constraint or "normal",
+                    ae_metering=args.ae_metering or "centre",
+                    ev=args.ev if args.ev is not None else 0.0,
                 )
             else:
                 _reject_picamera2_only_flags(

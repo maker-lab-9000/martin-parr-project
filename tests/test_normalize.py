@@ -346,3 +346,118 @@ def test_luma_tone_keeps_chroma_where_per_channel_tone_would_not():
     assert patch_chroma(out_c) / before > 1.20
     with pytest.raises(ValueError, match="levels_tone"):
         NormalizeParams(levels=True, levels_tone="magic")
+
+
+# --- clipping-aware lift (Phase 6) --------------------------------------------
+
+LIFT = NormalizeParams(white_balance=False, levels=True, levels_lift_highlight_ref=0.05)
+
+
+def _scene(frac_ceiling: float, ceiling_value: float = 1.0, h: int = 40, w: int = 60,
+           body_lo: float = 0.30, body_hi: float = 0.60):
+    """A dark gradient body (sRGB 0.30-0.60) plus ``frac_ceiling`` of its pixels at
+    ``ceiling_value``. With the body this dark the levels median lands below the
+    exposure target, so raw_gamma < 1: a lift, the outdoor failure mode."""
+    body = np.linspace(body_lo, body_hi, w, dtype=np.float32)
+    img = np.repeat(body[None, :], h, axis=0)[..., None].repeat(3, axis=2).copy()
+    n = int(round(frac_ceiling * h * w))
+    flat = img.reshape(-1, 3)
+    flat[:n] = ceiling_value
+    return flat.reshape(h, w, 3)
+
+
+def test_lift_ref_none_is_bit_for_bit_the_old_path_and_records_weight_one():
+    img = _scene(0.10)
+    old = compute_gains(img, NormalizeParams(white_balance=False, levels=True))
+    assert old.levels["lift_weight"] == 1.0
+    assert old.levels["gamma"] == pytest.approx(
+        float(np.clip(old.levels["raw_gamma"], 0.5, 2.0))
+    )
+    for key in ("raw_gamma", "highlight_frac", "lift_weight"):
+        assert key in old.levels
+
+
+def test_a_dark_frame_with_nothing_at_the_ceiling_keeps_its_full_lift():
+    # bright pixels at sRGB 0.977 (~0.95 linear) sit below the 0.97 ceiling line
+    g = compute_gains(_scene(0.10, ceiling_value=0.977), LIFT)
+    assert g.levels["raw_gamma"] < 1.0, "fixture must be a lift"
+    assert g.levels["highlight_frac"] == 0.0
+    assert g.levels["lift_weight"] == 1.0
+    assert g.levels["gamma"] == pytest.approx(g.levels["raw_gamma"])
+
+
+def test_a_frame_with_ref_or_more_at_the_ceiling_gets_no_lift():
+    g = compute_gains(_scene(0.10), LIFT)  # 10 % at the ceiling, ref 5 %
+    assert g.levels["raw_gamma"] < 1.0, "fixture must be a lift"
+    assert g.levels["highlight_frac"] == pytest.approx(0.10, abs=0.005)
+    assert g.levels["lift_weight"] == 0.0
+    assert g.levels["gamma"] == pytest.approx(1.0)
+
+
+def test_a_partial_ceiling_fraction_damps_the_lift_linearly():
+    g = compute_gains(_scene(0.025), LIFT)  # half of ref
+    assert g.levels["lift_weight"] == pytest.approx(0.5, abs=0.02)
+    expected = 1.0 - (1.0 - g.levels["raw_gamma"]) * g.levels["lift_weight"]
+    assert g.levels["gamma"] == pytest.approx(expected)
+
+
+def test_darkening_is_never_damped():
+    # A bright body (sRGB 0.75-0.95) puts the stretched median above the exposure
+    # target, so raw_gamma > 1. A flat body would not work: the percentile stretch
+    # maps a constant body to 0, collapsing the median into a lift instead.
+    bright = _scene(0.10, body_lo=0.75, body_hi=0.95)
+    g = compute_gains(bright, LIFT)
+    assert g.levels["raw_gamma"] > 1.0, "fixture must be a darkening"
+    assert g.levels["lift_weight"] == 1.0
+    assert g.levels["gamma"] == pytest.approx(float(np.clip(g.levels["raw_gamma"], 0.5, 2.0)))
+
+
+def test_highlight_fraction_counts_pixels_the_stats_mask_excludes():
+    # The stats mask drops luminance > 0.90, so the ceiling pixels are invisible to
+    # the median; highlight_frac must still see them or bright frames read as dark.
+    g = compute_gains(_scene(0.10), LIFT)
+    assert g.levels["highlight_frac"] == pytest.approx(0.10, abs=0.005)
+
+
+def test_clamped_levels_reflects_the_damped_gamma():
+    # Undamped raw_gamma is well below 1; damped to exactly 1.0 it is inside the
+    # clamp, so the clamp flag must be False even though raw_gamma alone might clamp.
+    g = compute_gains(_scene(0.10), NormalizeParams(
+        white_balance=False, levels=True, levels_lift_highlight_ref=0.05,
+        levels_gamma_min=0.95, levels_gamma_max=1.05,
+    ))
+    assert g.levels["gamma"] == pytest.approx(1.0)
+    assert g.clamped["levels"] is False
+
+
+@pytest.mark.parametrize("value", [0.0, -0.1, 1.5, float("nan")])
+def test_lift_ref_validation_names_the_field(value):
+    with pytest.raises(ValueError, match="levels_lift_highlight_ref"):
+        NormalizeParams(levels_lift_highlight_ref=value)
+
+
+def test_lift_ref_round_trips_and_is_optional():
+    p = NormalizeParams(levels=True, levels_lift_highlight_ref=0.05)
+    assert NormalizeParams.from_dict(p.to_dict()) == p
+    assert NormalizeParams.from_dict({"levels": True}).levels_lift_highlight_ref is None
+
+
+def test_a_second_pass_is_still_mild_with_the_lift_ref_set():
+    # Damping deliberately stops short of the exposure target, so the frame the
+    # second pass sees is further from target than an undamped one and the
+    # residual gamma is correspondingly larger (0.88 here against 0.95 without
+    # the lift ref). What must hold is that it stays bounded and strictly milder
+    # than the first pass, i.e. the damping does not set up a runaway.
+    img = _scene(0.02)
+    once, once_gains = normalize_float(img, LIFT)
+    twice_gains = compute_gains(once, LIFT)
+    assert 0.85 <= twice_gains.levels["gamma"] <= 1.1
+    assert abs(1.0 - twice_gains.levels["gamma"]) < abs(1.0 - once_gains.levels["gamma"])
+
+
+def test_u8_and_float_paths_agree_on_the_damped_gamma():
+    img = _scene(0.03)
+    _, g_float = normalize_float(img, LIFT)
+    _, g_u8 = normalize_u8((img * 255).round().astype(np.uint8), LIFT)
+    assert g_u8.levels["gamma"] == pytest.approx(g_float.levels["gamma"], abs=0.03)
+    assert g_u8.levels["lift_weight"] == pytest.approx(g_float.levels["lift_weight"], abs=0.05)

@@ -41,7 +41,18 @@ Understanding this makes every flag and every gate in the report meaningful.
    vignetting). The long side is downscaled to 512. Source frames get the same
    white balance and levels normalisation the Pi applies at capture; reference
    photographs get exposure matching only, no white balance and no levels
-   stretch, so their colour balance is preserved. 3000 pixels per image are
+   stretch, so their colour balance is preserved. `--no-source-levels` and
+   `--no-source-white-balance` turn off the respective source-side step
+   (mirroring `NormalizeParams.levels` and `.white_balance`), and
+   `--source-lift-highlight-ref FRACTION` sets the source's clipping-aware
+   levels lift; all three are recorded in the artifact's `params.json` so the
+   Pi applies exactly what was trained. Use `--no-source-white-balance` and
+   `--source-lift-highlight-ref` together when the source camera has its own
+   ISP-side AWB (an IMX708/Picamera2 corpus, for example) — the bundled
+   starter's own values are `white_balance=False` and
+   `levels_lift_highlight_ref=0.02`; see
+   [the normalisation write-up](experiments/2026-09-19-imx708-normalisation.md)
+   for why. 3000 pixels per image are
    sampled with Oklab lightness between 0.02 and 0.98, capped at 400,000 per
    pool. The white-balance and exposure gains, how often they hit their clamps,
    and which ICC profiles were seen travel with the pool into the report.
@@ -94,9 +105,11 @@ service sets no controls, so auto exposure and auto white balance are on at
 capture time; leave them on for the shoot too, and give each frame a second to
 settle before pressing.
 
-Do **not** lock one white balance across different lighting. The pipeline's
-per-frame white balance, applied identically in training and at capture, is
-what absorbs tungsten versus daylight, but its gains are clamped to 0.6 to 1.6.
+Do **not** lock one white balance across different lighting. What absorbs
+tungsten versus daylight is either the pipeline's per-frame white balance,
+applied identically in training and at capture, or — when the artifact turns it
+off, as the IMX708 starter does — the camera's own AWB. The pipeline's gains
+are clamped to 0.6 to 1.6.
 A tungsten room shot with a daylight value locked in leaves a cast that range
 cannot remove; the trainer then learns to cool everything, and every daylight
 capture comes out wrong. If auto white balance visibly hunts within one scene,

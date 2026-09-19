@@ -102,7 +102,8 @@ fitted on normalized input; grain runs last because it models developed film.
 - `app.py`: `CaptureSession` owns camera + pipeline + output dir. Three loops: live preview,
   captures-only display (`--show-captures`, shows TV colour bars while processing), and headless
   terminal. Output: `~/Pictures/pifilm/YYYY-MM-DD/HHMMSS_{original|ungraded,pifilm}.jpg` plus an audit
-  line in `captures.jsonl` (grain seed + LUT hash allow regenerating the graded file).
+  line in `captures.jsonl` (LUT hash, normalisation hash and grain seed allow regenerating the
+  graded file).
 - `controller.py`: `CaptureController` serializes captures on one worker thread, one active job at
   a time, idempotent by `request_id`. Shared by the local SPACE key and the remote API.
 - `remote.py`: `RemoteCaptureServer`, a stdlib `http.server` with bearer-token auth
