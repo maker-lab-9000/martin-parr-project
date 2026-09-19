@@ -13,6 +13,7 @@ an unflagged capture behaves exactly as it did before they existed.
 from __future__ import annotations
 
 import math
+import sys
 import tempfile
 from typing import Any
 
@@ -281,6 +282,22 @@ def _stream_info(actual: Any, tuning_file: str) -> StreamInfo:
     )
 
 
+def _warn_missing_ae_enum(control: str, flag: str, requested: str, default: str) -> None:
+    """Report an AE control this libcamera cannot set, but only when it matters.
+
+    The defaults are libcamera's own, so their absence changes nothing and stays
+    silent; a requested non-default that cannot be applied is a surprise worth
+    one stderr line.
+    """
+    if requested == default:
+        return
+    print(
+        f"warning: this libcamera has no {control}, so {flag} {requested} was not applied; "
+        f"the camera keeps its default ({default})",
+        file=sys.stderr,
+    )
+
+
 def _apply_camera_controls(
     camera: Any,
     autofocus: str,
@@ -319,20 +336,24 @@ def _apply_camera_controls(
     # blow out while metering a shaded foreground (measured: shot 171656 on the
     # IMX708 pilot). Enum lookups are guarded like NoiseReductionMode above because
     # older libcamera builds lack them.
+    # A missing enum silently leaves libcamera's default in force. That is
+    # harmless for the defaults (they *are* libcamera's defaults) but not for a
+    # requested non-default: the user asked for highlight protection and would
+    # otherwise believe they got it, so say so on stderr.
     try:
         constraint_modes = {"normal": _lc.AeConstraintModeEnum.Normal,
                             "highlight": _lc.AeConstraintModeEnum.Highlight,
                             "shadows": _lc.AeConstraintModeEnum.Shadows}
         cam_controls["AeConstraintMode"] = constraint_modes[ae_constraint]
     except AttributeError:
-        pass  # older libcamera: leave the constraint at its default, recorded as unset
+        _warn_missing_ae_enum("AeConstraintMode", "--ae-constraint", ae_constraint, "normal")
     try:
         metering_modes = {"centre": _lc.AeMeteringModeEnum.CentreWeighted,
                           "spot": _lc.AeMeteringModeEnum.Spot,
                           "matrix": _lc.AeMeteringModeEnum.Matrix}
         cam_controls["AeMeteringMode"] = metering_modes[ae_metering]
     except AttributeError:
-        pass  # older libcamera: leave metering at its default, recorded as unset
+        _warn_missing_ae_enum("AeMeteringMode", "--ae-metering", ae_metering, "centre")
     # 0.0 is neutral, but it is set unconditionally so every capture records the
     # same control set regardless of the flags used.
     cam_controls["ExposureValue"] = float(ev)

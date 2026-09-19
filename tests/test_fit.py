@@ -216,7 +216,8 @@ def test_main_rejects_identical_and_missing_dirs(tmp_path, capsys):
 def test_main_reports_an_invalid_source_lift_highlight_ref_instead_of_a_traceback(
     tmp_path, capsys
 ):
-    """NormalizeParams is validated inside train(), so main() must catch that ValueError."""
+    """main() builds the source NormalizeParams in its own config block, so the
+    ValueError surfaces there and must be reported instead of a traceback."""
     _image_dir(tmp_path / "src", 2, 0)
     _image_dir(tmp_path / "tgt", 2, 1)
     code = main(["--source", str(tmp_path / "src"), "--target", str(tmp_path / "tgt"),

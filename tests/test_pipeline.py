@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import pytest
 
@@ -18,10 +20,33 @@ def test_process_shapes_and_info(pipeline):
     frame = np.random.default_rng(0).integers(0, 256, (36, 64, 3), dtype=np.uint8)
     out, info = pipeline.process(frame, rng=np.random.default_rng(0))
     assert out.shape == frame.shape and out.dtype == np.uint8
-    assert set(info) == {"wb_gains", "exposure_gain", "levels", "clamped", "lut_sha1"}
+    assert set(info) == {"wb_gains", "exposure_gain", "levels", "clamped", "lut_sha1",
+                         "normalize_sha1"}
     assert len(info["wb_gains"]) == 3
     assert info["lut_sha1"] == sha1_hex(LUT3D.identity(9))
     assert set(info["clamped"]) == {"wb", "exposure"}
+
+
+def test_normalize_sha1_identifies_the_normalisation(tmp_path):
+    """The LUT hash alone no longer pins the grade: normalisation is per artifact.
+
+    A capture record has to say which normalisation produced it, or two records
+    with the same ``lut_sha1`` and different ``levels_lift_highlight_ref``
+    cannot be told apart (see docs/known-issues.md).
+    """
+    def _pipeline(sub, params):
+        write_artifact(tmp_path / sub, LUT3D.identity(9), params, GrainParams())
+        return Pipeline(Artifacts.load(tmp_path / sub))
+
+    frame = np.random.default_rng(3).integers(0, 256, (24, 32, 3), dtype=np.uint8)
+    base = _pipeline("a", NormalizeParams())
+    same = _pipeline("b", NormalizeParams())
+    damped = _pipeline("c", NormalizeParams(levels_lift_highlight_ref=0.02))
+
+    digest = base.process(frame, grain=False)[1]["normalize_sha1"]
+    assert re.fullmatch(r"[0-9a-f]{40}", digest)
+    assert same.process(frame, grain=False)[1]["normalize_sha1"] == digest
+    assert damped.process(frame, grain=False)[1]["normalize_sha1"] != digest
 
 
 def test_grain_can_be_skipped(pipeline):

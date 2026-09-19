@@ -7,11 +7,17 @@ low-resolution live preview (``grain=False``) and batch reprocessing, which
 is what guarantees the preview shows the grade the capture will get.
 
 ``info`` returns the gains that were applied, whether either gain hit its
-clamp, and the LUT's content hash. The capture app writes all of it to its
-log so a surprising frame can be explained after the fact.
+clamp, the LUT's content hash and a hash of the normalisation parameters. The
+capture app writes all of it to its log so a surprising frame can be explained
+after the fact. Both hashes are needed: normalisation is a per-artifact
+setting, so the same LUT under two different ``NormalizeParams`` produces two
+different grades that ``lut_sha1`` alone cannot tell apart.
 """
 
 from __future__ import annotations
+
+import hashlib
+import json
 
 import numpy as np
 
@@ -24,6 +30,9 @@ class Pipeline:
     def __init__(self, artifacts: Artifacts) -> None:
         self.artifacts = artifacts
         self._filter = artifacts.lut.to_pillow()
+        self.normalize_sha1 = hashlib.sha1(
+            json.dumps(artifacts.normalize.to_dict(), sort_keys=True).encode()
+        ).hexdigest()
 
     def process(
         self, rgb_u8: np.ndarray, *, grain: bool = True, rng: np.random.Generator | None = None
@@ -47,4 +56,5 @@ class Pipeline:
             ),
             "clamped": dict(gains.clamped),
             "lut_sha1": self.artifacts.lut_sha1,
+            "normalize_sha1": self.normalize_sha1,
         }

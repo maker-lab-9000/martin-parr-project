@@ -39,9 +39,11 @@ sidecar is written alongside the original; ``--no-dng`` only omits that
 sidecar and never changes the original's name. One JSON line per capture
 lands in ``captures.jsonl``.
 
-That line is an audit record, not a status message. It carries the grain
-seed and the LUT hash, which together let anyone regenerate the graded file
-from the original; the negotiated stream format, so a camera that quietly
+That line is an audit record, not a status message. It carries the LUT hash,
+the normalisation hash and the grain seed, which together let anyone regenerate
+the graded file from the original — the LUT hash alone is not enough, because
+normalisation is a per-artifact setting that changes the grade under an
+unchanged LUT; the negotiated stream format, so a camera that quietly
 dropped to a different mode is visible; two timings, because the pipeline cost
 and the time from shutter to durable file are different numbers and only the
 second is what the user waits for; ``camera_metadata`` (per-shot camera metadata)

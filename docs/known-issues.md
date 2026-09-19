@@ -84,3 +84,43 @@ example a half-res `2304×1296` binned stream, or `1920×1080`), keeping full
 resolution only for the saved original and DNG. Grading 2–3 MP is several times
 faster, which closes the camera-servicing gap that trips the watchdog. Raising
 `buffer_count` and/or CMA is a secondary lever where there is room.
+
+## Capture records written before 2026-09-19 cannot be told apart by `lut_sha1`
+
+**Status:** understood, not fixed retroactively. New records carry the missing
+field; old ones cannot be rewritten without guessing.
+
+**First seen:** 2026-09-19, reviewing the Phase 6 normalisation freeze
+([write-up](experiments/2026-09-19-imx708-normalisation.md)).
+
+### Symptom
+
+Two `captures.jsonl` records — one from before the Phase 6 freeze, one from
+after — can carry the **same `lut_sha1`** and still have been graded
+differently. The bundled starter's LUT did not change in Phase 6; its
+normalisation did (`white_balance` true -> false,
+`levels_lift_highlight_ref` null -> 0.02).
+
+### Root cause
+
+`lut_sha1` is the content hash of the `.cube` only. Normalisation lives in the
+artifact's `params.json` and was never hashed into the record, so the record
+identified half of the grade. `Pipeline.process` now also records
+`normalize_sha1` (a SHA-1 of `NormalizeParams.to_dict()`, sorted keys), and
+`CaptureSession` writes it into every line — but only for captures taken from
+2026-09-19 onward.
+
+### Workaround for old records
+
+The record still carries the *applied* `wb_gains`, `exposure_gain` and
+`levels`, which is what the normaliser actually did to that frame. Feeding
+those values back reconstructs the grade without knowing which parameter set
+produced them; the missing piece is only the parameter identity, not the
+result.
+
+### How to confirm it is resolved for new captures
+
+`normalize_sha1` is present in every new `captures.jsonl` line
+(`tests/test_app.py::test_log_line_carries_full_provenance`) and differs
+between two artifacts whose normalisation differs
+(`tests/test_pipeline.py::test_normalize_sha1_identifies_the_normalisation`).

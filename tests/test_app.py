@@ -168,7 +168,8 @@ def test_log_line_carries_full_provenance(tmp_path, pipeline):
     line = json.loads((tmp_path / "shots" / "2026-09-03" / "captures.jsonl").read_text().strip())
     assert set(line) >= {
         "timestamp", "original", "pifilm", "frame_source", "wb_gains", "exposure_gain",
-        "clamped", "grain_seed", "lut_sha1", "params_version", "package_version",
+        "clamped", "grain_seed", "lut_sha1", "normalize_sha1", "params_version",
+        "package_version",
         "width", "height", "fourcc", "fps", "pipeline_ms", "shutter_to_saved_ms",
     }
     assert line["shutter_to_saved_ms"] >= line["pipeline_ms"]

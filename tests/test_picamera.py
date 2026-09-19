@@ -675,7 +675,7 @@ def test_ae_constraint_metering_and_ev_reach_the_controls(install_picamera):
     camera.close()
 
 
-def test_ae_enums_are_omitted_on_older_libcamera_but_ev_is_still_set(install_picamera):
+def test_ae_enums_are_omitted_on_older_libcamera_but_ev_is_still_set(install_picamera, capsys):
     state = install_picamera(with_ae_enums=False)
     camera = Picamera2Camera(ae_constraint="highlight")
 
@@ -683,6 +683,19 @@ def test_ae_enums_are_omitted_on_older_libcamera_but_ev_is_still_set(install_pic
     assert "AeConstraintMode" not in controls
     assert "AeMeteringMode" not in controls
     assert controls["ExposureValue"] == 0.0
+    # A requested non-default must not be silently dropped: the user asked for
+    # highlight protection and would otherwise believe they got it.
+    warning = capsys.readouterr().err
+    assert "highlight" in warning and "AeConstraintMode" in warning
+    camera.close()
+
+
+def test_default_ae_settings_warn_nothing_on_older_libcamera(install_picamera, capsys):
+    """The defaults are libcamera's own, so their absence changes nothing."""
+    install_picamera(with_ae_enums=False)
+    camera = Picamera2Camera()
+
+    assert capsys.readouterr().err == ""
     camera.close()
 
 
