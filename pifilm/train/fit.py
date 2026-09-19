@@ -52,7 +52,7 @@ from ..highlight import protect_highlights
 from ..imageio import list_images
 from ..lut import LUT3D
 from ..normalize import NormalizeParams
-from .dataset import CorpusTooSmall, PixelPool, SampleConfig, build_corpus
+from .dataset import PixelPool, SampleConfig, build_corpus
 from .evaluate import check_gates, evaluate
 from .lutfit import enforce_grey_axis, enforce_monotone, fit_lut
 from .report import write_report
@@ -188,13 +188,19 @@ def train(
     target_levels: bool = False,
     source_levels: bool = True,
     target_median: float | None = None,
+    source_white_balance: bool = True,
+    source_lift_highlight_ref: float | None = None,
     command: str = "",
     progress: Callable[[str], None] | None = None,
 ) -> tuple[dict, list]:
     say = progress or (lambda _m: None)
     source_dir, target_dir, out_dir = Path(source_dir), Path(target_dir), Path(out_dir)
 
-    source_normalize = NormalizeParams(levels=source_levels)
+    source_normalize = NormalizeParams(
+        white_balance=source_white_balance,
+        levels=source_levels,
+        levels_lift_highlight_ref=source_lift_highlight_ref,
+    )
     target_normalize = NormalizeParams(
         white_balance=False, levels=target_levels, levels_target_median=target_median
     )
@@ -324,6 +330,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-pixels", type=int, default=400_000)
     parser.add_argument("--no-source-levels", dest="source_levels", action="store_false",
                         help="normalise camera frames with a gain instead of levels (A/B only)")
+    parser.add_argument(
+        "--no-source-white-balance", dest="source_white_balance", action="store_false",
+        help="do not grey-world the source frames; use for cameras whose ISP has already "
+             "white-balanced them (Picamera2/IMX708). Recorded in the artifact and applied "
+             "identically by the Pi",
+    )
+    parser.add_argument(
+        "--source-lift-highlight-ref", type=float, default=None, metavar="FRACTION",
+        help="clipping-aware lift: fraction of pixels at the ceiling at which the levels "
+             "lift is fully suppressed (e.g. 0.05); default off. Recorded in the artifact",
+    )
     parser.add_argument("--target-levels", action=argparse.BooleanOptionalAction, default=False,
                         help="stretch target levels; default uses exposure matching only")
     parser.add_argument("--target-median", type=float, default=None,
@@ -369,9 +386,14 @@ def main(argv: list[str] | None = None) -> int:
             proxy_source=args.proxy_source, allow_small=args.allow_small,
             target_levels=args.target_levels, target_median=args.target_median,
             source_levels=args.source_levels,
+            source_white_balance=args.source_white_balance,
+            source_lift_highlight_ref=args.source_lift_highlight_ref,
             command=" ".join(["pifilm-train", *(argv or sys.argv[1:])]), progress=print,
         )
-    except CorpusTooSmall as exc:
+    # CorpusTooSmall is a ValueError, and so is a rejected --source-lift-highlight-ref:
+    # NormalizeParams is validated inside train(), not in the config block above. Both are
+    # user errors in the invocation, so both get the same one-line message, not a traceback.
+    except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
