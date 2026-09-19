@@ -119,8 +119,7 @@ control the lens; the default is continuous AF at normal range.
 
 Confirm on real hardware:
 
-- The DNG opens in darktable or RawTherapee with correct colour (not a
-  garbled Bayer pattern or an inverted channel order).
+- The DNG passes the [DNG acceptance test](#dng-acceptance-test) below.
 - Repeated captures at different subject distances move `LensPosition` in
   `camera_metadata`, and `AfState` reflects the autofocus state machine
   (searching vs. focused).
@@ -130,6 +129,43 @@ Confirm on real hardware:
 - With `--ae-lock`, confirm the locked frame's exposure matches an unlocked
   frame of the same scene before relying on it — the lock freezes whatever
   value AE held before capture started, which is not guaranteed to be settled.
+
+### DNG acceptance test
+
+The DNG is the archival, re-processable source for later work (Phase 5
+retraining, reprocessing experiments). The saved JPEGs come from the ISP and do
+not depend on the DNG's tags, so a subtly wrong DNG breaks nothing today — but
+every future raw-based experiment would be built on bad data. Check it once,
+here.
+
+**Test shot.** In even daylight, photograph a scene containing a white or grey
+sheet of paper, something clearly **red**, and something clearly **blue**. One
+frame then exposes white balance, channel order and black level at a glance.
+Open its `<stem>.dng` and work down this table.
+
+| Check | Pass | A failure means |
+| --- | --- | --- |
+| Opens; pixel dimensions | Opens cleanly at **4608 × 2592** | Will not open, half size or garbled → PiDNG or stride problem |
+| Is the red object red? | Correct colours | **Red and blue swapped** → wrong CFA pattern tag. The sensor is **BGGR**; tagged RGGB, skin goes cyan and sky goes orange. The most likely failure |
+| "As shot" white balance | Greys and whites look roughly neutral | A heavy **green cast** that as-shot WB does not fix → `AsShotNeutral` or the colour matrix is missing or wrong |
+| Shadows | Fall to clean black, no colour tint | Milky, or **magenta/green shadows** → wrong `BlackLevel` |
+| Highlights | Clip to white | Clip to **pink or cyan** → wrong per-channel white level |
+| 100 % zoom | Smooth grain, no pattern | **Vertical stripes, banding or a screen-door texture** → the 10-bit `SBGGR10_CSI2P` packed data is being unpacked wrongly |
+| Against `<stem>_original.jpg` | Same framing, same moment, same focus; colours in the same family | A different frame → the DNG did not come from the same capture request |
+| EXIF in the raw developer | Matches that capture's `captures.jsonl` record (`ExposureTime`, `AnalogueGain`, colour temperature) | Mismatch → the metadata is not reaching the DNG |
+
+**Expected, and not a fault:**
+
+- The raw looks **flat and desaturated** beside the graded JPEG. That is
+  correct: the ISP is deliberately neutralised (sharpness, contrast and
+  saturation at 1.0) and the JPEG additionally carries the tone curve and LUT.
+- **darktable applies its own scene-referred tone mapping by default**, so it
+  will not match the JPEG. Judge the raw with a minimal profile; RawTherapee's
+  **Neutral** profile is the easier choice for this check.
+
+**Pass criteria:** opens at full size, red is red, as-shot white balance looks
+neutral, blacks are clean, no repeating pattern at 100 %, and it is recognisably
+the same frame as the original JPEG. Record the result in the progress document.
 
 ## 5. Record acceptance and collect the pilot later
 
