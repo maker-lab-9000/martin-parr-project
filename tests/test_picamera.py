@@ -107,10 +107,29 @@ class _NoiseReductionModeEnum:
     HighQuality = "NoiseReductionMode.HighQuality"
 
 
-def _fake_libcamera_module(*, with_noise_reduction=True):
+class _AeConstraintModeEnum:
+    """Mimics ``libcamera.controls.AeConstraintModeEnum``."""
+
+    Normal = "AeConstraintMode.Normal"
+    Highlight = "AeConstraintMode.Highlight"
+    Shadows = "AeConstraintMode.Shadows"
+
+
+class _AeMeteringModeEnum:
+    """Mimics ``libcamera.controls.AeMeteringModeEnum``."""
+
+    CentreWeighted = "AeMeteringMode.CentreWeighted"
+    Spot = "AeMeteringMode.Spot"
+    Matrix = "AeMeteringMode.Matrix"
+
+
+def _fake_libcamera_module(*, with_noise_reduction=True, with_ae_enums=True):
     controls_ns = SimpleNamespace(AfModeEnum=_AfModeEnum, AfRangeEnum=_AfRangeEnum)
     if with_noise_reduction:
         controls_ns.draft = SimpleNamespace(NoiseReductionModeEnum=_NoiseReductionModeEnum)
+    if with_ae_enums:
+        controls_ns.AeConstraintModeEnum = _AeConstraintModeEnum
+        controls_ns.AeMeteringModeEnum = _AeMeteringModeEnum
     return SimpleNamespace(controls=controls_ns)
 
 
@@ -129,6 +148,7 @@ def install_picamera(monkeypatch):
         close_error=None,
         autofocus_cycle_error=None,
         with_noise_reduction=True,
+        with_ae_enums=True,
     ):
         state = SimpleNamespace(instance=None, loaded_tuning=[])
 
@@ -198,7 +218,9 @@ def install_picamera(monkeypatch):
                     raise close_error
 
         monkeypatch.setitem(sys.modules, "picamera2", SimpleNamespace(Picamera2=FakePicamera2))
-        libcamera_module = _fake_libcamera_module(with_noise_reduction=with_noise_reduction)
+        libcamera_module = _fake_libcamera_module(
+            with_noise_reduction=with_noise_reduction, with_ae_enums=with_ae_enums
+        )
         monkeypatch.setitem(sys.modules, "libcamera", libcamera_module)
         return state
 
@@ -536,6 +558,9 @@ def test_default_construction_applies_neutral_rendering_and_continuous_af(instal
         "NoiseReductionMode": _NoiseReductionModeEnum.HighQuality,
         "AfMode": _AfModeEnum.Continuous,
         "AfRange": _AfRangeEnum.Normal,
+        "AeConstraintMode": _AeConstraintModeEnum.Normal,
+        "AeMeteringMode": _AeMeteringModeEnum.CentreWeighted,
+        "ExposureValue": 0.0,
     }]
     camera.close()
 
@@ -637,6 +662,46 @@ def test_default_leaves_ae_and_awb_auto(install_picamera):
     assert "AwbEnable" not in controls
     assert "ColourGains" not in controls
     camera.close()
+
+
+def test_ae_constraint_metering_and_ev_reach_the_controls(install_picamera):
+    state = install_picamera()
+    camera = Picamera2Camera(ae_constraint="highlight", ae_metering="matrix", ev=-0.5)
+
+    controls = state.instance.set_controls_calls[-1]
+    assert controls["AeConstraintMode"] == _AeConstraintModeEnum.Highlight
+    assert controls["AeMeteringMode"] == _AeMeteringModeEnum.Matrix
+    assert controls["ExposureValue"] == -0.5
+    camera.close()
+
+
+def test_ae_enums_are_omitted_on_older_libcamera_but_ev_is_still_set(install_picamera):
+    state = install_picamera(with_ae_enums=False)
+    camera = Picamera2Camera(ae_constraint="highlight")
+
+    controls = state.instance.set_controls_calls[-1]
+    assert "AeConstraintMode" not in controls
+    assert "AeMeteringMode" not in controls
+    assert controls["ExposureValue"] == 0.0
+    camera.close()
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"ae_constraint": "bright"}, "ae_constraint"),
+        ({"ae_metering": "average"}, "ae_metering"),
+        ({"ev": 9.0}, "ev"),
+        ({"ev": -8.5}, "ev"),
+    ],
+)
+def test_invalid_ae_settings_raise_camera_error(install_picamera, kwargs, match):
+    state = install_picamera()
+
+    with pytest.raises(CameraError, match=match):
+        Picamera2Camera(**kwargs)
+
+    assert state.instance is None
 
 
 def test_autofocus_auto_triggers_exactly_one_cycle_per_read(install_picamera):

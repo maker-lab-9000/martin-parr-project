@@ -4,6 +4,10 @@ The camera is configured for the IMX708's full 4608x2592 still stream. Picamera2
 ``RGB888`` arrays use BGR byte order, so each request is copied into an owned RGB
 array before the request is released. Importing Picamera2 stays inside construction
 so USB and fake-camera use do not require Raspberry Pi camera packages.
+
+Auto-exposure shaping (constraint mode, metering mode, exposure compensation) is
+exposed as constructor arguments whose defaults are libcamera's own defaults, so
+an unflagged capture behaves exactly as it did before they existed.
 """
 
 from __future__ import annotations
@@ -21,6 +25,9 @@ _NATIVE_SIZE = (4608, 2592)
 _MAIN_FORMAT = "RGB888"
 _AUTOFOCUS_MODES = ("continuous", "auto", "manual")
 _AF_RANGES = ("normal", "macro", "full")
+_AE_CONSTRAINTS = ("normal", "highlight", "shadows")
+_AE_METERING = ("centre", "spot", "matrix")
+_EV_RANGE = (-8.0, 8.0)
 
 METADATA_KEYS = (
     "ExposureTime",
@@ -69,6 +76,9 @@ class Picamera2Camera:
         ae_lock: bool = False,
         awb_lock: bool = False,
         colour_gains: tuple[float, float] | None = None,
+        ae_constraint: str = "normal",
+        ae_metering: str = "centre",
+        ev: float = 0.0,
     ) -> None:
         if autofocus not in _AUTOFOCUS_MODES:
             raise CameraError(
@@ -76,6 +86,16 @@ class Picamera2Camera:
             )
         if af_range not in _AF_RANGES:
             raise CameraError(f"Unknown af_range {af_range!r}; expected one of {_AF_RANGES}")
+        if ae_constraint not in _AE_CONSTRAINTS:
+            raise CameraError(
+                f"Unknown ae_constraint {ae_constraint!r}; expected one of {_AE_CONSTRAINTS}"
+            )
+        if ae_metering not in _AE_METERING:
+            raise CameraError(
+                f"Unknown ae_metering {ae_metering!r}; expected one of {_AE_METERING}"
+            )
+        if not _EV_RANGE[0] <= float(ev) <= _EV_RANGE[1]:
+            raise CameraError(f"ev must be within {_EV_RANGE}, got {ev}")
 
         try:
             from picamera2 import Picamera2
@@ -111,7 +131,10 @@ class Picamera2Camera:
             camera.configure(config)
             actual = camera.camera_configuration()
             self._stream_info = _stream_info(actual, tuning_file)
-            _apply_camera_controls(camera, autofocus, af_range, ae_lock, awb_lock, colour_gains)
+            _apply_camera_controls(
+                camera, autofocus, af_range, ae_lock, awb_lock, colour_gains,
+                ae_constraint, ae_metering, ev,
+            )
             start_attempted = True
             camera.start()
             self._started = True
@@ -265,12 +288,17 @@ def _apply_camera_controls(
     ae_lock: bool,
     awb_lock: bool,
     colour_gains: tuple[float, float] | None,
+    ae_constraint: str,
+    ae_metering: str,
+    ev: float,
 ) -> None:
-    """Neutral ISP rendering plus autofocus, applied once after ``configure``.
+    """Neutral ISP rendering plus autofocus and AE shaping, applied once after
+    ``configure``.
 
     Imports libcamera's control enums lazily so USB and fake-camera use never
-    require the Raspberry Pi camera stack. ``autofocus``/``af_range`` are
-    validated by the caller, so the dict lookups below cannot raise ``KeyError``.
+    require the Raspberry Pi camera stack. ``autofocus``/``af_range``/
+    ``ae_constraint``/``ae_metering`` are validated by the caller, so the dict
+    lookups below cannot raise ``KeyError``.
     """
     from libcamera import controls as _lc
 
@@ -285,6 +313,29 @@ def _apply_camera_controls(
                  "macro": _lc.AfRangeEnum.Macro, "full": _lc.AfRangeEnum.Full}
     cam_controls["AfMode"] = af_modes[autofocus]
     cam_controls["AfRange"] = af_ranges[af_range]
+    # Auto-exposure shaping. Centre-weighted metering with the normal constraint is
+    # libcamera's own default, so the defaults here reproduce previous behaviour
+    # exactly; "highlight" protects a bright sky or wall that centre-weighting would
+    # blow out while metering a shaded foreground (measured: shot 171656 on the
+    # IMX708 pilot). Enum lookups are guarded like NoiseReductionMode above because
+    # older libcamera builds lack them.
+    try:
+        constraint_modes = {"normal": _lc.AeConstraintModeEnum.Normal,
+                            "highlight": _lc.AeConstraintModeEnum.Highlight,
+                            "shadows": _lc.AeConstraintModeEnum.Shadows}
+        cam_controls["AeConstraintMode"] = constraint_modes[ae_constraint]
+    except AttributeError:
+        pass  # older libcamera: leave the constraint at its default, recorded as unset
+    try:
+        metering_modes = {"centre": _lc.AeMeteringModeEnum.CentreWeighted,
+                          "spot": _lc.AeMeteringModeEnum.Spot,
+                          "matrix": _lc.AeMeteringModeEnum.Matrix}
+        cam_controls["AeMeteringMode"] = metering_modes[ae_metering]
+    except AttributeError:
+        pass  # older libcamera: leave metering at its default, recorded as unset
+    # 0.0 is neutral, but it is set unconditionally so every capture records the
+    # same control set regardless of the flags used.
+    cam_controls["ExposureValue"] = float(ev)
     if colour_gains is not None:
         cam_controls["AwbEnable"] = False
         cam_controls["ColourGains"] = tuple(colour_gains)

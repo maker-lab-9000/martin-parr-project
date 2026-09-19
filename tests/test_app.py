@@ -975,6 +975,9 @@ def test_device_without_camera_choice_selects_v4l2(camera_cli, monkeypatch):
         (["--camera", "v4l2", "--ae-lock"], "--ae-lock"),
         (["--camera", "v4l2", "--awb-lock"], "--awb-lock"),
         (["--camera", "v4l2", "--colour-gains", "1.0,1.0"], "--colour-gains"),
+        (["--camera", "v4l2", "--ae-constraint", "highlight"], "--ae-constraint"),
+        (["--camera", "v4l2", "--ae-metering", "matrix"], "--ae-metering"),
+        (["--camera", "v4l2", "--ev", "-0.5"], "--ev"),
     ],
 )
 def test_camera_specific_options_reject_conflicting_backend(args, message, capsys):
@@ -1004,6 +1007,9 @@ def test_no_dng_is_accepted_with_explicit_v4l2(camera_cli, monkeypatch):
         ["--autofocus", "auto"],
         ["--af-range", "macro"],
         ["--tuning-file", "sensor.json"],
+        ["--ae-constraint", "highlight"],
+        ["--ae-metering", "spot"],
+        ["--ev", "0.3"],
     ],
 )
 def test_implicit_v4l2_via_device_rejects_picamera2_only_flags(camera_cli, flag_args):
@@ -1105,6 +1111,41 @@ def test_control_flags_reach_the_picamera2_backend(camera_cli, monkeypatch):
     assert backend_kwargs["awb_lock"] is True
     assert backend_kwargs["colour_gains"] == (1.8, 2.1)
     assert backend_kwargs["save_dng"] is True
+
+
+def test_ae_shaping_flags_reach_the_picamera2_backend(camera_cli, monkeypatch):
+    backend_kwargs = {}
+
+    def open_picamera(tuning_file, **kwargs):
+        backend_kwargs.update(kwargs)
+        return _CameraDouble()
+
+    monkeypatch.setattr(camera_cli, "Picamera2Camera", open_picamera, raising=False)
+
+    assert camera_cli.main([
+        "--camera", "picamera2", "--no-preview",
+        "--ae-constraint", "highlight", "--ae-metering", "matrix", "--ev", "-0.5",
+    ]) == 0
+
+    assert backend_kwargs["ae_constraint"] == "highlight"
+    assert backend_kwargs["ae_metering"] == "matrix"
+    assert backend_kwargs["ev"] == -0.5
+
+
+def test_default_flags_leave_ae_shaping_at_libcamera_defaults(camera_cli, monkeypatch):
+    backend_kwargs = {}
+
+    def open_picamera(tuning_file, **kwargs):
+        backend_kwargs.update(kwargs)
+        return _CameraDouble()
+
+    monkeypatch.setattr(camera_cli, "Picamera2Camera", open_picamera, raising=False)
+
+    assert camera_cli.main(["--camera", "picamera2", "--no-preview"]) == 0
+
+    assert backend_kwargs["ae_constraint"] == "normal"
+    assert backend_kwargs["ae_metering"] == "centre"
+    assert backend_kwargs["ev"] == 0.0
 
 
 def test_default_flags_leave_ae_and_awb_auto_with_continuous_af(camera_cli, monkeypatch):
