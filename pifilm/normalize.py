@@ -32,6 +32,23 @@ quartile up and the LUT learned to lift shadows, which read as haze. Both
 sides are now normalised the same way; the runtime bakes it into the same
 three tables.
 
+Clipping-aware lift
+-------------------
+The levels gamma brightens any frame whose stretched median sits below the
+exposure target, and it used to do so however much of the frame was already
+at the ceiling. On the IMX708 pilot that fired on 53 of 108 outdoor-ish
+shots: their highlights were already at 1.0, so the lift could only blow
+them further while pulling the shadows up to grey -- the look readers
+called "faded". ``levels_lift_highlight_ref`` scales the lift down in
+proportion to the fraction of pixels at the ceiling, reaching no lift at
+all at that fraction. The fraction is measured over every balanced pixel
+and not over the statistics mask, because the mask excludes luminance above
+``stats_lum_max`` -- that exclusion is precisely why such a frame reads as
+"dark" to the median, so the mask can never see the clipping that caused
+it. Darkening is never damped: a frame that is genuinely too bright should
+still come down. ``None`` reproduces the old behaviour exactly; the
+artifact is what turns it on.
+
 Targets versus sources
 ----------------------
 Reference photographs use ``white_balance=False`` and by default ``levels=False``:
@@ -44,10 +61,14 @@ brightens an image pushes pixels past the cutoff and the next pass measures
 a different set. On the levels path the second pass is mild (gamma 0.94 on
 a photo-like ramp) because black and white are pinned; on the legacy gain
 path it is not (a second gain of 1.3), because a gain can push the whole
-top of the range out of the statistic. Nothing in the project normalises
-an image twice: the trainer normalises corpora once and the Pi normalises
-a capture once, with the same code. This is documented rather than
-engineered away, and tested as a bounded second pass on the levels path.
+top of the range out of the statistic. Damping the lift leaves a frame
+deliberately short of the target, so a second pass over a clipped frame
+finds a little more residual lift than it otherwise would (gamma 0.88
+rather than 0.94); it is still bounded and still milder than the first.
+Nothing in the project normalises an image twice: the trainer normalises
+corpora once and the Pi normalises a capture once, with the same code.
+This is documented rather than engineered away, and tested as a bounded
+second pass on the levels path.
 """
 
 from __future__ import annotations
@@ -63,6 +84,10 @@ from .color import LUMA_709, linear_to_srgb, srgb_to_linear
 cv2 = require_cv2()
 
 _EPS = 1e-6
+
+# A linear luminance at or above this (about sRGB 254/255) is "at the ceiling".
+# Not a parameter: it is the definition of clipped, not a tuning knob.
+LEVELS_HIGHLIGHT_LIN = 0.97
 
 
 def _check_finite(name: str, value: float) -> None:
@@ -111,6 +136,14 @@ class NormalizeParams:
     # camera's median taught the LUT to lift shadows, which read as haze on
     # outdoor shots. Set lower to keep the film's density in what is learned.
     levels_target_median: float | None = None
+    # Clipping-aware lift. The levels gamma brightens a frame whose median is
+    # below the exposure target regardless of how much of it is already at the
+    # ceiling: on the IMX708 pilot 53 of 108 outdoor-ish shots were lifted while
+    # their highlights sat at 1.0, which blew the highlights further and lifted
+    # shadows to grey (read as "faded"). When set, the fraction of pixels at the
+    # ceiling scales the lift down linearly, reaching zero lift at this fraction.
+    # None keeps the old behaviour exactly; the artifact turns it on.
+    levels_lift_highlight_ref: float | None = None
 
     def __post_init__(self) -> None:
         for f in fields(self):
@@ -133,6 +166,9 @@ class NormalizeParams:
             raise ValueError(
                 f"levels_target_median must be in (0, 1), got {self.levels_target_median}"
             )
+        ref = self.levels_lift_highlight_ref
+        if ref is not None and not 0.0 < ref <= 1.0:
+            raise ValueError(f"levels_lift_highlight_ref must be in (0, 1], got {ref}")
         if not 0.0 < self.levels_gamma_min < self.levels_gamma_max:
             raise ValueError(
                 f"levels_gamma_min ({self.levels_gamma_min}) must be positive and below "
@@ -232,6 +268,21 @@ def _stats_mask(lum: np.ndarray, params: NormalizeParams) -> np.ndarray:
     return mask if mask.mean() >= 0.01 else np.ones_like(mask)
 
 
+def _damp_lift(raw_gamma: float, highlight_frac: float, ref: float | None) -> tuple[float, float]:
+    """Scale a brightening lift down as the frame's highlights approach the ceiling.
+
+    Returns ``(gamma, weight)``. ``weight`` is 1.0 when nothing was damped: ``ref``
+    is None, the frame is being darkened (``raw_gamma >= 1``), or no pixel is at
+    the ceiling. It falls linearly to 0.0 as ``highlight_frac`` reaches ``ref``,
+    at which point the lift is removed entirely (gamma 1.0). Darkening is never
+    touched: a frame that is too bright should still be brought down.
+    """
+    if ref is None or raw_gamma >= 1.0:
+        return raw_gamma, 1.0
+    weight = float(np.clip(1.0 - highlight_frac / ref, 0.0, 1.0))
+    return 1.0 - (1.0 - raw_gamma) * weight, weight
+
+
 def compute_gains(rgb: np.ndarray, params: NormalizeParams) -> Gains:
     """Grey-world white balance, then either a median-to-target gain or levels.
 
@@ -275,15 +326,22 @@ def compute_gains(rgb: np.ndarray, params: NormalizeParams) -> Gains:
     if target is None:
         target = params.exposure_target_median
     raw_gamma = math.log(target) / math.log(median)
-    gamma = float(np.clip(raw_gamma, params.levels_gamma_min, params.levels_gamma_max))
+    # Over ALL balanced pixels, not the stats mask: the mask excludes luminance
+    # above 0.90, so it can never see the ceiling -- that exclusion is why a
+    # bright frame reads as "dark" to the median in the first place.
+    highlight_frac = float(np.mean(lum_b >= LEVELS_HIGHLIGHT_LIN))
+    damped, lift_weight = _damp_lift(raw_gamma, highlight_frac, params.levels_lift_highlight_ref)
+    gamma = float(np.clip(damped, params.levels_gamma_min, params.levels_gamma_max))
     clamped = raw_stretch > params.levels_max_stretch or not (
-        params.levels_gamma_min <= raw_gamma <= params.levels_gamma_max
+        params.levels_gamma_min <= damped <= params.levels_gamma_max
     )
     return Gains(
         wb=wb,
         exposure=1.0,
         clamped={"wb": wb_clamped, "exposure": False, "levels": bool(clamped)},
         levels={"low": lo, "high": hi, "stretch": stretch, "gamma": gamma,
+                "raw_gamma": float(raw_gamma), "highlight_frac": highlight_frac,
+                "lift_weight": lift_weight,
                 "black_rgb_spread": float(lo_c.max() - lo_c.min()), "tone": params.levels_tone},
     )
 
