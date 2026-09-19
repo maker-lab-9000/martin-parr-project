@@ -27,8 +27,10 @@ Every graded frame goes through three steps, in a fixed order, in
    pixels already at the highlight ceiling — so a frame that is already
    clipped is not lifted further while a genuinely dark frame keeps its full
    lift. On a 108-shot IMX708 pilot this took outdoor shots' median tone
-   gamma from a 0.577 lift to 1.0 (no lift) with indoor shots essentially
-   unaffected (0.764 to 0.975); see
+   gamma from a 0.577 lift to 1.0 (no lift). The indoor lift is also largely
+   removed at this setting (median gamma 0.764 to 0.975); a less aggressive
+   `ref=0.05` would have kept more of the indoor lift (0.856), but the user
+   chose 0.02 anyway, preferring outdoor fidelity. See
    [the write-up](experiments/2026-09-19-imx708-normalisation.md) for the full
    numbers and the trade-off made. A USB/V4L2 camera has no ISP AWB and
    should regenerate a starter with `pifilm-preset` and re-enable white

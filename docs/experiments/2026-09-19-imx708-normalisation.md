@@ -86,10 +86,13 @@ gitignored `--out` directory (not committed).
 
 Current, undamped: 53 of 108 shots were lifted while already clipped (see the
 design doc). With `ref=0.02+nowb`, outdoor median gamma goes from 0.577 to
-1.00 (no lift) and outdoor median clip% roughly halves (12.1% -> 8.2%);
-indoor median gamma barely moves (0.764 -> 0.975) and indoor clip% actually
-falls a little, because turning white balance off also removes some
-blue-channel clipping.
+1.00 (no lift) and outdoor median clip% roughly halves (12.1% -> 8.2%). The
+indoor lift is also largely removed at `ref=0.02` — median gamma goes from
+0.764 to 0.975, i.e. most of the lift is gone, not a small change. `ref=0.05`
+would have kept more of it (indoor median gamma 0.856); the user chose 0.02
+anyway, preferring outdoor fidelity over preserving more of the indoor lift
+(see Decision, below). Indoor clip% falls a little regardless, because
+turning white balance off also removes some blue-channel clipping.
 
 ### Named shots (current -> chosen: `ref=0.02+nowb`)
 
@@ -97,19 +100,21 @@ Gamma / clip% / p5 luma:
 
 | Shot | Current gamma/clip%/p5 | Chosen gamma/clip%/p5 |
 | --- | --- | --- |
-| 172404 | 0.59 / 10.8 / 0.204 | 1.00 / 8.7 / 0.054 |
-| 172258 | 0.65 / 10.9 / 0.137 | 1.00 / 4.4 / 0.039 |
-| 171656 | 0.70 / 10.4 / 0.093 | 1.00 / 7.9 / 0.028 |
-| 172111 | 0.74 / 5.9 / 0.086 | 1.00 / 3.8 / 0.031 |
-| 172012 | 0.92 / 11.7 / 0.055 | 1.00 / 11.6 / 0.039 |
-| 172144 | 0.97 / 2.1 / 0.109 | 0.98 / 2.1 / 0.107 |
+| 172404 | 0.59 / 10.8 / 0.204 | 1.00 / 6.9 / 0.055 |
+| 172258 | 0.65 / 10.9 / 0.137 | 1.00 / 5.2 / 0.040 |
+| 171656 | 0.70 / 10.4 / 0.093 | 1.00 / 5.4 / 0.028 |
+| 172111 | 0.74 / 5.9 / 0.086 | 1.00 / 2.6 / 0.032 |
+| 172012 | 0.92 / 11.7 / 0.055 | 1.00 / 10.2 / 0.039 |
+| 172144 | 0.97 / 2.1 / 0.109 | 0.98 / 1.4 / 0.107 |
 
 `172404` and `172258` were the two shots the user judged worst under the
 current behaviour (design doc: the strongest gamma lift combined with the
 strongest blue push, up to 1.6x). Both drop their tone lift to identity and
 lose most of their extra clipping. `172144`, an already well-behaved indoor
-shot, is essentially unchanged, which is the "leave good indoor shots alone"
-property working as intended.
+shot, keeps almost the same gamma (0.97 -> 0.98) and clip% (2.1 -> 1.4),
+which is the "leave good indoor shots alone" property working as intended —
+in contrast to the indoor set as a whole, where the median lift is largely
+removed (see above).
 
 ![Original, current starter and chosen (ref=0.02, white balance off) side by side for the six named shots](imx708-normalisation/named-shots.jpg)
 
