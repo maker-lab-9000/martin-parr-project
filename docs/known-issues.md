@@ -6,8 +6,10 @@ how to confirm it is resolved.
 
 ## IMX708 second-capture "Camera frontend has timed out" on the Raspberry Pi 3B
 
-**Status:** open — deferred to the Raspberry Pi 4 migration; native 12 MP capture
-kept for now. Revisit only if it still times out on the Pi 4.
+**Status:** **resolved 2026-09-19** by the move to the Raspberry Pi 4. No code
+change was needed and native 12 MP capture was kept — see
+[Resolution](#resolution) for the measurements. The entry stays because the
+failure mode is instructive and a Pi 3B is still affected.
 
 **First seen:** 2026-09-18, Raspberry Pi 3B + Camera Module 3 Wide (IMX708),
 `pifilm-capture` on `main`.
@@ -56,24 +58,29 @@ Raspberry Pi 3B, Raspberry Pi OS Trixie, libcamera 0.7.2, picamera2 0.3.37,
 IMX708 (`imx708_wide`) at 4608×2592, `buffer_count=2`, CMA 256 MiB shared with
 `vc4-kms-v3d`.
 
-### Decision
+### Resolution
 
-Keep native 12 MP capture and re-test on the **Raspberry Pi 4**, which has more
-CPU headroom — the grade will be shorter, so the servicing gap shrinks. Expected
-to help, but it may not fully remove the warning: 12 MP grading still exceeds the
-1-second watchdog even on faster hardware.
+Measured on a Raspberry Pi 4 Model B running the migrated SD, 2026-09-19, with
+the same 4608×2592 configuration and `buffer_count=2`:
 
-### If it persists on the Pi 4 — the fix
+| Metric | Pi 3B | Pi 4 |
+|---|---|---|
+| Grade one 12 MP frame (`pipeline_ms`) | ~20,400 ms | **~3,290 ms** |
+| Shutter to saved (`shutter_to_saved_ms`) | — | **~5,300 ms** |
+| `Camera frontend has timed out` | on the second capture | **0 across every capture in the boot** |
 
-Stop grading at full 12 MP. The contained change is a configurable
-capture/grading resolution (for example a half-res `2304×1296` binned stream, or
-`1920×1080`), keeping full resolution only for the saved original/DNG if wanted.
-Grading 2–3 MP is several times faster, which both speeds up each capture and
-closes the camera-servicing gap that trips the watchdog. Optionally raise
-`buffer_count` and/or CMA on the Pi 4, where there is room.
+The Pi 4 grades a 12 MP frame roughly six times faster, so the capture loop no
+longer leaves the camera unserviced long enough to trip libcamera's one-second
+dequeue watchdog. Repeated captures complete with consistent timings
+(3286.7 / 3284.8 / 3303.7 ms across three shots).
 
-### How to confirm resolved
+Native 12 MP is therefore kept, and the configurable grading resolution
+considered during diagnosis was **not** needed.
 
-On the Pi 4 with the IMX708, take three or more captures in a row and confirm each
-returns within a few seconds with no "Camera frontend has timed out" error.
-`journalctl -u pifilm-capture` should stay clean across repeated shots.
+### If it regresses — the fallback
+
+Stop grading at full 12 MP: make the capture/grading resolution configurable (for
+example a half-res `2304×1296` binned stream, or `1920×1080`), keeping full
+resolution only for the saved original and DNG. Grading 2–3 MP is several times
+faster, which closes the camera-servicing gap that trips the watchdog. Raising
+`buffer_count` and/or CMA is a secondary lever where there is room.
