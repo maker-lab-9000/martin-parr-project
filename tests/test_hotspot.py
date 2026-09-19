@@ -40,11 +40,21 @@ def test_keyfile_is_an_ap_on_wlan0_with_wpa2_psk_and_shared_ipv4_from_remote_url
     assert _section(text, "wifi")["mode"] == "ap"
     assert _section(text, "wifi")["ssid"] == "pifilm-cam"
     assert _section(text, "wifi")["band"] == "bg"
+    assert _section(text, "wifi")["powersave"] == "2"
     assert _section(text, "wifi-security")["key-mgmt"] == "wpa-psk"
     assert _section(text, "wifi-security")["proto"] == "rsn"
     assert _section(text, "wifi-security")["psk"] == "correct-horse-battery"
     assert _section(text, "ipv4")["method"] == "shared"
     assert _section(text, "ipv4")["address1"] == "10.42.0.1/24"
+
+
+def test_keyfile_disables_wifi_power_save_so_the_ap_stays_reliable():
+    # brcmfmac enables power management on wlan0 (seen when eth0's carrier drops),
+    # which makes the access point drop clients: the Stick associates, gets a DHCP
+    # lease, then keeps re-associating every few minutes and its API calls stall.
+    # powersave=2 disables NM power save on the AP so the hotspot is steady with
+    # or without Ethernet. Measured on a Pi 4 running the migrated SD, 2026-09-19.
+    assert _section(hotspot_keyfile(ENV), "wifi")["powersave"] == "2"
 
 
 def test_keyfile_disables_protected_management_frames_for_the_pi_3b_radio():
