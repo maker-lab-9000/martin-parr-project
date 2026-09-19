@@ -117,6 +117,17 @@ disables AWB) rather than relying on whatever AWB happened to land on.
 `--autofocus {continuous,auto,manual}` and `--af-range {normal,macro,full}`
 control the lens; the default is continuous AF at normal range.
 
+Three more controls, all Picamera2-only (rejected on V4L2, `--device` and
+`--fake`, and their defaults reproduce today's behaviour exactly):
+`--ae-constraint {normal,highlight,shadows}` (default `normal`) sets
+libcamera's `AeConstraintMode`; `highlight` protects bright regions from
+clipping instead of exposing for the average scene. `--ae-metering
+{centre,spot,matrix}` (default `centre`) sets `AeMeteringMode`. `--ev STOPS`
+(default `0`, range -8 to 8) sets `ExposureValue`, always applied so 0 is an
+explicit, deterministic neutral rather than an unset control. The effect of a
+non-default value shows up in the already-recorded `ExposureTime` and `Lux`
+in `camera_metadata`.
+
 Confirm on real hardware:
 
 - The DNG passes the [DNG acceptance test](#dng-acceptance-test) below.
@@ -129,6 +140,13 @@ Confirm on real hardware:
 - With `--ae-lock`, confirm the locked frame's exposure matches an unlocked
   frame of the same scene before relying on it — the lock freezes whatever
   value AE held before capture started, which is not guaranteed to be settled.
+- Shoot a 171656-type strong-light scene (bright background metered against a
+  shaded foreground, the kind that blows highlights under default
+  centre-weighted AE — see
+  [the normalisation write-up](experiments/2026-09-19-imx708-normalisation.md#what-this-does-not-fix))
+  with `--ae-constraint highlight` and confirm the `_original.jpg` keeps its
+  highlights, by comparing `ExposureTime`/`Lux` in `camera_metadata` against a
+  default (`--ae-constraint normal`) shot of the same scene.
 
 ### DNG acceptance test
 

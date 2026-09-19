@@ -19,7 +19,20 @@ Every graded frame goes through three steps, in a fixed order, in
    compiles into three 256-entry tables plus one for tone, applied with
    OpenCV's `LUT` and two `cvtColor` calls: about 100 ms for 1080p on the Pi.
    The same code, in floating point, prepared every training image, so the LUT
-   sees the input distribution it was fitted on.
+   sees the input distribution it was fitted on. White balance and the levels
+   tone lift are per-artifact settings, not per-camera ones: the bundled
+   starter targets the IMX708 (the default mount), whose ISP already runs its
+   own AWB, so its `params.json` turns source white balance off and caps the
+   levels lift by `levels_lift_highlight_ref` — the fraction of a frame's
+   pixels already at the highlight ceiling — so a frame that is already
+   clipped is not lifted further while a genuinely dark frame keeps its full
+   lift. On a 108-shot IMX708 pilot this took outdoor shots' median tone
+   gamma from a 0.577 lift to 1.0 (no lift) with indoor shots essentially
+   unaffected (0.764 to 0.975); see
+   [the write-up](experiments/2026-09-19-imx708-normalisation.md) for the full
+   numbers and the trade-off made. A USB/V4L2 camera has no ISP AWB and
+   should regenerate a starter with `pifilm-preset` and re-enable white
+   balance in its own artifact.
 2. **The 3D LUT** (`pifilm/lut.py`). Trilinear interpolation over the 35,937
    nodes, executed by Pillow's `ImageFilter.Color3DLUT` in C with 16-bit fixed
    point. A NumPy reference implementation exists for tests and the trainer.
