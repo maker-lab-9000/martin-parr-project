@@ -8,19 +8,19 @@ Dependency review: 2026-09-13, following highlight-protection commits
 
 | Phase | Status | Next prerequisite |
 | --- | --- | --- |
-| 1: Picamera2 acquisition | Implementation in progress | Task-by-task plan; fake-request tests can start without photos. Hardware required for acceptance. |
-| 2: capture controls and metadata | Implemented; fake-backed tests pass | Hardware acceptance: autofocus (`LensPosition`, `AfState`) and metadata verified on the sensor. |
-| 3: original / DNG / graded output | Implemented; fake-backed tests pass | Hardware acceptance: DNG opens correctly in darktable/RawTherapee. |
-| 4: benchmark | Not recorded for this roadmap | Synthetic benchmark can start now; real Pi 4 capture and DNG timings follow 1–3. |
-| F: lighting experiment | Not recorded for IMX708 | Stable originals, pilot captures and paired lighting test. |
-| 6: gentler normalisation | Not implemented | Code can start independently; choose parameters on IMX708 pilot photos before fitting. |
+| 1: Picamera2 acquisition | Implemented, merged, hardware-accepted | Done. |
+| 2: capture controls and metadata | Implemented, merged, **hardware-accepted 2026-09-19** | Done: the sensor reports the full metadata set and autofocus moves `LensPosition` (`AfState=2`). |
+| 3: original / DNG / graded output | Implemented, merged; DNG written on hardware (15 MB) | One manual check left: open a `.dng` in darktable/RawTherapee and confirm colour. |
+| 4: benchmark | **Measured on the Pi 4, 2026-09-19** | Done: ~3.29 s to grade 12 MP, ~5.3 s shutter-to-saved, zero camera timeouts. Native 12 MP kept. |
+| F: lighting experiment | **Dropped** | Superseded by the no-flash decision of 2026-09-14. |
+| 6: gentler normalisation | Not implemented — **next** | Code can start now; freeze its parameters on IMX708 pilot photos before fitting Phase 5. |
 | 5: IMX708 retraining | Not performed | Stable capture/lighting policy, frozen normalisation, source corpus and scene-grouped training route. |
 | 7: grain | Not implemented | Phase 4 timing/resolution decision; independent of colour-LUT fitting. |
 | 8: scene statistics | Not implemented | Acquisition metadata for full integration; not a blocker for the first retrain. |
 | 9: baked highlight protection | Implemented and tested | Select the IMX708 value in Phase 5; current default remains zero. |
 | 9: runtime blend | Not implemented; optional | Evidence of need and Phase 8 adaptive inputs. |
 | 10: classifier | Not implemented; conditional | Labelled data and evidence simple scene rules are insufficient. |
-| F′: final flash | Not recorded | Prototype decision; collect final flash corpus after final lighting is established. |
+| F′: final flash | **Dropped** | Superseded by the no-flash decision of 2026-09-14. |
 
 ## Dependency review completed
 
@@ -57,13 +57,15 @@ Dependency review: 2026-09-13, following highlight-protection commits
 
 ## Next implementation unit
 
-Prepare the Phase 1 task-by-task plan against `pifilm/capture/camera.py`,
-`pifilm/capture/app.py` and the existing fake-camera tests. Include how request
-ownership can support Phase 3 without prematurely releasing saved-image data,
-and preserve the V4L2/FakeCamera paths and Stick thumbnail behaviour.
-Photo collection is not a blocker for writing or testing that software plan.
-The remaining hardware/API assumptions in the roadmap must be checked against
-the installed Picamera2/libcamera versions during that planning and bring-up.
+**Phase 6: gentler, configurable normalisation.** Phases 1–4 are done and the
+flash branch is dropped, so normalisation is the next code. The roadmap puts it
+deliberately before Phase 5: the LUT is fitted on normalised input, so changing
+normalisation after a fit invalidates it. Build it, choose its parameters on
+IMX708 pilot photos, freeze them, then fit once.
+
+**In parallel, start collecting the Phase 5 source corpus** — it is the long
+pole and needs no new code: at least 100 usable originals across at least 25
+development scenes, plus 3–5 whole scenes reserved for the final held-out test.
 
 ## Validation of the September 13 roadmap review
 
@@ -178,3 +180,57 @@ Tasks 1–4 on `plan/imx708-af-metadata-dng`.
   reports `AfState` and moves `LensPosition`, and whether the
   `NoiseReductionMode` enum path exists on the installed libcamera (0.7.2) or
   must be skipped.
+
+## 2026-09-19 — Pi 4 bring-up: Phase 4 benchmarked, Phases 2/3 hardware-accepted
+
+The SD card was migrated to a Raspberry Pi 4 Model B with the Camera Module 3
+Wide attached. Everything below is measured on that hardware, not on fakes.
+
+### Phase 4 — 12 MP benchmark
+
+From `captures.jsonl` over three consecutive captures:
+
+| Metric | Pi 3B | Pi 4 |
+| --- | --- | --- |
+| Grade one 12 MP frame (`pipeline_ms`) | ~20,400 ms | **3286.7 / 3284.8 / 3303.7 ms** |
+| Shutter to saved (`shutter_to_saved_ms`) | — | **5325.6 / 5261.9 / 5372.2 ms** |
+| `Camera frontend has timed out` | on the second capture | **0 for the whole boot** |
+
+Roughly six times faster, and the second-capture timeout recorded in
+`docs/known-issues.md` does not occur: the grade no longer starves the camera
+long enough to trip libcamera's one-second dequeue watchdog. **Native 4608×2592
+is kept**; the configurable/downscaled grading resolution considered during
+diagnosis is not needed. That entry in `docs/known-issues.md` is now marked
+resolved.
+
+### Phases 2 and 3 — hardware acceptance
+
+- **Metadata**: the sensor reports the full expected set — `AfState`,
+  `AnalogueGain`, `ColourGains`, `ColourTemperature`, `DigitalGain`,
+  `ExposureTime`, `FocusFoM`, `FrameDuration`, `LensPosition`, `Lux`,
+  `SensorTimestamp`. Values are plausible for the scene (`Lux` 124–186,
+  `ColourTemperature` 5198–5759 K, `AnalogueGain` ~2.0, `ExposureTime`
+  43,379–59,994 µs).
+- **Autofocus** genuinely moves: `LensPosition` varied 2.29 / 2.38 / 2.45 across
+  shots with `AfState=2` (focused). The continuous-AF default works on the Wide
+  module.
+- **Output**: `<stem>.dng` 15 MB, `_original.jpg` 2.5 MB, `_graded.jpg` 3.1 MB —
+  about 21 MB per shot, close to the ~28 MB documented estimate.
+- **Still outstanding (manual)**: open a `.dng` in darktable/RawTherapee and
+  confirm the colour is right. That is the only Phase 2/3 acceptance item left.
+
+### Hotspot fix found during the same bring-up
+
+The Stick appeared unable to connect, especially with Ethernet unplugged. It was
+in fact associating and getting a lease (`10.42.0.70`) but re-associating every
+few minutes, and the kernel logged `brcmf_cfg80211_set_power_mgmt: power save
+enabled` on `wlan0` as eth0's carrier dropped. Wi-Fi power save on the AP radio
+was degrading the hotspot. `scripts/pi_hotspot.py` now writes `powersave=2` into
+the keyfile's `[wifi]` section. Ruled out along the way: the home-Wi-Fi client
+profile stealing `wlan0` (`autoconnect=no`), an SSID mismatch, and the capture
+service.
+
+### Next
+
+Phase 6 (gentler, configurable normalisation), then Phase 5 (retrain on IMX708
+frames). Start collecting the Phase 5 corpus in parallel.
