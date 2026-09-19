@@ -52,7 +52,7 @@ from ..highlight import protect_highlights
 from ..imageio import list_images
 from ..lut import LUT3D
 from ..normalize import NormalizeParams
-from .dataset import PixelPool, SampleConfig, build_corpus
+from .dataset import CorpusTooSmall, PixelPool, SampleConfig, build_corpus
 from .evaluate import check_gates, evaluate
 from .lutfit import enforce_grey_axis, enforce_monotone, fit_lut
 from .report import write_report
@@ -376,6 +376,15 @@ def main(argv: list[str] | None = None) -> int:
             max_pixels=args.max_pixels, val_fraction=args.val_fraction, seed=args.seed,
         )
         grain = GrainParams(strength=args.grain_strength)
+        # Validated here and thrown away: train() builds the real one, but only after
+        # reading both corpora, and a rejected --source-lift-highlight-ref should be a
+        # one-line usage error like every other bad flag. __post_init__ is the single
+        # copy of the range checks, so this is a fail-fast call, not duplicated logic.
+        NormalizeParams(
+            white_balance=args.source_white_balance,
+            levels=args.source_levels,
+            levels_lift_highlight_ref=args.source_lift_highlight_ref,
+        )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -390,10 +399,10 @@ def main(argv: list[str] | None = None) -> int:
             source_lift_highlight_ref=args.source_lift_highlight_ref,
             command=" ".join(["pifilm-train", *(argv or sys.argv[1:])]), progress=print,
         )
-    # CorpusTooSmall is a ValueError, and so is a rejected --source-lift-highlight-ref:
-    # NormalizeParams is validated inside train(), not in the config block above. Both are
-    # user errors in the invocation, so both get the same one-line message, not a traceback.
-    except ValueError as exc:
+    # Deliberately narrow: a ValueError from inside the fit (a diverging LUT, say) is a
+    # bug worth a traceback, not a usage error. Bad flag values are already rejected by
+    # the config block above, so nothing user-facing reaches here but a short corpus.
+    except CorpusTooSmall as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
