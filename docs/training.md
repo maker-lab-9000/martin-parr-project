@@ -105,9 +105,11 @@ service sets no controls, so auto exposure and auto white balance are on at
 capture time; leave them on for the shoot too, and give each frame a second to
 settle before pressing.
 
-Do **not** lock one white balance across different lighting. The pipeline's
-per-frame white balance, applied identically in training and at capture, is
-what absorbs tungsten versus daylight, but its gains are clamped to 0.6 to 1.6.
+Do **not** lock one white balance across different lighting. What absorbs
+tungsten versus daylight is either the pipeline's per-frame white balance,
+applied identically in training and at capture, or — when the artifact turns it
+off, as the IMX708 starter does — the camera's own AWB. The pipeline's gains
+are clamped to 0.6 to 1.6.
 A tungsten room shot with a daylight value locked in leaves a cast that range
 cannot remove; the trainer then learns to cool everything, and every daylight
 capture comes out wrong. If auto white balance visibly hunts within one scene,

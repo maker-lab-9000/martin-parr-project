@@ -13,8 +13,9 @@ machine-learning runtime installed.
 Every graded frame goes through three steps, in a fixed order, in
 `pifilm/pipeline.py`:
 
-1. **Normalisation** (`pifilm/normalize.py`). Per-frame white balance and an
-   exposure or levels correction, computed in linear light and applied to
+1. **Normalisation** (`pifilm/normalize.py`). Per-frame white balance (when the
+   artifact enables it) and an exposure or levels correction, computed in
+   linear light and applied to
    the luma channel only, so contrast changes do not inflate saturation. It
    compiles into three 256-entry tables plus one for tone, applied with
    OpenCV's `LUT` and two `cvtColor` calls: about 100 ms for 1080p on the Pi.
@@ -28,13 +29,17 @@ Every graded frame goes through three steps, in a fixed order, in
    clipped is not lifted further while a genuinely dark frame keeps its full
    lift. On a 108-shot IMX708 pilot this took outdoor shots' median tone
    gamma from a 0.577 lift to 1.0 (no lift). The indoor lift is also largely
-   removed at this setting (median gamma 0.764 to 0.975); a less aggressive
-   `ref=0.05` would have kept more of the indoor lift (0.856), but the user
-   chose 0.02 anyway, preferring outdoor fidelity. See
+   removed at this setting (median gamma 0.764 to 0.975); `ref=0.05` would have
+   kept more of the indoor lift (0.856) but only partially damps the worst
+   shots, and the user chose 0.02 to have those fully corrected. See
    [the write-up](experiments/2026-09-19-imx708-normalisation.md) for the full
-   numbers and the trade-off made. A USB/V4L2 camera has no ISP AWB and
-   should regenerate a starter with `pifilm-preset` and re-enable white
-   balance in its own artifact.
+   numbers and the trade-off made. A USB/V4L2 camera has no ISP AWB, so it needs
+   an artifact with white balance back on. There is no flag for this:
+   copy the artifact directory (or write a fresh one with `pifilm-preset --out
+   DIR`), then edit its `params.json` — set `"white_balance": true` under
+   `normalize` and delete (or set to `null`) `"levels_lift_highlight_ref"` —
+   and pass `--artifacts DIR`. Editing `params.json` is safe here because
+   `lut_sha1` covers only the `.cube`, not the normalisation block.
 2. **The 3D LUT** (`pifilm/lut.py`). Trilinear interpolation over the 35,937
    nodes, executed by Pillow's `ImageFilter.Color3DLUT` in C with 16-bit fixed
    point. A NumPy reference implementation exists for tests and the trainer.

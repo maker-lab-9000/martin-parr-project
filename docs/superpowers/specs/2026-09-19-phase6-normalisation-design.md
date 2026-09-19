@@ -89,8 +89,9 @@ is the value being clamped), plus the existing stretch check.
 **Recorded diagnostics.** `Gains.levels` gains three keys, always present on
 the levels path: `raw_gamma`, `highlight_frac`, `lift_weight` (1.0 when no
 damping applied, including when `ref` is `None`). They flow into
-`captures.jsonl` through the existing generic serialisation and appear in
-`pifilm-process` diagnostics. Existing keys are unchanged.
+`captures.jsonl` through the existing generic serialisation; `pifilm-process`
+has no per-image diagnostics, so that is their only sink. Existing keys are
+unchanged.
 
 **Properties.** Monotone in `highlight_frac`. An indoor frame (≈0 % at the
 ceiling) keeps its full lift. A frame with at least `ref` of its pixels at the

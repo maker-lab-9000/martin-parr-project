@@ -82,10 +82,18 @@ on top of the ISP's own AWB (up to 1.6x blue on foliage/yellow scenes).
 - **Frozen values**, bundled starter (`pifilm/preset.py` ->
   `pifilm/data/params.json`): `white_balance=False`,
   `levels_lift_highlight_ref=0.02`. LUT bytes and `lut_sha1` unchanged.
-- **Decision**: chose `ref=0.02` over the alternative `ref=0.05` — `0.02`
-  gives outdoor median gamma 1.00 (no lift, same as `0.05`) while keeping
-  indoor median gamma at 0.975 versus `0.05`'s 0.856; the trade-off made was
-  outdoor fidelity over preserving more of the indoor lift.
+- **Decision**: chose `ref=0.02` over `ref=0.05`. On the aggregate outdoor
+  medians the two are indistinguishable — both give median gamma 1.00 and
+  median clip 8.17%. They differ on the specific problem shots, those with a
+  moderate ceiling fraction, which `0.05` only partially damps and `0.02`
+  removes entirely: 172404 gamma 0.86 (`ref=0.05+nowb`) vs 1.00
+  (`ref=0.02+nowb`), 172258 0.83 vs 1.00, 171656 0.93 vs 1.00. The cost is
+  that `0.02` removes *more* of the indoor lift (indoor median gamma
+  0.764 -> 0.975) than `0.05` would (-> 0.856). The spec's proposed selection
+  rule (indoor gamma within 0.02 of current, outdoor clip down to the indoor
+  level) was not satisfiable by any candidate on this set, so the user chose on
+  the contact sheet, preferring the outdoor problem shots fully corrected over
+  keeping the indoor lift.
 - **Capture-side**: `pifilm-capture --ae-constraint {normal,highlight,shadows}`,
   `--ae-metering {centre,spot,matrix}`, `--ev STOPS`, Picamera2-only, defaults
   unchanged from today's behaviour. `highlight` targets exactly the kind of

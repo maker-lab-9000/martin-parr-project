@@ -28,10 +28,31 @@ candidate `levels_lift_highlight_ref` and white balance on/off:
 ```sh
 .venv/bin/python -m pifilm.experiments.normalisation \
   --source source_imx708/2026-09-19 \
+  --artifacts /tmp/pre-phase6 \
   --no-wb \
   --shots 171656,172012,172111,172144,172258,172404 \
   --out data/phase6-normalisation-eval
 ```
+
+> **Since the freeze, `--artifacts` matters.** The `current` column is the
+> given artifact's *own* normalisation, and the bundled starter now **is** the
+> chosen candidate — so running this without `--artifacts` makes `current`
+> identical to `ref=0.02+nowb`. To reproduce the tables, build the pre-Phase-6
+> starter first and point at it:
+>
+> ```sh
+> .venv/bin/python -c "
+> from pifilm.artifacts import write_artifact
+> from pifilm.preset import starter_lut
+> from pifilm.normalize import NormalizeParams
+> from pifilm.grain import GrainParams
+> write_artifact('/tmp/pre-phase6', starter_lut(), NormalizeParams(levels=True), GrainParams())
+> "
+> ```
+>
+> That is the starter's normalisation as it stood before this phase (white
+> balance on, no lift damping) with a byte-identical LUT
+> (`lut_sha1 fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca`).
 
 `--refs` defaults to `0.02,0.05,0.10` (evaluated alongside the current,
 undamped behaviour); `--no-wb` doubles every candidate with
@@ -86,11 +107,12 @@ gitignored `--out` directory (not committed).
 
 Current, undamped: 53 of 108 shots were lifted while already clipped (see the
 design doc). With `ref=0.02+nowb`, outdoor median gamma goes from 0.577 to
-1.00 (no lift) and outdoor median clip% roughly halves (12.1% -> 8.2%). The
-indoor lift is also largely removed at `ref=0.02` — median gamma goes from
-0.764 to 0.975, i.e. most of the lift is gone, not a small change. `ref=0.05`
-would have kept more of it (indoor median gamma 0.856); the user chose 0.02
-anyway, preferring outdoor fidelity over preserving more of the indoor lift
+1.00 (no lift) and outdoor median clip% roughly halves (12.05% -> 8.17%;
+outdoor *mean* clip%, the statistic quoted in `pifilm/preset.py`, goes 13.31%
+-> 9.54%). The indoor lift is also largely removed at `ref=0.02` — median gamma
+goes from 0.764 to 0.975, i.e. most of the lift is gone, not a small change.
+`ref=0.05` would have kept more of it (indoor median gamma 0.856) but damps the
+problem shots only partially; the user chose 0.02 for those shots
 (see Decision, below). Indoor clip% falls a little regardless, because
 turning white balance off also removes some blue-channel clipping.
 
@@ -122,17 +144,44 @@ Columns: original | current starter | chosen (`ref=0.02`, white balance off).
 
 ## Decision
 
-**Frozen: `levels_lift_highlight_ref=0.02`, `white_balance=False`.** The user
-chose `ref=0.02` over the candidate `ref=0.05` that the design doc's proposed
-selection rule would have picked (the smallest ref that brings outdoor clip%
-down to the indoor level while leaving indoor gamma unchanged within 0.02).
-At `ref=0.05+nowb`, outdoor gamma is 1.00 (same as 0.02) but indoor median
-gamma drops further, to 0.856 vs. 0.02's 0.975 — a visible loss of indoor
-lift for shots that were already good. The trade-off actually made: **prefer
-outdoor fidelity (no unwanted lift on bright frames) over preserving as much
-of the indoor lift as the selection rule would keep**; `ref=0.02` gives
-almost all of the outdoor clipping reduction `ref=0.05` gives, at a much
-smaller cost to indoor gamma.
+**Frozen: `levels_lift_highlight_ref=0.02`, `white_balance=False`.** The two
+serious candidates were `ref=0.02+nowb` and `ref=0.05+nowb`.
+
+**On the aggregate outdoor medians they are indistinguishable.** Both give
+outdoor median gamma **1.00** and outdoor median clip **8.167%** (table
+above). Nothing in the outdoor aggregate separates the two candidates, so the
+choice could not be made there.
+
+**They differ on the specific problem shots** — those with a moderate fraction
+of pixels already at the ceiling (roughly 2.5-4%, above `0.02` but well below
+`0.05`). There `ref=0.05` only partially damps the lift while `ref=0.02`
+removes it entirely (`report.json`, per-shot applied gamma):
+
+| Shot | `ref=0.05+nowb` gamma | `ref=0.02+nowb` gamma |
+| --- | ---: | ---: |
+| 172404 | 0.86 | 1.00 |
+| 172258 | 0.83 | 1.00 |
+| 171656 | 0.93 | 1.00 |
+
+`172404` and `172258` are the two shots the user judged worst; `171656` is the
+blown-highlight scene. Under `ref=0.05` each keeps a residual lift on a frame
+that is already clipped.
+
+**The cost is indoor.** `ref=0.02` removes **more** of the indoor lift than
+`ref=0.05` would: indoor median gamma goes 0.764 -> **0.975** at `ref=0.02`
+versus 0.764 -> 0.856 at `ref=0.05`. The indoor frames are the ones the user
+already judged good, so this is the price of the choice, and it was paid
+knowingly.
+
+**How the choice was actually made.** The design doc's proposed selection rule
+— indoor gamma unchanged within 0.02 of current, and outdoor clip% brought down
+to the indoor level — **was not satisfiable by any candidate on this set**. No
+candidate brings outdoor clip% (8.2% at best) near the indoor level (~2%),
+because most of the residual outdoor clipping is in-camera (see below); and the
+only candidate leaving indoor gamma within 0.02 of current is `current+nowb`
+(0.765), which is the undamped behaviour this phase exists to change. With the
+rule inapplicable, the user chose on the contact sheet, preferring **the
+outdoor problem shots fully corrected over keeping the indoor lift**.
 
 White balance off removes the ISP-on-top-of-grey-world double correction
 (D2 in the design doc) with no measurable cost to indoor neutrals in this
@@ -158,10 +207,31 @@ original's highlights.
 ```sh
 .venv/bin/python -m pifilm.experiments.normalisation \
   --source source_imx708/2026-09-19 \
+  --artifacts /tmp/pre-phase6 \
   --no-wb \
   --shots 171656,172012,172111,172144,172258,172404 \
   --out data/phase6-normalisation-eval
 ```
+
+> **Since the freeze, `--artifacts` matters.** The `current` column is the
+> given artifact's *own* normalisation, and the bundled starter now **is** the
+> chosen candidate — so running this without `--artifacts` makes `current`
+> identical to `ref=0.02+nowb`. To reproduce the tables, build the pre-Phase-6
+> starter first and point at it:
+>
+> ```sh
+> .venv/bin/python -c "
+> from pifilm.artifacts import write_artifact
+> from pifilm.preset import starter_lut
+> from pifilm.normalize import NormalizeParams
+> from pifilm.grain import GrainParams
+> write_artifact('/tmp/pre-phase6', starter_lut(), NormalizeParams(levels=True), GrainParams())
+> "
+> ```
+>
+> That is the starter's normalisation as it stood before this phase (white
+> balance on, no lift damping) with a byte-identical LUT
+> (`lut_sha1 fa89d3b2075f2d3ebaf6cd3c080e5fcaf5683bca`).
 
 `report.json`, `report.md` and `contact_sheet.jpg` land under `--out`, which
 is gitignored (`source_*/` and `data/` are excluded from the repo; see

@@ -11,6 +11,15 @@ only normalisation differs, and reports per shot and in aggregate:
   output in [0, 1]. High values mean lifted, faded blacks.
 - the applied ``gamma``, ``wb_blue``, ``highlight_frac`` and ``lift_weight``.
 
+The ``current`` column is **the given artifact's own normalisation**, not a
+fixed baseline: candidates are built by replacing fields of
+``artifacts.normalize``. Since the Phase 6 freeze the bundled starter *is* the
+chosen candidate, so the default artifact makes ``current`` identical to
+``ref=0.02+nowb``. To compare against the pre-freeze behaviour, pass
+``--artifacts`` pointing at a pre-freeze artifact (one written with
+``NormalizeParams(levels=True)``); see
+``docs/experiments/2026-09-19-imx708-normalisation.md``.
+
 Aggregates are split indoor/outdoor by ``camera_metadata.Lux > 1500`` when a
 ``captures.jsonl`` sits beside the originals. A contact sheet shows
 original | current | each candidate for named and sampled shots. Never changes
@@ -174,7 +183,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--source", type=Path, required=True, help="folder of *_original.jpg")
     parser.add_argument(
-        "--artifacts", type=Path, default=None, help="artifact dir (default: bundled)"
+        "--artifacts", type=Path, default=None,
+        help="artifact dir (default: bundled). The 'current' column is THIS artifact's own "
+             "normalisation, so pass a pre-Phase-6 artifact to compare against the pre-freeze "
+             "baseline; the bundled starter is itself the chosen candidate",
     )
     parser.add_argument("--refs", default="0.02,0.05,0.10",
                         help="comma-separated levels_lift_highlight_ref candidates")

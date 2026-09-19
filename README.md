@@ -134,6 +134,10 @@ Capture modes:
 | `--fake` | synthetic frames, no camera (for testing) |
 | `--device /dev/videoN` | select a specific USB camera |
 
+With the default artifact, `pifilm-process` now grades any folder — including old USB
+captures — without white balance and with the damped highlight lift (see
+[Camera backends](#camera-backends)).
+
 Output lands in `~/Pictures/pifilm/YYYY-MM-DD/`: `*_original.jpg` (or
 `*_ungraded.jpg`), `*_graded.jpg`, and a `captures.jsonl` line. The USB (V4L2)
 path captures a 1920×1080 MJPEG stream at 30 fps; window size does not change
@@ -154,6 +158,11 @@ come from Raspberry Pi OS apt (never pip), so the venv uses `--system-site-packa
 > camera must pass `--camera v4l2` until it is migrated. First-time bring-up
 > (`rpicam-hello --list-cameras`, an RGB patch check, dimensions and metadata) is
 > in [the Picamera2 bring-up checklist](docs/picamera2-bringup.md).
+
+The bundled starter now assumes the IMX708 ISP's AWB (white balance off, clipping-aware
+lift on), so a USB/V4L2 camera should point `--artifacts` at a copy with `"white_balance":
+true` in its `params.json` — redeploying the bundled starter to a USB Pi would otherwise
+drop white balance entirely ([how-it-works](docs/how-it-works.md#at-capture-time-on-the-pi)).
 
 **Picamera2 saves three files** per shot (two on V4L2):
 
