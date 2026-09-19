@@ -8,7 +8,11 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from pifilm.artifacts import write_artifact
 from pifilm.experiments.normalisation import main
+from pifilm.grain import GrainParams
+from pifilm.lut import LUT3D
+from pifilm.normalize import NormalizeParams
 
 
 def _write(path, arr):
@@ -22,6 +26,13 @@ def _flat(values, height):
 
 
 def test_experiment_reports_more_clipping_for_a_blown_frame_and_writes_all_outputs(tmp_path):
+    # An explicit, pre-Phase-6 artifact (levels lift undamped, white balance
+    # on): the bundled starter now ships the frozen, damped defaults, and this
+    # test's whole point is to contrast an undamped baseline against a damped
+    # candidate, so it must not depend on whatever the bundled defaults are.
+    artifacts_dir = write_artifact(
+        tmp_path / "artifacts", LUT3D.identity(9), NormalizeParams(levels=True), GrainParams()
+    )
     src = tmp_path / "src"
     src.mkdir()
     h, w = 64, 96
@@ -36,8 +47,8 @@ def test_experiment_reports_more_clipping_for_a_blown_frame_and_writes_all_outpu
     _write(src / "100001_original.jpg", blown)
     out = tmp_path / "out"
 
-    rc = main(["--source", str(src), "--refs", "0.05", "--no-wb", "--sample", "0",
-               "--shots", "100001", "--out", str(out)])
+    rc = main(["--source", str(src), "--artifacts", str(artifacts_dir), "--refs", "0.05",
+               "--no-wb", "--sample", "0", "--shots", "100001", "--out", str(out)])
 
     assert rc == 0
     report = json.loads((out / "report.json").read_text())

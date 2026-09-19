@@ -47,8 +47,15 @@ def starter_lut(size: int = 33) -> LUT3D:
 
 def write_starter(out: str | Path, highlights: float = 0.0) -> Path:
     lut = protect_highlights(starter_lut(), highlights)
+    # Chosen 2026-09-19 on the 108-shot IMX708 pilot: at ref 0.02 every outdoor
+    # shot's lift is removed (outdoor median gamma 0.577 -> 1.0, 5th-percentile
+    # luma 0.170 -> 0.037) and clipping falls 13.3% -> 9.5% with white balance
+    # off; the ISP's AWB has already balanced Picamera2 frames, and grey-world
+    # on top pushed blue up to 1.6x. The user preferred outdoor fidelity over
+    # keeping the indoor lift (indoor median gamma 0.764 -> 0.975).
+    normalize = NormalizeParams(levels=True, white_balance=False, levels_lift_highlight_ref=0.02)
     return write_artifact(
-        out, lut, NormalizeParams(levels=True), GrainParams(),
+        out, lut, normalize, GrainParams(),
         training={
             "kind": "handcrafted-preset",
             "trained": False,
@@ -56,6 +63,7 @@ def write_starter(out: str | Path, highlights: float = 0.0) -> Path:
             "highlights": highlights,
             "note": "Untrained saturated color-negative starter. No Martin Parr images used. "
                     "Not a calibrated film-stock or photographer emulation.",
+            "normalisation_frozen": "2026-09-19 IMX708 pilot",
         },
     )
 

@@ -83,3 +83,21 @@ def test_training_skips_reference_levels_stretch_by_default():
     assert args.target_levels is False
     assert args.grain_strength == 0.004
     assert str(args.target) == "data/references"
+
+
+REF = 0.02
+
+
+def test_starter_normalisation_trusts_the_isp_and_damps_the_lift(tmp_path):
+    out = write_starter(tmp_path / "s")
+    normalize = Artifacts.load(out).normalize
+    assert normalize.white_balance is False
+    assert normalize.levels is True
+    assert normalize.levels_lift_highlight_ref == REF  # literal chosen value
+
+
+def test_bundled_params_match_write_starter_and_the_cube_is_unchanged(tmp_path):
+    out = write_starter(tmp_path / "s")
+    bundled = Artifacts.default()
+    assert Artifacts.load(out).normalize == bundled.normalize
+    assert (out / "pifilm.cube").read_bytes() == (bundled.path / "pifilm.cube").read_bytes()
